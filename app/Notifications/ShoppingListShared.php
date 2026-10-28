@@ -8,66 +8,47 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
+use Illuminate\Support\Facades\Password;
 
-class ShoppingListShared extends Notification
+class ShoppingListShared extends Notification implements ShouldQueue
 {
     use Queueable;
 
-    /**
-     * The user who shared the shopping list
-     *
-     * @var \App\Models\User
-     */
-    private $user;
+    public function __construct(
+        private User $sharedBy,
+        private ShoppingList $list,
+        private bool $invited,
+    ) {}
 
     /**
-     * The affected shopping list
-     *
-     * @var \App\Models\ShoppingList
+     * @return array<int, string>
      */
-    private $shoppingList;
-
-    /**
-     * Create a new notification instance.
-     *
-     * @param  \App\Models\User  $user
-     * @param  \App\Models\ShoppingList  $shoppingList
-     * @return void
-     */
-    public function __construct(User $user, ShoppingList $shoppingList)
-    {
-        $this->user = $user;
-        $this->shoppingList = $shoppingList;
-    }
-
-    /**
-     * Get the notification's delivery channels.
-     *
-     * @param  mixed  $notifiable
-     * @return array
-     */
-    public function via($notifiable)
+    public function via(object $notifiable): array
     {
         return ['mail'];
     }
 
-    /**
-     * Get the mail representation of the notification.
-     *
-     * @param  mixed  $notifiable
-     * @return \Illuminate\Notifications\Messages\MailMessage
-     */
-    public function toMail($notifiable)
+    public function toMail(User $notifiable): MailMessage
     {
-        // This is mainly a phpstan fix
-        $subject = !is_array(__('Shoppinglist shared')) ? __('Shoppinglist shared') : 'Shoppinglist shared';
+        $message = (new MailMessage)
+            ->subject(__('Shopping list shared'))
+            ->line(__(':email shared the shopping list ":list" with you.', [
+                'email' => $this->sharedBy->email,
+                'list' => $this->list->name,
+            ]));
 
-        return (new MailMessage)
-            ->subject($subject)
-            ->line(__('The user :email shared the shopping list :shoppingList with you.', [
-                'email'        => $this->user->email,
-                'shoppingList' => $this->shoppingList->name
-            ]))
-            ->line(__('No further action is required.'));
+        if (! $this->invited) {
+            return $message->action(__('Open shopping list'), url('/'));
+        }
+
+        // Invited users choose a password, which also verifies their email address.
+        $url = url(route('password.reset', [
+            'token' => Password::broker()->createToken($notifiable),
+            'email' => $notifiable->email,
+        ], false));
+
+        return $message
+            ->line(__('An account has been created for you. Choose a password to get started.'))
+            ->action(__('Choose password'), $url);
     }
 }
