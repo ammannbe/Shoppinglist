@@ -33,6 +33,10 @@ Shoppinglist: offline-first PWA for shared shopping lists. One Laravel app serve
 - `vite-plugin-pwa` (generateSW) writes `public/sw.js` (not committed, built on deploy); `public/manifest.webmanifest` and `public/icons/` are static.
 - The service worker precaches the app shell `/` and the build assets; other pages (login etc.) need a connection.
 
+## Deployment
+
+- `.forgejo/workflows/deploy.yml` (same as RecipeManager): push to `main` builds assets in CI, uploads `public/build`, `public/sw.js` and `public/workbox-*.js`, then `git pull` + `composer install --no-dev` + `migrate` + `optimize` on the server via SSH.
+
 ## Commands
 
 - Tests: `ddev artisan test`. Code style: `ddev exec vendor/bin/pint`.

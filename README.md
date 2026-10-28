@@ -32,6 +32,14 @@ ddev npm run dev
 - Cron every minute: `php /path/to/artisan schedule:run` (also works off the mail queue, no queue worker needed).
 - Apache: `public/.htaccess` sets the manifest MIME type and disables caching of `sw.js` (needs `mod_headers`).
 
+### Automatic deployment (Forgejo Actions)
+
+`.forgejo/workflows/deploy.yml` deploys every push to `main`: builds the assets (incl. service worker) in CI, copies them via SSH, then runs `git pull`, `composer install --no-dev`, migrations and `optimize` on the server (`php85`).
+
+- Secret: `SSH_KEY` (private deploy key)
+- Variables: `SSH_HOST`, `SSH_USER`, `SSH_FINGERPRINT` (SHA256 ed25519 host key), `DEPLOY_PATH`, optional `PRIMARY_SITE_URL` (checked after the deploy)
+- The server needs a git checkout of the repository in `DEPLOY_PATH` and a configured `.env`.
+
 ## Import from the old API
 
 The data of the former Laravel 7 API (ShoppinglistApi ≤ 2020) can be imported once into an empty database:
