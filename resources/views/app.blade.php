@@ -47,7 +47,7 @@
                         'bg-emerald-500': $store.sync.status === 'synced',
                         'bg-amber-400 animate-pulse': ['starting', 'syncing'].includes($store.sync.status),
                         'bg-stone-400': ['offline', 'local'].includes($store.sync.status),
-                        'bg-red-500': ['error', 'expired', 'unverified'].includes($store.sync.status),
+                        'bg-red-500': ['error', 'expired', 'unverified', 'broken'].includes($store.sync.status),
                     }"></span>
                 <span class="hidden min-[400px]:inline" x-text="{
                     starting: $t('Starting …'),
@@ -58,6 +58,7 @@
                     expired: $t('Not synced'),
                     unverified: $t('Not synced'),
                     error: $t('Sync error'),
+                    broken: $t('Error'),
                 }[$store.sync.status]"></span>
             </span>
 
@@ -86,6 +87,11 @@
 
     {{-- Account hints --}}
     <div class="mx-auto max-w-xl px-3">
+        <div x-show="$store.sync.status === 'broken'" class="notice mt-3 space-y-2" role="alert">
+            <p x-text="$t('The data on this device could not be opened.')"></p>
+            <p x-text="$t('Resetting deletes it from this device. Synced lists come back from the server, changes that were not synced yet are lost.')"></p>
+            <button type="button" class="font-medium underline" @click="confirm($t('Reset the data on this device?')) && $store.sync.resetLocalData()" x-text="$t('Reset data on this device')"></button>
+        </div>
         <p x-show="$store.sync.status === 'local'" class="notice mt-3">
             <span x-text="$t('Log in to sync your lists across devices and share them.')"></span>
             <a href="/login" data-online class="font-medium underline" x-text="$t('Log in')"></a> ·
@@ -101,7 +107,7 @@
         </p>
     </div>
 
-    <main class="mx-auto max-w-xl px-3 pt-4 pb-[calc(2rem+env(safe-area-inset-bottom))]">
+    <main x-show="$store.sync.status !== 'broken'" class="mx-auto max-w-xl px-3 pt-4 pb-[calc(2rem+env(safe-area-inset-bottom))]">
         {{-- Lists --}}
         <section x-show="route.view === 'lists'">
             <form @submit.prevent="createList()" class="mb-4 flex gap-2">

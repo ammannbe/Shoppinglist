@@ -8,7 +8,7 @@ const syncFields = {
 };
 
 export const lists = {
-    version: 1,
+    version: 2,
     primaryKey: 'id',
     type: 'object',
     properties: {
@@ -27,7 +27,7 @@ export const lists = {
 };
 
 export const items = {
-    version: 1,
+    version: 2,
     primaryKey: 'id',
     type: 'object',
     properties: {
@@ -78,8 +78,16 @@ export const units = {
 
 // Schema migrations of the local documents, keyed by collection and schema version.
 export const migrations = {
-    lists: { 1: (doc) => ({ ...doc, position: null, item_sort: null }) },
-    items: { 1: (doc) => ({ ...doc, position: null, image: null }) },
+    lists: {
+        1: (doc) => ({ ...doc, position: null, item_sort: null }),
+        // Version 1 briefly existed without item_sort (development builds only).
+        2: (doc) => ({ ...doc, item_sort: doc.item_sort ?? null }),
+    },
+    items: {
+        1: (doc) => ({ ...doc, position: null, image: null }),
+        // Version 1 briefly existed without image (development builds only).
+        2: (doc) => ({ ...doc, image: doc.image ?? null }),
+    },
     products: { 1: (doc) => ({ ...doc, image: null }) },
     // Units were pull only, all of them public.
     units: { 1: (doc) => ({ ...doc, is_public: true, version: 1 }) },

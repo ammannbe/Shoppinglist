@@ -2,7 +2,7 @@ import Alpine from 'alpinejs';
 import { addRxPlugin } from 'rxdb/plugins/core';
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
 import { createApi, HttpError } from './api.js';
-import { createDatabase, startReplication } from './db/index.js';
+import { createDatabase, removeDatabase, startReplication } from './db/index.js';
 import { byPosition, compareBy, formatAmount, mergedAmount, nextPosition, normalizeName, parseItemInput, sameName, uuid7 } from './helpers.js';
 import { hasPendingLocale, htmlLang, initialLocale, LOCALES, storeLocale, translate } from './i18n.js';
 import { registerServiceWorker } from './pwa.js';
@@ -25,8 +25,21 @@ let replication = null;
 // ---------------------------------------------------------------- stores
 
 Alpine.store('i18n', { locale: initialLocale(), locales: LOCALES });
-// status: starting | local (not logged in) | unverified | expired | offline | syncing | synced | error
-Alpine.store('sync', { status: 'starting', user: null, online: navigator.onLine });
+// status: starting | local (not logged in) | unverified | expired | offline | syncing | synced | error | broken (local database)
+Alpine.store('sync', {
+    status: 'starting',
+    user: null,
+    online: navigator.onLine,
+
+    /**
+     * The local database could not be opened (e.g. schema changed without migration):
+     * start over with an empty one, synced data comes back from the server.
+     */
+    async resetLocalData() {
+        await removeDatabase({ storage: getRxStorageDexie() });
+        location.reload();
+    },
+});
 Alpine.store('data', { lists: [], items: [], products: [], units: [] });
 Alpine.store('undo', createUndoStore());
 Alpine.store('prefs', createPrefsStore(api));
@@ -597,7 +610,13 @@ async function boot() {
         storage = wrappedValidateAjvStorage({ storage });
     }
 
-    db = await createDatabase({ storage });
+    try {
+        db = await createDatabase({ storage });
+    } catch (error) {
+        console.error(error);
+        Alpine.store('sync').status = 'broken';
+        return;
+    }
     navigator.storage?.persist?.();
 
     const sync = Alpine.store('sync');

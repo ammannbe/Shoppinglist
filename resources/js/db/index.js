@@ -1,4 +1,4 @@
-import { addRxPlugin, createRxDatabase } from 'rxdb/plugins/core';
+import { addRxPlugin, createRxDatabase, removeRxDatabase } from 'rxdb/plugins/core';
 import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
 import { replicateRxCollection } from 'rxdb/plugins/replication';
 import { Subject, map } from 'rxjs';
@@ -36,6 +36,13 @@ export async function createDatabase({ storage, name = 'shoppinglist', multiInst
     }
 
     return db;
+}
+
+/**
+ * Deletes the local database (last resort when it cannot be opened anymore).
+ */
+export function removeDatabase({ storage, name = 'shoppinglist' }) {
+    return removeRxDatabase(name, storage);
 }
 
 /**
