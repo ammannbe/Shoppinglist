@@ -418,9 +418,15 @@
                     <div class="min-w-0 space-y-1 text-sm">
                         <span class="label" x-text="$t('Photo for all “:name”', { name: editing.name.trim() || '…' })"></span>
                         <div class="flex flex-wrap gap-x-4 gap-y-1">
-                            <label class="cursor-pointer font-medium underline" :class="(imageBusy || !$store.sync.online) && 'opacity-50'">
-                                <input type="file" accept="image/*" class="sr-only" :disabled="imageBusy" @change="chooseImage($event)">
-                                <span x-text="imageBusy ? $t('Saving …') : editing.image ? $t('Change photo') : $t('Add photo')"></span>
+                            <span x-show="imageBusy" class="text-stone-500" x-text="$t('Saving …')"></span>
+                            {{-- capture opens the camera directly (phones and tablets; desktops ignore it, so it is hidden there) --}}
+                            <label x-show="!imageBusy" class="cursor-pointer font-medium underline pointer-fine:hidden" :class="$store.sync.online || 'opacity-50'">
+                                <input type="file" accept="image/*" capture="environment" class="sr-only" @change="chooseImage($event)">
+                                <span x-text="$t('Take photo')"></span>
+                            </label>
+                            <label x-show="!imageBusy" class="cursor-pointer font-medium underline" :class="$store.sync.online || 'opacity-50'">
+                                <input type="file" accept="image/*" class="sr-only" @change="chooseImage($event)">
+                                <span x-text="editing.image ? $t('Choose another photo') : $t('Choose photo')"></span>
                             </label>
                             <button type="button" x-show="editing.image && !imageBusy" class="text-red-700 underline" @click="removeImage()" x-text="$t('Remove photo')"></button>
                         </div>
