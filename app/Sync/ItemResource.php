@@ -3,6 +3,7 @@
 namespace App\Sync;
 
 use App\Models\Item;
+use App\Models\Product;
 use App\Models\ShoppingList;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
@@ -28,7 +29,9 @@ class ItemResource extends SyncResource
             'name' => $model->name,
             'amount' => $model->amount,
             'unit' => $model->unit,
+            'image' => $model->image,
             'done' => $model->done,
+            'position' => $model->position,
             'creator_email' => $model->creator?->email,
             'version' => $model->version,
             'updated_at' => $model->syncTimestamp(),
@@ -51,7 +54,7 @@ class ItemResource extends SyncResource
                 return null;
             }
 
-            $item = new Item($this->attributes($new));
+            $item = new Item($this->attributes($new, $user));
             $item->id = $new['id'];
             $item->shopping_list_id = $listId;
             $item->creator()->associate($user);
@@ -73,7 +76,7 @@ class ItemResource extends SyncResource
             return null;
         }
 
-        $item->fill($this->attributes($new))->save();
+        $item->fill($this->attributes($new, $user, $item))->save();
 
         return null;
     }
@@ -94,13 +97,23 @@ class ItemResource extends SyncResource
      * @param  array<string, mixed>  $doc
      * @return array<string, mixed>
      */
-    private function attributes(array $doc): array
+    private function attributes(array $doc, User $user, ?Item $item = null): array
     {
+        // Only images of own products (or the one the item already has), so nobody gets
+        // access to a foreign image by pushing its id.
+        $image = $doc['image'] ?? null;
+        if ($image !== null && $image !== $item?->image
+            && ! Product::where('image', $image)->where('owner_id', $user->id)->exists()) {
+            $image = $item?->image;
+        }
+
         return [
+            'image' => $image,
             'name' => $doc['name'],
             'amount' => $doc['amount'] ?? null,
             'unit' => $doc['unit'] ?? null,
             'done' => (bool) ($doc['done'] ?? false),
+            'position' => $doc['position'] ?? null,
         ];
     }
 }

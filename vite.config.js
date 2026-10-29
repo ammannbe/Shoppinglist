@@ -48,6 +48,15 @@ export default defineConfig({
                     urlPattern: ({ request }) => request.mode === 'navigate',
                     handler: 'NetworkOnly',
                     options: { precacheFallback: { fallbackURL: '/' } },
+                }, {
+                    // Product images never change (a new image gets a new id): keep them for offline use.
+                    urlPattern: ({ url }) => url.pathname.startsWith('/images/'),
+                    handler: 'CacheFirst',
+                    options: {
+                        cacheName: 'images',
+                        expiration: { maxEntries: 500, maxAgeSeconds: 60 * 60 * 24 * 365 },
+                        cacheableResponse: { statuses: [200] },
+                    },
                 }],
                 cleanupOutdatedCaches: true,
             },

@@ -288,15 +288,45 @@ class SyncTest extends TestCase
         $this->assertSame($user->id, Product::find($ownId)->owner_id);
     }
 
-    public function test_units_are_pull_only(): void
+    public function test_public_units_are_read_only_and_own_units_are_private(): void
     {
         $user = User::factory()->create();
+        $other = User::factory()->create();
         $unit = Unit::create(['name' => 'kg']);
 
-        $doc = $this->pull($user, 'units')->assertJsonPath('documents.0.name', 'kg')->json('documents.0');
+        $doc = $this->pull($user, 'units')
+            ->assertJsonPath('documents.0.name', 'kg')
+            ->assertJsonPath('documents.0.is_public', true)
+            ->json('documents.0');
 
         $this->push($user, 'units', [['assumedMasterState' => $doc, 'newDocumentState' => [...$doc, 'name' => 'g']]])
             ->assertJsonPath('0.name', 'kg');
         $this->assertSame('kg', $unit->fresh()->name);
+
+        // Own units may share the name of another user's unit.
+        $ownId = (string) Str::uuid();
+        $this->push($user, 'units', [['newDocumentState' => ['id' => $ownId, 'name' => 'Becher']]])->assertExactJson([]);
+        $this->push($other, 'units', [['newDocumentState' => ['id' => (string) Str::uuid(), 'name' => 'Becher']]])->assertExactJson([]);
+
+        $this->assertSame($user->id, Unit::find($ownId)->owner_id);
+        $this->pull($user, 'units')->assertJsonCount(2, 'documents')->assertJsonPath('documents.1.is_public', false);
+    }
+
+    public function test_item_positions_are_shared_and_list_positions_are_personal(): void
+    {
+        $owner = User::factory()->create();
+        $member = User::factory()->create();
+        $listId = $this->createList($owner);
+        ShoppingList::find($listId)->addMember($member);
+        $this->createItem($owner, $listId, ['position' => 2.5]);
+
+        $this->pull($member, 'items')->assertJsonPath('documents.0.position', 2.5);
+
+        $doc = $this->pull($member, 'lists')->json('documents.0');
+        $this->push($member, 'lists', [['assumedMasterState' => $doc, 'newDocumentState' => [...$doc, 'version' => $doc['version'] + 1, 'position' => 3]]])
+            ->assertExactJson([]);
+
+        $this->pull($member, 'lists')->assertJsonPath('documents.0.position', 3);
+        $this->pull($owner, 'lists')->assertJsonPath('documents.0.position', null);
     }
 }

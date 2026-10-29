@@ -7,6 +7,7 @@
     <title>{{ $title ? $title.' – ' : '' }}{{ config('app.name') }}</title>
     <meta name="theme-color" content="#047857">
     @include('partials.favicon')
+    @include('partials.meta')
     @vite(['resources/css/app.css', 'resources/js/auth.js'])
 </head>
 <body class="min-h-dvh bg-stone-50 text-stone-900 antialiased">

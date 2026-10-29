@@ -10,6 +10,7 @@ use App\Sync\SyncResource;
 use App\Sync\UnitResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class SyncController extends Controller
 {
@@ -52,6 +53,9 @@ class SyncController extends Controller
             '*.newDocumentState.amount' => ['nullable', 'numeric', 'min:0', 'max:9999999'],
             '*.newDocumentState.unit' => ['nullable', 'string', 'max:255'],
             '*.newDocumentState.done' => ['nullable', 'boolean'],
+            '*.newDocumentState.position' => ['nullable', 'numeric'],
+            '*.newDocumentState.item_sort' => ['nullable', Rule::in(PreferenceController::SORTS)],
+            '*.newDocumentState.image' => ['nullable', 'uuid'],
         ]);
 
         abort_if(count($rows) > 500, 413);

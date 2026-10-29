@@ -19,7 +19,9 @@ Shoppinglist: offline-first PWA for shared shopping lists. One Laravel app serve
 - Lists are pulled via memberships (`shopping_list_user`), so revoked access and deleted lists arrive as deleted documents. Any list change has to call `touchForMembers()`; adding a member also touches the items.
 - Items of a list unknown to the server return 409, the client retries (list created offline, not pushed yet).
 - Sharing/leaving lists needs a connection (`MemberController`). Unknown emails get an account and a password-reset invitation.
-- Units are pull only, public products (no owner) are read only.
+- Products and units (`CatalogResource`): own entries per user, public ones (no owner) are read only.
+- Sorting: options `manual`, `name_asc`, `name_desc`, `newest`, `oldest` (ids are UUID v7 = creation time). Lists overview per user (`preferences.list_sort`), items per list (`shopping_lists.item_sort`, shared). Manual order: `items.position` (shared) and `shopping_list_user.position` (personal, list document field `position`); null positions sort after the positioned ones. Dragging a row writes the shown order as positions (only changed ones) and switches to `manual`.
+- Product images: `POST/DELETE /products/{id}/image` (`ImageController`, creates the product if not synced yet), files in `storage/app/private/images/<uuid>` (not in `ddev pull`), served by `GET /images/{uuid}` to the product owner and members of lists with an item using it. The client scales photos to max. 480 px WebP/JPEG (`resources/js/image.js`, also drops EXIF), the server accepts max. 400 KB. The image id is copied to `items.image` (push only accepts images of own products); the service worker caches `/images/*` (CacheFirst).
 
 ## Translations
 
@@ -40,8 +42,14 @@ Shoppinglist: offline-first PWA for shared shopping lists. One Laravel app serve
 
 - Install instructions: `resources/js/install.js` (platform detection, steps per OS/browser, native `beforeinstallprompt` button), first visit hint + `#/install` view, linked in the settings.
 
-- Rows use `<x-swipe-row actions="…">` (`resources/js/swipe.js`): touch swipe left reveals the actions, full swipe runs the last one; mouse gets a hover "…" menu (`pointer-fine`/`pointer-coarse`). Actions are defined once in `listActions()`/`itemActions()`.
+- Rows use `<x-swipe-row actions="…">` (`resources/js/swipe.js`): on touch either swipe left to reveal the actions (no full swipe action) or long press for the actions menu, per user setting `preferences.row_actions` (`users.preferences` JSON, `PUT /preferences`, `resources/js/prefs.js`: cached in localStorage and resent when offline). Mouse gets a hover "…" menu (`pointer-fine`/`pointer-coarse`) and the right-click menu. Actions are defined once in `listActions()`/`itemActions()`/`catalogActions()`.
+- Suggestions: `suggestField` (`resources/js/suggest.js`) + `<x-suggestions>` instead of `<datalist>`, sources `item` (quick entry: units right after the amount, picking one keeps typing; then products, picking one adds the item), `product` and `unit` (lists all on focus). Accent-insensitive, ranked exact > prefix > word start > anywhere, then by usage counted from the current items. Adding a product that is already open on the list asks to increase the amount (same unit only) or add anyway. Own products/units: `#/products`, `#/units` (rename to an existing name deletes the renamed one); new units from the edit dialog are stored.
+- Row gestures (`resources/js/swipe.js` + `drag.js`): touch hold and move drags a row (rows with `data-sort-id`, event `row-move` → `moveRow()`), mouse drags directly; hold and release opens the menu in the long-press setting. While a row is held, `touchmove` is prevented to block scrolling.
 - Deletions are undoable (`resources/js/undo.js`): rows are hidden, the RxDB remove runs after 5 s or when the app is hidden. Never revive deleted documents.
+
+## Link previews
+
+- `resources/views/partials/meta.blade.php` (fixed German texts, cached app shell) in the app shell and the guest layout; image `public/og-image.jpg` (1200×630). `og:url`/`og:image` use `APP_URL`.
 
 ## Deployment
 
