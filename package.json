@@ -4,7 +4,8 @@
     "type": "module",
     "scripts": {
         "build": "vite build",
-        "dev": "vite"
+        "dev": "vite",
+        "favicon": "node src/scripts/favicon.mjs"
     },
     "devDependencies": {
         "@tailwindcss/vite": "^4.0.0",

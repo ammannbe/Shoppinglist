@@ -23,15 +23,31 @@ export default defineConfig({
             scope: '/',
             registerType: 'autoUpdate',
             injectRegister: false,
-            // Static file public/manifest.webmanifest (the generated one would end up in public/build).
+            // Favicons and public/site.webmanifest come from `npm run favicon` (RealFaviconGenerator).
             manifest: false,
             workbox: {
                 globDirectory: 'public',
-                globPatterns: ['build/**/*.{js,css,woff,woff2}', 'icons/*.png', 'favicon.ico', 'manifest.webmanifest'],
+                // Every precached file must exist on the server, one 404 aborts the whole installation.
+                globPatterns: [
+                    'build/**/*.{js,css,woff,woff2}',
+                    'favicon.ico',
+                    'favicon-96x96.png',
+                    'apple-touch-icon.png',
+                    'web-app-manifest-*.png',
+                    'site.webmanifest',
+                ],
+                // Favicon URLs carry a cache busting ?v=<hash>.
+                ignoreURLParametersMatching: [/^v$/],
                 // The app shell is rendered by Laravel; a new revision on every build updates it.
                 additionalManifestEntries: [{ url: '/', revision: Date.now().toString() }],
                 navigateFallback: '/',
                 navigateFallbackAllowlist: [/^\/$/],
+                // Other pages (login, password reset, …) need the server; offline they fall back to the app shell.
+                runtimeCaching: [{
+                    urlPattern: ({ request }) => request.mode === 'navigate',
+                    handler: 'NetworkOnly',
+                    options: { precacheFallback: { fallbackURL: '/' } },
+                }],
                 cleanupOutdatedCaches: true,
             },
         }),

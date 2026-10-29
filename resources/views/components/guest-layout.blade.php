@@ -6,15 +6,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ $title ? $title.' – ' : '' }}{{ config('app.name') }}</title>
     <meta name="theme-color" content="#047857">
-    <link rel="manifest" href="/manifest.webmanifest">
-    <link rel="icon" href="/favicon.ico" sizes="32x32">
-    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+    @include('partials.favicon')
     @vite(['resources/css/app.css'])
 </head>
 <body class="min-h-dvh bg-stone-50 text-stone-900 antialiased">
     <main class="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-6 py-12">
         <a href="/" class="mb-8 flex flex-col items-center gap-3">
-            <img src="/icons/icon-192.png" alt="" class="size-16 rounded-2xl">
+            <img src="/web-app-manifest-192x192.png" alt="" class="size-16 rounded-2xl">
             <span class="text-2xl font-semibold">{{ config('app.name') }}</span>
         </a>
 

@@ -1,0 +1,26 @@
+{
+  "id": "/",
+  "name": "Shoppinglist",
+  "short_name": "Shoppinglist",
+  "description": "Einkaufslisten, offline und geteilt",
+  "lang": "de-CH",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fafaf9",
+  "theme_color": "#047857",
+  "icons": [
+    {
+      "src": "/web-app-manifest-192x192.png?v=2d465704",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/web-app-manifest-512x512.png?v=2d465704",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
