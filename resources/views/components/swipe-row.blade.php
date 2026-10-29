@@ -5,7 +5,7 @@
     a "…" menu (mouse: visible on hover, keyboard: on focus) and the right-click menu.
     $actions: JS expression returning [{ label, run, danger? }].
 --}}
-<li x-data="swipeRow" {{ $attributes->merge(['class' => 'group relative overflow-hidden bg-white']) }} :class="lifted && 'shadow-lg ring-1 ring-stone-200'"
+<li x-data="swipeRow" {{ $attributes->merge(['class' => 'group relative overflow-hidden bg-white']) }} :class="lifted && 'z-10 shadow-[0_12px_32px_rgba(0,0,0,0.3)]'"
     @pointerdown.window="open && !$root.contains($event.target) && close()"
     @row-menu="openMenu($el, {{ $actions }})">
     <div x-ref="actions" aria-hidden="true" class="absolute inset-y-0 right-0 flex overflow-hidden" :style="actionsStyle"
@@ -24,8 +24,12 @@
         </template>
     </div>
 
-    <div class="relative flex touch-pan-y items-center bg-white select-none [-webkit-touch-callout:none]" :style="contentStyle"
-        :class="dragging || 'transition-transform duration-200 motion-reduce:transition-none'"
+    <div class="relative flex touch-pan-y items-center select-none [-webkit-touch-callout:none]" :style="contentStyle"
+        :class="[
+            dragging || ['transition-[transform,background-color] motion-reduce:transition-none', pressing ? 'duration-[450ms]' : 'duration-200'],
+            {{-- Long press: darkens while holding, then floats with a shadow and a frame --}}
+            lifted ? 'bg-emerald-50 ring-2 ring-inset ring-emerald-600' : pressing ? 'bg-stone-100' : 'bg-white',
+        ]"
         @pointerdown="down($event)" @pointermove="move($event)" @pointerup="up()" @pointercancel="up()"
         @click.capture="guardClick($event)" @contextmenu="contextMenu($event)">
         {{ $slot }}

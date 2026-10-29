@@ -23,6 +23,8 @@ export function swipeRow() {
         open: false,
         dragging: false,
         lifted: false,
+        // Finger down, long press not reached yet (visual feedback).
+        pressing: false,
         start: null,
         axis: null,
         pressTimer: null,
@@ -77,6 +79,7 @@ export function swipeRow() {
 
             if (!this.open && (this.sortable || this.longPress)) {
                 clearTimeout(this.pressTimer);
+                this.pressing = true;
                 this.pressTimer = setTimeout(() => this.lift(), LONG_PRESS);
             }
         },
@@ -87,6 +90,7 @@ export function swipeRow() {
          */
         lift() {
             this.pressTimer = null;
+            this.pressing = false;
             this.lifted = true;
             // The finger lifts later: that click must not toggle or open the row.
             this.suppressClick = true;
@@ -133,6 +137,7 @@ export function swipeRow() {
                 if (Math.abs(dx) < AXIS_LOCK && Math.abs(dy) < AXIS_LOCK) return;
                 // Moved before the long press: scrolling or swiping.
                 clearTimeout(this.pressTimer);
+                this.pressing = false;
                 if (this.longPress) {
                     this.start = null;
                     return;
@@ -156,6 +161,7 @@ export function swipeRow() {
 
         up() {
             clearTimeout(this.pressTimer);
+            this.pressing = false;
             // A held row ends with the touch events (pointer events may be cancelled).
             if (this.lifted) return;
             if (this.start?.mouse) {

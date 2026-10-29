@@ -23,7 +23,7 @@ export function startDrag(row, clientY) {
 
     row.style.position = 'relative';
     row.style.zIndex = '10';
-    row.classList.add('shadow-lg');
+    row.style.boxShadow = '0 12px 32px rgba(0, 0, 0, 0.3)';
     rows.forEach((r) => { if (r !== row) r.style.transition = 'transform 150ms'; });
 
     const update = () => {
@@ -62,7 +62,7 @@ export function startDrag(row, clientY) {
             });
             row.style.position = '';
             row.style.zIndex = '';
-            row.classList.remove('shadow-lg');
+            row.style.boxShadow = '';
 
             return { from, to };
         },
