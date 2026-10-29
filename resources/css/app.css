@@ -1,0 +1,61 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+
+@theme {
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
+[x-cloak] {
+    display: none !important;
+}
+
+/* Links to server pages are unavailable offline. */
+.is-offline a[data-online] {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+@layer components {
+    .field {
+        @apply rounded-lg border border-stone-300 bg-white px-3 py-2 text-base focus:border-emerald-600 focus:outline-none;
+    }
+
+    .label {
+        @apply mb-1 block text-sm font-medium text-stone-600;
+    }
+
+    .button {
+        @apply rounded-lg bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-800 disabled:opacity-50;
+    }
+
+    .button-secondary {
+        @apply rounded-lg border border-stone-300 bg-white px-4 py-2 font-medium hover:bg-stone-50 disabled:opacity-50;
+    }
+
+    .icon-button {
+        @apply -m-1 grid size-10 shrink-0 place-items-center rounded-full text-stone-700 hover:bg-stone-100;
+    }
+
+    .menu-item {
+        @apply block w-full px-4 py-2 text-left hover:bg-stone-50;
+    }
+
+    .notice {
+        @apply rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-900;
+    }
+
+    .check {
+        @apply mx-3 grid size-6 shrink-0 place-items-center rounded-full border-2 border-stone-300 hover:border-emerald-600;
+    }
+
+    .check-done {
+        @apply border-emerald-600 bg-emerald-600 text-white;
+    }
+
+    .dialog {
+        @apply m-auto w-[min(28rem,calc(100%-2rem))] rounded-xl p-5 shadow-xl backdrop:bg-stone-900/40;
+    }
+}

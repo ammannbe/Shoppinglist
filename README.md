@@ -1,118 +1,62 @@
-# ShoppingListApi
+# Shoppinglist
 
-Backend API to manage your shopping list, written with Laravel.
-Manage your shopping list and share them with your family and flatmates.
+Offline-first web app (PWA) to manage shopping lists and share them with your family and flatmates. German and English.
 
-## Why is this so awesome?
+- **Works offline**: all lists live on the device and sync in the background as soon as a connection is available.
+- **Share lists**: invite others by email, changes of all members are merged.
+- **Installable**: add it to the home screen on Android and iOS, no app store needed.
+- **Passkeys**: log in with Face ID, Touch ID, Windows Hello or the device PIN.
 
--   **Multiple shopping lists** | You can create multiple shopping lists.
--   **Share shopping lists** | You can share shopping lists with a view clicks click with other users or via Social Media (Telegram, E-Mail, etc.).
--   **Desktop and mobile apps** | They are comming soon...
--   **Sync with other devices** | Sync with other devices at your account.
--   **Offline editing** | Manage your lists offline and sync them after you connected to the internet.
+Built with Laravel, Alpine.js and RxDB. See [AGENTS.md](AGENTS.md) for the architecture.
 
-## Getting Started
+## Development
 
-Get the latest [release](https://git.narrenhaus.ch/Narrenhaus/ShoppingListApi/releases) or clone the repo with
-
-```
-git clone https://git.narrenhaus.ch/Narrenhaus/ShoppingListApi.git
-```
-
-### Prerequisites
-
--   LAMP Stack (only on production)
--   Requirements for [laravel](https://laravel.com/docs)
--   Composer
--   NPM
-
-### Installing
-
-It's recommended to install and update this software with docker/docker-compose.
-See [here](docker/README.md) for more information.
-
-Alternatively or for development purposes you can make a manual installation on any linux/unix machine:
-
-#### Manual installation
-
--   Install composer packages `composer install`
--   Install NPM packages `npm install`
--   Copy .env.example to .env and modify it to your needs
--   Generate an app key `php artisan key:generate`
--   Migrate the database `php artisan migrate`
--   Add following to your crontab:
+Requires [DDEV](https://ddev.com).
 
 ```bash
-  *  *  *  *  *  www-data   cd /path-to-the-project && php artisan schedule:run >> /dev/null 2>&1
+ddev start
+ddev composer install
+ddev npm install
+ddev artisan key:generate
+ddev artisan migrate --seed   # test@example.com / password
+ddev npm run dev
 ```
 
-#### Manual development deployment
+- Tests: `ddev artisan test`
+- Code style: `ddev exec vendor/bin/pint`
 
--   If not already done, [install](#installation) everything
--   Run the server `php artisan serve`
--   Watch for style and js changes: `npm run watch`
+## Deployment (shared hosting, e.g. KeyHelp)
 
-#### Manual production deployment
+- PHP 8.3+, MariaDB/MySQL, HTTPS (required for service worker and offline mode).
+- Document root: `public/`.
+- `composer install --no-dev --optimize-autoloader`, `npm ci && npm run build`, `php artisan migrate --force`, `php artisan optimize`.
+- Cron jobs, every minute (same as RecipeManager):
+  ```
+  * * * * *  cd /path-to-the-project && php artisan schedule:run >> /dev/null 2>&1
+  * * * * *  cd /path-to-the-project && php artisan queue:work --max-time=50 >> /dev/null 2>&1
+  ```
+  The queue sends the mails (verification, password reset, invitations).
+- Apache: `public/.htaccess` sets the manifest MIME type and disables caching of `sw.js` (needs `mod_headers`).
 
--   If not already done, [install](#installation) everything
--   Optimize composer autoload `composer install --optimize-autoloader --no-dev`
--   Enable caching:
+### Automatic deployment (Forgejo Actions)
+
+`.forgejo/workflows/deploy.yml` deploys every push to `main`: builds the assets (incl. service worker) in CI, copies them via SSH, then runs `git pull`, `composer install --no-dev`, migrations and `optimize` on the server (`php85`).
+
+- Secret: `SSH_KEY` (private deploy key)
+- Variables: `SSH_HOST`, `SSH_USER`, `SSH_FINGERPRINT` (SHA256 ed25519 host key), `DEPLOY_PATH`, optional `PRIMARY_SITE_URL` (checked after the deploy)
+- The server needs a git checkout of the repository in `DEPLOY_PATH` and a configured `.env`.
+
+## Import from the old API
+
+The data of the former Laravel 7 API (ShoppinglistApi ≤ 2020) can be imported once into an empty database:
 
 ```bash
-php artisan config:cache
-php artisan route:cache
-php artisan view:cache
+# .env: LEGACY_DB_HOST, LEGACY_DB_DATABASE, LEGACY_DB_USERNAME, LEGACY_DB_PASSWORD
+php artisan shoppinglist:import-legacy
 ```
 
--   Optimize npm packages: `npm run prod`
-
-## Update
-
--   Get the latest source (see [Getting Started](#getting-started))
--   Check `.env.examples` for changes
--   Optimize composer autoload `composer install`
--   Install NPM packages `npm install`
--   Migrate the database `php artisan migrate`
--   Follow [Development deployment](#development-deployment) or [Production deployment](#production-deployment)
-
-## Translations
-
-Translations are manually managed in `resources/lang/*.json` and `resources/lang/*/*.php`.
-
-## IDE helpers
-
-You get better IDE IntelliSense support with the [laravel-ide-helper](https://github.com/barryvdh/laravel-ide-helper) package.
-
-You need to generate the helpers by yourself:
-
-```bash
-composer run ide-helper:generate
-```
-
-After that, you should run the commands from [Testing / Code Quality](#testing-/-code-quality).
-
-## Testing / Code Quality
-
--   Run static code analytics `composer run phpstan`
--   Run PHP Coding Standards Fixer `composer run php-cs-fixer`
-
-## Built With
-
--   [barryvdh/laravel-cors](https://github.com/barryvdh/laravel-cors) - Adds CORS (Cross-Origin Resource Sharing) headers support in your Laravel application
--   [laravel/laravel](https://github.com/laravel/laravel) - A PHP framework for web artisans.
--   [laravel/telescope](https://github.com/laravel/telescope) - Laravel Telescope is an elegant debug assistant for the Laravel framework.
--   [nunomaduro/larastan](https://github.com/nunomaduro/larastan) - Adds static analysis to Laravel improving developer productivity and code quality
--   [stechstudio/Laravel-PHP-CS-Fixer](https://github.com/stechstudio/Laravel-PHP-CS-Fixer) - Artisan Command for FriendsOfPHP/PHP-CS_Fixer
--   [laravel-ide-helper](https://github.com/barryvdh/laravel-ide-helper) - Laravel IDE Helper
-
-## Contributing
-
-Please see [CONTRIBUTING](CONTRIBUTING.md) for details.
-
-## Authors
-
--   **Benjamin Ammann** - _Initial work_ - [ammannbe](https://github.com/ammannbe)
+Users keep their passwords.
 
 ## License
 
-This project is licensed under the AGPLv3 or later - see the [LICENSE](LICENSE) file for details
+AGPLv3 or later, see [LICENSE](LICENSE).
