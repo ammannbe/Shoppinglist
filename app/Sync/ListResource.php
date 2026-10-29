@@ -37,8 +37,11 @@ class ListResource extends SyncResource
         return [
             'id' => $list->id,
             'name' => $list->name,
+            'item_sort' => $list->item_sort,
             'owner_email' => $list->owner->email,
             'is_owner' => $isOwner,
+            // The order of the lists is personal.
+            'position' => $model->position,
             'members' => $isOwner
                 ? $list->memberships->pluck('user.email')->reject(fn ($email) => $email === $user->email)->sort()->values()->all()
                 : [],
@@ -58,11 +61,11 @@ class ListResource extends SyncResource
                 return null;
             }
 
-            $list = new ShoppingList(['name' => $new['name']]);
+            $list = new ShoppingList(['name' => $new['name'], 'item_sort' => $new['item_sort'] ?? null]);
             $list->id = $new['id'];
             $list->owner()->associate($user);
             $list->save();
-            $list->addMember($user);
+            $list->addMember($user)->update(['position' => $new['position'] ?? null]);
 
             return null;
         }
@@ -96,9 +99,11 @@ class ListResource extends SyncResource
         }
 
         $list->name = $new['name'];
+        $list->item_sort = $new['item_sort'] ?? null;
         $list->version = $this->nextVersion($list, $new);
         $list->save();
         $list->touchForMembers();
+        $membership->update(['position' => $new['position'] ?? null]);
 
         return null;
     }

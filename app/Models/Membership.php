@@ -9,10 +9,17 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Table('shopping_list_user')]
-#[Fillable(['shopping_list_id', 'user_id'])]
+#[Fillable(['shopping_list_id', 'user_id', 'position'])]
 class Membership extends Model
 {
     use Syncable;
+
+    protected function casts(): array
+    {
+        return [
+            'position' => 'float',
+        ];
+    }
 
     public function shoppingList(): BelongsTo
     {
