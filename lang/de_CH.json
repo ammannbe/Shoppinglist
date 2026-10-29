@@ -64,6 +64,7 @@
     "Disable": "Deaktivieren",
     "Discard": "Verwerfen",
     "Done": "Erledigt",
+    "Done items deleted": "Erledigte Artikel gelöscht",
     "Down": "Runter",
     "Duplicate": "Duplikat",
     "Duplicate :name": "Duplikat :name",
@@ -124,6 +125,7 @@
     "Leave this list?": "Diese Liste verlassen?",
     "Length Required": "Längenangabe erforderlich",
     "Like": "Wie",
+    "List deleted": "Liste gelöscht",
     "Load": "Belastung",
     "Localize": "Lokalisieren",
     "Location": "Standort",
@@ -140,6 +142,7 @@
     "Menu": "Menü",
     "Method Not Allowed": "Methode nicht erlaubt",
     "Misdirected Request": "Fehlgeleitete Anfrage",
+    "More actions": "Weitere Aktionen",
     "Moved Permanently": "Permanent verschoben",
     "Multi-Status": "Multistatus",
     "Multiple Choices": "Mehrere Auswahlmöglichkeiten",
@@ -286,6 +289,7 @@
     "Unable to write the encrypted environment file.": "Unable to write the encrypted environment file.",
     "Unauthorized": "Nicht autorisiert",
     "Unavailable For Legal Reasons": "Aus rechtlichen Gründen nicht verfügbar",
+    "Undo": "Rückgängig",
     "Unit": "Einheit",
     "Unknown Error": "Unbekannter Fehler",
     "Unpack": "Auspacken",
@@ -309,5 +313,6 @@
     "Whoops!": "Ups!",
     "Yes": "Ja",
     "You are receiving this email because we received a password reset request for your account.": "Du erhältst diese E-Mail, weil für dein Konto das Zurücksetzen des Passworts angefordert wurde.",
-    "Your session has expired. Please log in again.": "Deine Sitzung ist abgelaufen. Bitte melde dich erneut an."
+    "Your session has expired. Please log in again.": "Deine Sitzung ist abgelaufen. Bitte melde dich erneut an.",
+    "“:name” deleted": "«:name» gelöscht"
 }

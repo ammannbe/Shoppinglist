@@ -6,6 +6,8 @@ import { createDatabase, startReplication } from './db/index.js';
 import { formatAmount, parseItemInput, uuid7 } from './helpers.js';
 import { hasPendingLocale, htmlLang, initialLocale, LOCALES, storeLocale, translate } from './i18n.js';
 import { registerServiceWorker } from './pwa.js';
+import { swipeRow } from './swipe.js';
+import { createUndoStore } from './undo.js';
 
 const RESYNC_INTERVAL = 30_000;
 const DEFAULT_UNITS = ['Stk.', 'g', 'kg', 'ml', 'dl', 'l', 'Pck.', 'Bund', 'Fl.'];
@@ -22,6 +24,7 @@ Alpine.store('i18n', { locale: initialLocale(), locales: LOCALES });
 // status: starting | local (not logged in) | unverified | expired | offline | syncing | synced | error
 Alpine.store('sync', { status: 'starting', user: null, online: navigator.onLine });
 Alpine.store('data', { lists: [], items: [], products: [], units: [] });
+Alpine.store('undo', createUndoStore());
 
 Alpine.magic('t', () => (key, replace) => translate(Alpine.store('i18n').locale, key, replace));
 
@@ -41,6 +44,8 @@ async function setLocale(locale) {
 
 // ---------------------------------------------------------------- UI component
 
+Alpine.data('swipeRow', swipeRow);
+
 Alpine.data('shoppinglist', () => ({
     route: { view: 'lists', id: null },
     newListName: '',
@@ -48,9 +53,12 @@ Alpine.data('shoppinglist', () => ({
     showDone: false,
     editing: null,
     renaming: null,
+    renamingList: null,
+    shareListId: null,
     shareEmail: '',
     shareError: null,
     busy: false,
+    menu: null,
     installHintDismissed: localStorage.getItem('shoppinglist.install-hint') === 'dismissed',
 
     init() {
@@ -58,6 +66,7 @@ Alpine.data('shoppinglist', () => ({
             const [, view, id = null] = location.hash.split('/');
             this.route = { view: view || 'lists', id };
             this.renaming = null;
+            this.menu = null;
         };
         window.addEventListener('hashchange', parse);
         parse();
@@ -66,13 +75,16 @@ Alpine.data('shoppinglist', () => ({
     // ---- data helpers
 
     get lists() {
-        return Alpine.store('data').lists;
+        return Alpine.store('data').lists.filter((list) => !Alpine.store('undo').hidden(list.id));
     },
     get list() {
         return this.lists.find((list) => list.id === this.route.id) ?? null;
     },
+    get shareList() {
+        return this.lists.find((list) => list.id === this.shareListId) ?? null;
+    },
     itemsOf(listId) {
-        return Alpine.store('data').items.filter((item) => item.shopping_list_id === listId);
+        return Alpine.store('data').items.filter((item) => item.shopping_list_id === listId && !Alpine.store('undo').hidden(item.id));
     },
     openCount(listId) {
         return this.itemsOf(listId).filter((item) => !item.done).length;
@@ -100,6 +112,40 @@ Alpine.data('shoppinglist', () => ({
         return [formatAmount(item.amount, Alpine.store('i18n').locale), item.unit].filter(Boolean).join(' ');
     },
 
+    // ---- context menu (hover "…" on desktop) and swipe actions share these definitions
+
+    listActions(list) {
+        return [
+            { label: this.$t('Rename'), icon: 'edit', run: () => this.openRename(list) },
+            ...(this.loggedIn && list.is_owner !== false ? [{ label: this.$t('Share'), icon: 'share', run: () => this.openShare(list.id) }] : []),
+            list.is_owner === false
+                ? { label: this.$t('Leave list'), icon: 'leave', danger: true, run: () => this.leaveList(list.id) }
+                : { label: this.$t('Delete'), icon: 'delete', danger: true, run: () => this.deleteList(list.id) },
+        ];
+    },
+
+    itemActions(item) {
+        return [
+            { label: this.$t('Edit'), icon: 'edit', run: () => this.edit(item) },
+            { label: this.$t('Delete'), icon: 'delete', danger: true, run: () => this.deleteItem(item) },
+        ];
+    },
+
+    openMenu(event, actions) {
+        const rect = event.currentTarget.getBoundingClientRect();
+        const below = rect.bottom + 48 * actions.length + 16 < window.innerHeight;
+        this.menu = {
+            actions,
+            style: `right: ${window.innerWidth - rect.right}px; ${below ? `top: ${rect.bottom + 4}px` : `bottom: ${window.innerHeight - rect.top + 4}px`}`,
+        };
+        this.$nextTick(() => this.$refs.menu?.querySelector('button')?.focus());
+    },
+
+    runMenu(action) {
+        this.menu = null;
+        action.run();
+    },
+
     // ---- lists
 
     async createList() {
@@ -124,16 +170,28 @@ Alpine.data('shoppinglist', () => ({
         this.renaming = null;
     },
 
-    async deleteList() {
-        if (!confirm(this.$t('Delete this list for all members?'))) return;
-        await (await db.lists.findOne(this.route.id).exec())?.remove();
-        location.hash = '#/';
+    openRename(list) {
+        this.renamingList = { id: list.id, name: list.name };
+        this.$nextTick(() => this.$refs.renameDialog.showModal());
     },
 
-    async leaveList() {
+    async saveRename() {
+        const name = this.renamingList.name.trim();
+        if (name) await (await db.lists.findOne(this.renamingList.id).exec())?.incrementalPatch({ name });
+        this.$refs.renameDialog.close();
+    },
+
+    deleteList(id = this.route.id) {
+        if (this.route.id === id) location.hash = '#/';
+        Alpine.store('undo').schedule(id, this.$t('List deleted'), async () => {
+            await (await db.lists.findOne(id).exec())?.remove();
+        });
+    },
+
+    async leaveList(id = this.route.id) {
         if (!confirm(this.$t('Leave this list?'))) return;
         await this.online(async () => {
-            await api.delete(`/lists/${this.route.id}/members/${encodeURIComponent(Alpine.store('sync').user.email)}`);
+            await api.delete(`/lists/${id}/members/${encodeURIComponent(Alpine.store('sync').user.email)}`);
             replication?.resync();
             location.hash = '#/';
         });
@@ -177,9 +235,14 @@ Alpine.data('shoppinglist', () => ({
         this.closeEdit();
     },
 
-    async deleteItem() {
-        await (await db.items.findOne(this.editing.id).exec())?.remove();
-        this.closeEdit();
+    /**
+     * Deleting is undoable for a few seconds instead of asking for confirmation.
+     */
+    deleteItem(item = this.editing) {
+        if (this.editing) this.closeEdit();
+        Alpine.store('undo').schedule(item.id, this.$t('“:name” deleted', { name: item.name }), async () => {
+            await (await db.items.findOne(item.id).exec())?.remove();
+        });
     },
 
     closeEdit() {
@@ -187,16 +250,20 @@ Alpine.data('shoppinglist', () => ({
         this.editing = null;
     },
 
-    async clearDone() {
-        await db.items.bulkRemove(this.doneItems.map((item) => item.id));
+    clearDone() {
+        const ids = this.doneItems.map((item) => item.id);
+        Alpine.store('undo').schedule(ids, this.$t('Done items deleted'), async () => {
+            await db.items.bulkRemove(ids);
+        });
     },
 
     // ---- sharing (needs a connection)
 
-    openShare() {
+    openShare(id = this.route.id) {
+        this.shareListId = id;
         this.shareEmail = '';
         this.shareError = null;
-        this.$refs.shareDialog.showModal();
+        this.$nextTick(() => this.$refs.shareDialog.showModal());
     },
 
     async share() {
@@ -204,7 +271,7 @@ Alpine.data('shoppinglist', () => ({
         if (!email) return;
         this.shareError = null;
         await this.online(async () => {
-            await api.post(`/lists/${this.route.id}/members`, { email });
+            await api.post(`/lists/${this.shareListId}/members`, { email });
             this.shareEmail = '';
             replication?.resync();
         }, (error) => { this.shareError = error; });
@@ -212,7 +279,7 @@ Alpine.data('shoppinglist', () => ({
 
     async removeMember(email) {
         await this.online(async () => {
-            await api.delete(`/lists/${this.route.id}/members/${encodeURIComponent(email)}`);
+            await api.delete(`/lists/${this.shareListId}/members/${encodeURIComponent(email)}`);
             replication?.resync();
         }, (error) => { this.shareError = error; });
     },

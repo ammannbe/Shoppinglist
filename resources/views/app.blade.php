@@ -110,8 +110,8 @@
 
             <ul class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
                 <template x-for="item in lists" :key="item.id">
-                    <li>
-                        <a :href="`#/list/${item.id}`" class="flex items-center gap-3 px-4 py-3 hover:bg-stone-50">
+                    <x-swipe-row actions="listActions(item)">
+                        <a :href="`#/list/${item.id}`" class="flex min-w-0 flex-1 items-center gap-3 py-3 pl-4 pointer-coarse:pr-4" draggable="false">
                             <span class="min-w-0 flex-1">
                                 <span class="block truncate font-medium" x-text="item.name"></span>
                                 <span x-show="item.is_owner === false" class="block truncate text-xs text-stone-500" x-text="$t('Shared by :email', { email: item.owner_email })"></span>
@@ -119,7 +119,7 @@
                             </span>
                             <span class="rounded-full bg-stone-100 px-2 py-0.5 text-sm tabular-nums text-stone-600" x-text="openCount(item.id)"></span>
                         </a>
-                    </li>
+                    </x-swipe-row>
                 </template>
             </ul>
         </section>
@@ -148,13 +148,14 @@
 
                     <ul class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white" x-show="openItems.length">
                         <template x-for="item in openItems" :key="item.id">
-                            <li class="flex items-center">
-                                <button type="button" class="check" @click="toggle(item)" :aria-label="$t('Done')"></button>
-                                <button type="button" class="flex min-w-0 flex-1 items-baseline gap-2 py-3 pr-4 text-left" @click="edit(item)">
-                                    <span class="truncate" x-text="item.name"></span>
+                            <x-swipe-row actions="itemActions(item)">
+                                {{-- Tap marks as done, edit/delete via swipe or "…" --}}
+                                <button type="button" class="flex min-w-0 flex-1 items-center py-3 pr-4 text-left" role="checkbox" aria-checked="false" @click="toggle(item)">
+                                    <span class="check" aria-hidden="true"></span>
+                                    <span class="mr-2 truncate" x-text="item.name"></span>
                                     <span class="shrink-0 text-sm text-stone-500" x-text="amount(item)"></span>
                                 </button>
-                            </li>
+                            </x-swipe-row>
                         </template>
                     </ul>
 
@@ -166,15 +167,15 @@
                         </div>
                         <ul x-show="showDone" class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
                             <template x-for="item in doneItems" :key="item.id">
-                                <li class="flex items-center text-stone-400">
-                                    <button type="button" class="check check-done" @click="toggle(item)" :aria-label="$t('Not done')">
-                                        <svg viewBox="0 0 24 24" class="size-4"><path d="M5 12l5 5 9-10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                                    </button>
-                                    <button type="button" class="flex min-w-0 flex-1 items-baseline gap-2 py-3 pr-4 text-left line-through" @click="edit(item)">
-                                        <span class="truncate" x-text="item.name"></span>
+                                <x-swipe-row actions="itemActions(item)" class="text-stone-400">
+                                    <button type="button" class="flex min-w-0 flex-1 items-center py-3 pr-4 text-left" role="checkbox" aria-checked="true" @click="toggle(item)">
+                                        <span class="check check-done" aria-hidden="true">
+                                            <svg viewBox="0 0 24 24" class="size-4"><path d="M5 12l5 5 9-10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                        </span>
+                                        <span class="mr-2 truncate line-through" x-text="item.name"></span>
                                         <span class="shrink-0 text-sm" x-text="amount(item)"></span>
                                     </button>
-                                </li>
+                                </x-swipe-row>
                             </template>
                         </ul>
                     </div>
@@ -220,7 +221,7 @@
     </main>
 
     {{-- iOS install hint (Safari has no install prompt) --}}
-    <div x-show="isIos && !installHintDismissed && route.view === 'lists'" class="fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] mx-auto max-w-xl rounded-lg bg-stone-900 p-4 text-sm text-white shadow-lg">
+    <div x-show="isIos && !installHintDismissed && route.view === 'lists' && !$store.undo.toast" class="fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] mx-auto max-w-xl rounded-lg bg-stone-900 p-4 text-sm text-white shadow-lg">
         <p x-text="$t('On iPhone and iPad: open this page in Safari, tap “Share” and then “Add to Home Screen”.')"></p>
         <button type="button" class="mt-2 font-medium underline" @click="dismissInstallHint()" x-text="$t('Got it')"></button>
     </div>
@@ -257,13 +258,13 @@
 
     {{-- Share list (owner only, needs a connection) --}}
     <dialog x-ref="shareDialog" class="dialog">
-        <template x-if="list">
+        <template x-if="shareList">
             <div class="space-y-4">
                 <h2 class="text-lg font-semibold" x-text="$t('Share')"></h2>
                 <p x-show="!$store.sync.online" class="notice" x-text="$t('This needs an internet connection.')"></p>
 
-                <ul x-show="list.members?.length" class="divide-y divide-stone-200 rounded-lg border border-stone-200">
-                    <template x-for="email in list.members" :key="email">
+                <ul x-show="shareList.members?.length" class="divide-y divide-stone-200 rounded-lg border border-stone-200">
+                    <template x-for="email in shareList.members" :key="email">
                         <li class="flex items-center justify-between gap-2 px-3 py-2">
                             <span class="min-w-0 truncate" x-text="email"></span>
                             <button type="button" class="text-sm text-red-700 underline" @click="removeMember(email)" :disabled="busy" x-text="$t('Remove')"></button>
@@ -285,6 +286,38 @@
             </div>
         </template>
     </dialog>
+
+    {{-- Rename list (overview) --}}
+    <dialog x-ref="renameDialog" class="dialog" @close="renamingList = null">
+        <template x-if="renamingList">
+            <form @submit.prevent="saveRename()" class="space-y-4">
+                <label class="block">
+                    <span class="label" x-text="$t('Name')"></span>
+                    <input x-model="renamingList.name" class="field w-full" required>
+                </label>
+                <div class="flex flex-wrap justify-end gap-2 pt-2">
+                    <button type="button" class="button-secondary" @click="$refs.renameDialog.close()" x-text="$t('Cancel')"></button>
+                    <button class="button" x-text="$t('Save')"></button>
+                </div>
+            </form>
+        </template>
+    </dialog>
+
+    {{-- "…" menu of a row (desktop) --}}
+    <div x-ref="menu" x-show="menu" x-transition.opacity.duration.100ms role="menu" :style="menu?.style"
+        class="fixed z-30 w-52 overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-lg"
+        @click.outside="menu = null" @keydown.escape.window="menu = null" @scroll.window="menu = null" @resize.window="menu = null">
+        <template x-for="action in menu?.actions ?? []" :key="action.label">
+            <button type="button" role="menuitem" class="menu-item" :class="action.danger && 'text-red-700'" @click="runMenu(action)" x-text="action.label"></button>
+        </template>
+    </div>
+
+    {{-- Undo deletion --}}
+    <div x-show="$store.undo.toast" x-transition role="status" aria-live="polite"
+        class="fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-40 mx-auto flex max-w-xl items-center gap-3 rounded-lg bg-stone-900 px-4 py-3 text-sm text-white shadow-lg">
+        <span class="min-w-0 flex-1 truncate" x-text="$store.undo.toast?.message"></span>
+        <button type="button" class="shrink-0 font-semibold text-emerald-300 uppercase" @click="$store.undo.undo()" x-text="$t('Undo')"></button>
+    </div>
 
     <datalist id="product-names">
         <template x-for="name in productNames" :key="name"><option :value="name"></option></template>

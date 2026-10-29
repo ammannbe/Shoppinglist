@@ -34,6 +34,11 @@ Shoppinglist: offline-first PWA for shared shopping lists. One Laravel app serve
 - Favicons + `public/site.webmanifest`: RealFaviconGenerator via `ddev npm run favicon -- --source src/favicon.png --theme '#047857' --bg '#fafaf9' --padding-bg '#ffd6d6'` (`src/scripts/favicon.mjs`, keeps extra manifest fields). Never use `/icons/`: Apache has a global `Alias /icons/`.
 - The service worker precaches the app shell `/`, build assets and favicons (one 404 aborts the install!); other navigations fall back to the app shell offline.
 
+## UI patterns
+
+- Rows use `<x-swipe-row actions="…">` (`resources/js/swipe.js`): touch swipe left reveals the actions, full swipe runs the last one; mouse gets a hover "…" menu (`pointer-fine`/`pointer-coarse`). Actions are defined once in `listActions()`/`itemActions()`.
+- Deletions are undoable (`resources/js/undo.js`): rows are hidden, the RxDB remove runs after 5 s or when the app is hidden. Never revive deleted documents.
+
 ## Deployment
 
 - `.forgejo/workflows/deploy.yml` (same as RecipeManager): push to `main` builds assets in CI, uploads `public/build`, `public/sw.js` and `public/workbox-*.js`, then `git pull` + `composer install --no-dev` + `migrate` + `optimize` on the server via SSH.
