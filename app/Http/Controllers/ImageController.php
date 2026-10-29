@@ -11,8 +11,9 @@ use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Product images. The client scales them down before the upload (resources/js/image.js),
- * the server only accepts small files. The image id is copied to the items, so members
+ * Product images in two sizes: `<uuid>` (full view, max. 1200 px) and `<uuid>-thumb`
+ * (rows, max. 240 px; missing for older images, then the full image is served). The client
+ * scales them down before the upload (resources/js/image.js), the server only accepts small files. The image id is copied to the items, so members
  * of shared lists may see the images of the items on their lists.
  */
 class ImageController extends Controller
@@ -27,7 +28,8 @@ class ImageController extends Controller
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'image' => ['required', 'file', 'mimetypes:image/webp,image/jpeg,image/png', 'max:400', 'dimensions:max_width=1600,max_height=1600'],
+            'image' => ['required', 'file', 'mimetypes:image/webp,image/jpeg,image/png', 'max:700', 'dimensions:max_width=1600,max_height=1600'],
+            'thumb' => ['required', 'file', 'mimetypes:image/webp,image/jpeg,image/png', 'max:100', 'dimensions:max_width=400,max_height=400'],
         ]);
 
         $product = $this->ownProduct($request, $productId, $validated['name']);
@@ -35,6 +37,7 @@ class ImageController extends Controller
 
         $image = (string) Str::uuid();
         Storage::putFileAs(self::DIRECTORY, $request->file('image'), $image);
+        Storage::putFileAs(self::DIRECTORY, $request->file('thumb'), $image.'-thumb');
 
         $this->saveImage($product, $image);
         $this->deleteUnused($old);
@@ -56,7 +59,7 @@ class ImageController extends Controller
     /**
      * Images of own products and of items on accessible lists.
      */
-    public function show(Request $request, string $image): Response
+    public function show(Request $request, string $image, ?string $size = null): Response
     {
         abort_unless(Str::isUuid($image), 404);
         $user = $request->user();
@@ -64,6 +67,9 @@ class ImageController extends Controller
         $allowed = Product::where('image', $image)->where('owner_id', $user->id)->exists()
             || Item::where('image', $image)->whereIn('shopping_list_id', $user->accessibleListIds())->exists();
         $path = self::DIRECTORY.'/'.$image;
+        if ($size === 'thumb' && Storage::exists($path.'-thumb')) {
+            $path .= '-thumb';
+        }
         abort_unless($allowed && Storage::exists($path), 404);
 
         // A new image gets a new id, so the file never changes.
@@ -103,6 +109,6 @@ class ImageController extends Controller
         if ($image === null || Product::withTrashed()->where('image', $image)->exists() || Item::withTrashed()->where('image', $image)->exists()) {
             return;
         }
-        Storage::delete(self::DIRECTORY.'/'.$image);
+        Storage::delete([self::DIRECTORY.'/'.$image, self::DIRECTORY.'/'.$image.'-thumb']);
     }
 }

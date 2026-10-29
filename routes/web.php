@@ -35,7 +35,7 @@ Route::middleware('auth')->group(function () {
         Route::get('sync/{collection}/pull', [SyncController::class, 'pull'])->name('sync.pull');
         Route::post('sync/{collection}/push', [SyncController::class, 'push'])->name('sync.push');
 
-        Route::get('images/{image}', [ImageController::class, 'show'])->name('images.show');
+        Route::get('images/{image}/{size?}', [ImageController::class, 'show'])->whereIn('size', ['thumb'])->name('images.show');
         Route::post('products/{product}/image', [ImageController::class, 'store'])->name('products.image.store');
         Route::delete('products/{product}/image', [ImageController::class, 'destroy'])->name('products.image.destroy');
 

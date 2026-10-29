@@ -174,7 +174,7 @@
                                 {{-- Tap marks as done, edit/delete via swipe or "…" --}}
                                 <button type="button" class="flex min-w-0 flex-1 items-center py-3 pr-4 text-left" role="checkbox" aria-checked="false" @click="toggle(item)">
                                     <span class="check" aria-hidden="true"></span>
-                                    <img x-show="item.image" :src="imageUrl(item.image)" alt="" loading="lazy" decoding="async" class="mr-3 size-10 shrink-0 rounded-md bg-stone-100 object-cover">
+                                    <img x-show="item.image" :src="imageUrl(item.image, 'thumb')" @click.stop="openImage(item.image)" :alt="$t('Show photo')" loading="lazy" decoding="async" class="mr-3 size-10 shrink-0 cursor-zoom-in rounded-md bg-stone-100 object-cover">
                                     <span x-show="amount(item)" class="mr-2 shrink-0 tabular-nums text-stone-500" x-text="amount(item)"></span>
                                     <span class="truncate" x-text="item.name"></span>
                                 </button>
@@ -195,7 +195,7 @@
                                         <span class="check check-done" aria-hidden="true">
                                             <svg viewBox="0 0 24 24" class="size-4"><path d="M5 12l5 5 9-10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
                                         </span>
-                                        <img x-show="item.image" :src="imageUrl(item.image)" alt="" loading="lazy" decoding="async" class="mr-3 opacity-50 size-10 shrink-0 rounded-md bg-stone-100 object-cover">
+                                        <img x-show="item.image" :src="imageUrl(item.image, 'thumb')" @click.stop="openImage(item.image)" :alt="$t('Show photo')" loading="lazy" decoding="async" class="mr-3 opacity-50 size-10 shrink-0 cursor-zoom-in rounded-md bg-stone-100 object-cover">
                                         <span x-show="amount(item)" class="mr-2 shrink-0 tabular-nums line-through" x-text="amount(item)"></span>
                                         <span class="truncate line-through" x-text="item.name"></span>
                                     </button>
@@ -295,7 +295,7 @@
                         <template x-for="entry in shownCatalog.filter((entry) => !entry.is_public)" :key="entry.id">
                             <x-swipe-row actions="catalogActions(entry)">
                                 <span class="flex min-w-0 flex-1 items-center gap-3 py-2 pl-4 pointer-coarse:pr-4">
-                                    <img x-show="entry.image" :src="imageUrl(entry.image)" alt="" loading="lazy" decoding="async" class="size-10 shrink-0 rounded-md bg-stone-100 object-cover">
+                                    <img x-show="entry.image" :src="imageUrl(entry.image, 'thumb')" @click.stop="openImage(entry.image)" :alt="$t('Show photo')" loading="lazy" decoding="async" class="size-10 shrink-0 cursor-zoom-in rounded-md bg-stone-100 object-cover">
                                     <span class="min-w-0 flex-1 truncate py-1" x-text="entry.name"></span>
                                 </span>
                             </x-swipe-row>
@@ -414,7 +414,7 @@
                 </div>
                 {{-- Photo of the product: shown for every item with this name --}}
                 <div x-show="loggedIn" class="flex items-center gap-3">
-                    <img x-show="editing.image" :src="imageUrl(editing.image)" alt="" class="size-20 shrink-0 rounded-lg bg-stone-100 object-cover">
+                    <img x-show="editing.image" :src="imageUrl(editing.image, 'thumb')" @click="openImage(editing.image)" :alt="$t('Show photo')" class="size-20 shrink-0 cursor-zoom-in rounded-lg bg-stone-100 object-cover">
                     <div class="min-w-0 space-y-1 text-sm">
                         <span class="label" x-text="$t('Photo for all “:name”', { name: editing.name.trim() || '…' })"></span>
                         <div class="flex flex-wrap gap-x-4 gap-y-1">
@@ -483,6 +483,29 @@
                 </div>
             </form>
         </template>
+    </dialog>
+
+    {{-- Product photo in full view (resources/js/lightbox.js) --}}
+    <dialog x-ref="lightbox" class="m-0 h-dvh max-h-none w-screen max-w-none overflow-hidden bg-transparent p-0 backdrop:bg-black/90"
+        @close="$store.lightbox.closed()" :aria-label="$t('Photo')">
+        <template x-if="$store.lightbox.image">
+            <div class="relative size-full touch-none select-none"
+                @pointerdown="$store.lightbox.down($event)" @pointermove="$store.lightbox.move($event)"
+                @pointerup="$store.lightbox.up($event)" @pointercancel="$store.lightbox.up($event)" @wheel.prevent="$store.lightbox.wheel($event)">
+                <div class="absolute inset-0 grid p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+                    :class="$store.lightbox.gesture || 'transition-transform duration-150 motion-reduce:transition-none'"
+                    :style="`transform: ${$store.lightbox.transform}`">
+                    {{-- Thumbnail at once (and offline), the large image on top as soon as it is loaded --}}
+                    <img :src="imageUrl($store.lightbox.image, 'thumb')" alt="" draggable="false" class="col-start-1 row-start-1 size-full object-contain">
+                    <img :src="imageUrl($store.lightbox.image)" alt="" draggable="false" x-show="$store.lightbox.loaded" @load="$store.lightbox.loaded = true"
+                        class="col-start-1 row-start-1 size-full object-contain">
+                </div>
+            </div>
+        </template>
+        <button type="button" class="absolute top-[max(0.75rem,env(safe-area-inset-top))] right-3 grid size-11 place-items-center rounded-full bg-black/50 text-white"
+            @click="$store.lightbox.close()" :aria-label="$t('Close')">
+            <svg viewBox="0 0 24 24" class="size-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
     </dialog>
 
     {{-- "…" menu of a row (desktop) --}}

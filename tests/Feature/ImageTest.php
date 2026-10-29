@@ -26,7 +26,8 @@ class ImageTest extends TestCase
     {
         return $this->actingAs($user)->post("/products/{$productId}/image", [
             'name' => $name,
-            'image' => $file ?? UploadedFile::fake()->image('milk.jpg', 400, 300),
+            'image' => $file ?? UploadedFile::fake()->image('milk.jpg', 1200, 900),
+            'thumb' => UploadedFile::fake()->image('thumb.jpg', 240, 180),
         ], ['Accept' => 'application/json']);
     }
 
@@ -46,10 +47,12 @@ class ImageTest extends TestCase
 
         $image = $this->upload($user, $id)->assertOk()->json('image');
 
-        Storage::assertExists("images/{$image}");
+        Storage::assertExists(["images/{$image}", "images/{$image}-thumb"]);
         $this->assertSame($user->id, Product::find($id)->owner_id);
         $this->actingAs($user)->getJson('/sync/products/pull')->assertJsonPath('documents.0.image', $image);
         $this->actingAs($user)->get("/images/{$image}")->assertOk()->assertHeader('Cache-Control', 'immutable, max-age=31536000, private');
+        $this->actingAs($user)->get("/images/{$image}/thumb")->assertOk();
+        $this->actingAs($user)->get("/images/{$image}/large")->assertNotFound();
     }
 
     public function test_replacing_deletes_the_unused_old_image(): void
@@ -61,7 +64,7 @@ class ImageTest extends TestCase
         $new = $this->upload($user, $id)->json('image');
 
         $this->assertNotSame($old, $new);
-        Storage::assertMissing("images/{$old}");
+        Storage::assertMissing(["images/{$old}", "images/{$old}-thumb"]);
         $this->actingAs($user)->deleteJson("/products/{$id}/image")->assertJsonPath('image', null);
         Storage::assertMissing("images/{$new}");
     }
@@ -78,7 +81,9 @@ class ImageTest extends TestCase
         ]]])->assertExactJson([]);
 
         $this->actingAs($member)->get("/images/{$image}")->assertOk();
+        $this->actingAs($member)->get("/images/{$image}/thumb")->assertOk();
         $this->actingAs($stranger)->get("/images/{$image}")->assertNotFound();
+        $this->actingAs($stranger)->get("/images/{$image}/thumb")->assertNotFound();
     }
 
     public function test_foreign_images_cannot_be_attached_to_items(): void
@@ -96,6 +101,19 @@ class ImageTest extends TestCase
         $this->actingAs($other)->get("/images/{$image}")->assertNotFound();
     }
 
+    public function test_older_images_without_thumbnail_serve_the_full_image(): void
+    {
+        $user = User::factory()->create();
+        $image = (string) Str::uuid();
+        Storage::put("images/{$image}", 'full');
+        $product = new Product(['name' => 'Brot']);
+        $product->owner()->associate($user);
+        $product->image = $image;
+        $product->save();
+
+        $this->actingAs($user)->get("/images/{$image}/thumb")->assertOk()->assertStreamedContent('full');
+    }
+
     public function test_large_files_and_foreign_products_are_rejected(): void
     {
         [$owner, $other] = User::factory()->count(2)->create();
@@ -103,6 +121,6 @@ class ImageTest extends TestCase
         $this->upload($owner, $id)->assertOk();
 
         $this->upload($other, $id)->assertForbidden();
-        $this->upload($owner, $id, file: UploadedFile::fake()->create('big.jpg', 600, 'image/jpeg'))->assertUnprocessable();
+        $this->upload($owner, $id, file: UploadedFile::fake()->create('big.jpg', 800, 'image/jpeg'))->assertUnprocessable();
     }
 }

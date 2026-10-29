@@ -7,6 +7,7 @@ import { byPosition, compareBy, formatAmount, mergedAmount, nextPosition, normal
 import { hasPendingLocale, htmlLang, initialLocale, LOCALES, storeLocale, translate } from './i18n.js';
 import { registerServiceWorker } from './pwa.js';
 import { shrinkImage } from './image.js';
+import { createLightboxStore } from './lightbox.js';
 import { createPrefsStore } from './prefs.js';
 import { suggestField } from './suggest.js';
 import { swipeRow } from './swipe.js';
@@ -43,6 +44,7 @@ Alpine.store('sync', {
 Alpine.store('data', { lists: [], items: [], products: [], units: [] });
 Alpine.store('undo', createUndoStore());
 Alpine.store('prefs', createPrefsStore(api));
+Alpine.store('lightbox', createLightboxStore());
 Alpine.store('install', createInstallStore());
 // New app version ready (service worker waiting).
 Alpine.store('update', {
@@ -381,8 +383,12 @@ Alpine.data('shoppinglist', () => ({
 
     // ---- product images (need an account and a connection)
 
-    imageUrl(image) {
-        return image ? `/images/${image}` : '';
+    imageUrl(image, size = null) {
+        return image ? `/images/${image}${size ? `/${size}` : ''}` : '';
+    },
+
+    openImage(image) {
+        Alpine.store('lightbox').open(image, this.$refs.lightbox);
     },
 
     /**
@@ -400,7 +406,9 @@ Alpine.data('shoppinglist', () => ({
             const product = ownProduct(name) ?? (await db.products.insert({ id: uuid7(), name })).toJSON();
             const form = new FormData();
             form.append('name', product.name);
-            form.append('image', await shrinkImage(file), 'image');
+            const { image: large, thumb } = await shrinkImage(file);
+            form.append('image', large, 'image');
+            form.append('thumb', thumb, 'thumb');
             const { image } = await api.post(`/products/${product.id}/image`, form);
             await this.applyImage(name, image);
         } catch (error) {
