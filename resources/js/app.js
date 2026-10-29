@@ -16,6 +16,8 @@ import { createInstallStore } from './install.js';
 
 const RESYNC_INTERVAL = 30_000;
 const DEFAULT_UNITS = ['Stk.', 'g', 'kg', 'ml', 'dl', 'l', 'Pck.', 'Bund', 'Fl.'];
+// Shop codes offered in the edit dialog (any short code is possible).
+const DEFAULT_STORES = ['M', 'C', 'A', 'L', 'D'];
 const OWNER_KEY = 'shoppinglist.owner';
 const USER_KEY = 'shoppinglist.user';
 
@@ -193,6 +195,11 @@ Alpine.data('shoppinglist', () => ({
     get shownCatalog() {
         return this.catalog.slice(0, CATALOG_SHOWN);
     },
+    get storeCodes() {
+        const used = Alpine.store('data').items.map((item) => item.store).filter(Boolean);
+
+        return [...new Set([...DEFAULT_STORES, ...used])];
+    },
     get loggedIn() {
         return Alpine.store('sync').user !== null;
     },
@@ -364,7 +371,7 @@ Alpine.data('shoppinglist', () => ({
     },
 
     async saveItem() {
-        const { id, name, amount, unit } = this.editing;
+        const { id, name, amount, unit, store, note } = this.editing;
         if (name.trim()) {
             const doc = await db.items.findOne(id).exec();
             // Renamed: the image of the (own) product with the new name.
@@ -374,6 +381,8 @@ Alpine.data('shoppinglist', () => ({
                 image,
                 amount: amount === '' || amount === null ? null : Number(String(amount).replace(',', '.')) || null,
                 unit: unit?.trim() || null,
+                store: store?.trim().toUpperCase().slice(0, 10) || null,
+                note: note?.trim().slice(0, 255) || null,
             });
             await remember('products', name.trim());
             if (unit?.trim() && !this.unitNames.some((known) => sameName(known, unit))) await remember('units', unit.trim());

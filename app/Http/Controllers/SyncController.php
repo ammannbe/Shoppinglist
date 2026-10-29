@@ -52,6 +52,8 @@ class SyncController extends Controller
             '*.newDocumentState.shopping_list_id' => ['nullable', 'uuid'],
             '*.newDocumentState.amount' => ['nullable', 'numeric', 'min:0', 'max:9999999'],
             '*.newDocumentState.unit' => ['nullable', 'string', 'max:255'],
+            '*.newDocumentState.store' => ['nullable', 'string', 'max:10'],
+            '*.newDocumentState.note' => ['nullable', 'string', 'max:255'],
             '*.newDocumentState.done' => ['nullable', 'boolean'],
             '*.newDocumentState.position' => ['nullable', 'numeric'],
             '*.newDocumentState.item_sort' => ['nullable', Rule::in(PreferenceController::SORTS)],

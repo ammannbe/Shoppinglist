@@ -175,8 +175,12 @@
                                 <button type="button" class="flex min-w-0 flex-1 items-center py-3 pr-4 text-left" role="checkbox" aria-checked="false" @click="toggle(item)">
                                     <span class="check" aria-hidden="true"></span>
                                     <img x-show="item.image" :src="imageUrl(item.image, 'thumb')" @click.stop="openImage(item.image)" :alt="$t('Show photo')" loading="lazy" decoding="async" class="mr-3 size-10 shrink-0 cursor-zoom-in rounded-md bg-stone-100 object-cover">
+                                    <span x-show="item.store" class="mr-2 grid h-5 min-w-5 shrink-0 place-items-center rounded bg-orange-100 px-1 text-xs font-semibold text-orange-800" :title="$t('Shop')" x-text="item.store"></span>
                                     <span x-show="amount(item)" class="mr-2 shrink-0 tabular-nums text-stone-500" x-text="amount(item)"></span>
-                                    <span class="truncate" x-text="item.name"></span>
+                                    <span class="min-w-0">
+                                        <span class="block truncate" x-text="item.name"></span>
+                                        <span x-show="item.note" class="block truncate text-xs text-stone-500" x-text="item.note"></span>
+                                    </span>
                                 </button>
                             </x-swipe-row>
                         </template>
@@ -196,6 +200,7 @@
                                             <svg viewBox="0 0 24 24" class="size-4"><path d="M5 12l5 5 9-10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
                                         </span>
                                         <img x-show="item.image" :src="imageUrl(item.image, 'thumb')" @click.stop="openImage(item.image)" :alt="$t('Show photo')" loading="lazy" decoding="async" class="mr-3 opacity-50 size-10 shrink-0 cursor-zoom-in rounded-md bg-stone-100 object-cover">
+                                        <span x-show="item.store" class="mr-2 grid h-5 min-w-5 shrink-0 place-items-center rounded bg-stone-100 px-1 text-xs font-semibold" :title="$t('Shop')" x-text="item.store"></span>
                                         <span x-show="amount(item)" class="mr-2 shrink-0 tabular-nums line-through" x-text="amount(item)"></span>
                                         <span class="truncate line-through" x-text="item.name"></span>
                                     </button>
@@ -410,6 +415,25 @@
                                 @keydown.enter="enter($event)" @keydown.escape="if (visible) { $event.preventDefault(); close() }">
                             <x-suggestions id="unit-suggestions" />
                         </span>
+                    </label>
+                </div>
+                <div class="flex gap-3">
+                    <div class="min-w-0 w-1/3">
+                        <label class="block">
+                            <span class="label" x-text="$t('Shop')"></span>
+                            <input x-model="editing.store" class="field w-full uppercase" maxlength="10" autocomplete="off" autocapitalize="characters">
+                        </label>
+                        <div class="mt-1 flex flex-wrap gap-1">
+                            <template x-for="code in storeCodes" :key="code">
+                                <button type="button" class="rounded px-1.5 text-xs font-semibold"
+                                    :class="(editing.store ?? '').toUpperCase() === code ? 'bg-orange-600 text-white' : 'bg-orange-100 text-orange-800'"
+                                    @click="editing.store = (editing.store ?? '').toUpperCase() === code ? '' : code" x-text="code"></button>
+                            </template>
+                        </div>
+                    </div>
+                    <label class="block min-w-0 w-2/3">
+                        <span class="label" x-text="$t('Note')"></span>
+                        <input x-model="editing.note" class="field w-full" maxlength="255">
                     </label>
                 </div>
                 {{-- Photo of the product: shown for every item with this name --}}
