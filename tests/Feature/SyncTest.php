@@ -312,6 +312,17 @@ class SyncTest extends TestCase
         $this->pull($user, 'units')->assertJsonCount(2, 'documents')->assertJsonPath('documents.1.is_public', false);
     }
 
+    public function test_store_and_note_of_items_are_synced(): void
+    {
+        $user = User::factory()->create();
+        $listId = $this->createList($user);
+        $this->createItem($user, $listId, ['store' => 'M', 'note' => 'Aktion −30 %']);
+
+        $this->pull($user, 'items')
+            ->assertJsonPath('documents.0.store', 'M')
+            ->assertJsonPath('documents.0.note', 'Aktion −30 %');
+    }
+
     public function test_item_positions_are_shared_and_list_positions_are_personal(): void
     {
         $owner = User::factory()->create();

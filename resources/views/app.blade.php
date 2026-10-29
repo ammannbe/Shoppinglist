@@ -26,6 +26,7 @@
                 <span x-show="route.view === 'lists'" class="block truncate" x-text="$t('Shopping lists')"></span>
                 <span x-show="route.view === 'settings'" class="block truncate" x-text="$t('Settings')"></span>
                 <span x-show="route.view === 'install'" class="block truncate" x-text="$t('Install app')"></span>
+                <span x-show="route.view === 'planner'" class="block truncate" x-text="$t('Week planner')"></span>
                 <span x-show="route.view === 'products'" class="block truncate" x-text="$t('Products')"></span>
                 <span x-show="route.view === 'units'" class="block truncate" x-text="$t('Units')"></span>
                 <span x-show="route.view === 'offline'" class="block truncate" x-text="$t('Offline')"></span>
@@ -94,6 +95,15 @@
     <main x-show="$store.sync.status !== 'broken'" class="mx-auto max-w-xl px-3 pt-4 pb-[calc(2rem+env(safe-area-inset-bottom))]">
         {{-- Lists --}}
         <section x-show="route.view === 'lists'">
+            <a x-show="assistantEnabled" href="#/planner" class="mb-4 flex items-center gap-3 rounded-lg border border-violet-200 bg-violet-50 p-4 hover:bg-violet-100">
+                <span class="text-2xl" aria-hidden="true">✨</span>
+                <span class="min-w-0 flex-1">
+                    <span class="block font-medium" x-text="$t('Week planner')"></span>
+                    <span class="block text-sm text-stone-600" x-text="$t('Offers, what is at home, recipes and the shopping list')"></span>
+                </span>
+                <span aria-hidden="true">›</span>
+            </a>
+
             <form @submit.prevent="createList()" class="mb-4 flex gap-2">
                 <input x-model="newListName" class="field min-w-0 flex-1" :placeholder="$t('New list')" :aria-label="$t('New list')" enterkeyhint="done">
                 <button class="button shrink-0 px-3 min-[400px]:px-4" :aria-label="$t('Add')">
@@ -175,8 +185,12 @@
                                 <button type="button" class="flex min-w-0 flex-1 items-center py-3 pr-4 text-left" role="checkbox" aria-checked="false" @click="toggle(item)">
                                     <span class="check" aria-hidden="true"></span>
                                     <img x-show="item.image" :src="imageUrl(item.image, 'thumb')" @click.stop="openImage(item.image)" :alt="$t('Show photo')" loading="lazy" decoding="async" class="mr-3 size-10 shrink-0 cursor-zoom-in rounded-md bg-stone-100 object-cover">
+                                    <span x-show="item.store" class="mr-2 grid h-5 min-w-5 shrink-0 place-items-center rounded bg-orange-100 px-1 text-xs font-semibold text-orange-800" :title="$t('Shop')" x-text="item.store"></span>
                                     <span x-show="amount(item)" class="mr-2 shrink-0 tabular-nums text-stone-500" x-text="amount(item)"></span>
-                                    <span class="truncate" x-text="item.name"></span>
+                                    <span class="min-w-0">
+                                        <span class="block truncate" x-text="item.name"></span>
+                                        <span x-show="item.note" class="block truncate text-xs text-stone-500" x-text="item.note"></span>
+                                    </span>
                                 </button>
                             </x-swipe-row>
                         </template>
@@ -196,6 +210,7 @@
                                             <svg viewBox="0 0 24 24" class="size-4"><path d="M5 12l5 5 9-10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
                                         </span>
                                         <img x-show="item.image" :src="imageUrl(item.image, 'thumb')" @click.stop="openImage(item.image)" :alt="$t('Show photo')" loading="lazy" decoding="async" class="mr-3 opacity-50 size-10 shrink-0 cursor-zoom-in rounded-md bg-stone-100 object-cover">
+                                        <span x-show="item.store" class="mr-2 grid h-5 min-w-5 shrink-0 place-items-center rounded bg-stone-100 px-1 text-xs font-semibold" :title="$t('Shop')" x-text="item.store"></span>
                                         <span x-show="amount(item)" class="mr-2 shrink-0 tabular-nums line-through" x-text="amount(item)"></span>
                                         <span class="truncate line-through" x-text="item.name"></span>
                                     </button>
@@ -227,7 +242,7 @@
                     ]" :key="option.value">
                         <label class="flex cursor-pointer items-start gap-3 p-4 hover:bg-stone-50">
                             <input type="radio" name="row-actions" class="mt-1 accent-emerald-700" :value="option.value"
-                                :checked="$store.prefs.rowActions === option.value" @change="setRowActions(option.value)">
+                                :checked="$store.prefs.row_actions === option.value" @change="$store.prefs.set('row_actions', option.value)">
                             <span>
                                 <span class="block" x-text="option.label"></span>
                                 <span class="block text-sm text-stone-500" x-text="option.hint"></span>
@@ -258,6 +273,26 @@
             </div>
 
             <div>
+                <template x-if="recipeApp && loggedIn">
+                    <div class="mb-6">
+                        <h2 class="mb-2 text-sm font-medium text-stone-600" x-text="recipeApp.name"></h2>
+                        <div class="rounded-lg border border-stone-200 bg-white p-4">
+                            <template x-if="recipeApp.connected">
+                                <div class="flex flex-wrap items-center justify-between gap-3">
+                                    <span class="min-w-0 break-all" x-text="$t('Connected as :account', { account: recipeApp.account?.email ?? recipeApp.account?.name ?? '' })"></span>
+                                    <button type="button" class="button-secondary shrink-0" :disabled="busy" @click="disconnectRecipes()" x-text="$t('Disconnect')"></button>
+                                </div>
+                            </template>
+                            <template x-if="!recipeApp.connected">
+                                <div class="space-y-3">
+                                    <p class="text-sm text-stone-600" x-text="$t('Connect your account so the week planner suggests your recipes and can save new ones.')"></p>
+                                    <a href="/recipes/connect" data-online class="button inline-block" x-text="$t('Connect with :name', { name: recipeApp.name })"></a>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+
                 <h2 class="mb-2 text-sm font-medium text-stone-600" x-text="$t('Suggestions')"></h2>
                 <div class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
                     <a href="#/products" class="flex items-center justify-between gap-3 p-4 hover:bg-stone-50">
@@ -314,6 +349,8 @@
             <p x-show="catalog.length > shownCatalog.length" class="text-center text-sm text-stone-500"
                 x-text="$t('Showing :shown of :total, search to narrow down.', { shown: shownCatalog.length, total: catalog.length })"></p>
         </section>
+
+        @include('partials.planner')
 
         {{-- A server page (login, account, …) was opened without a connection: the service worker served the app shell. --}}
         <section x-show="route.view === 'offline'" class="space-y-4 py-8 text-center">
@@ -410,6 +447,25 @@
                                 @keydown.enter="enter($event)" @keydown.escape="if (visible) { $event.preventDefault(); close() }">
                             <x-suggestions id="unit-suggestions" />
                         </span>
+                    </label>
+                </div>
+                <div class="flex gap-3">
+                    <div class="min-w-0 w-1/3">
+                        <label class="block">
+                            <span class="label" x-text="$t('Shop')"></span>
+                            <input x-model="editing.store" class="field w-full uppercase" maxlength="10" autocomplete="off" autocapitalize="characters">
+                        </label>
+                        <div class="mt-1 flex flex-wrap gap-1">
+                            <template x-for="code in storeCodes" :key="code">
+                                <button type="button" class="rounded px-1.5 text-xs font-semibold"
+                                    :class="(editing.store ?? '').toUpperCase() === code ? 'bg-orange-600 text-white' : 'bg-orange-100 text-orange-800'"
+                                    @click="editing.store = (editing.store ?? '').toUpperCase() === code ? '' : code" x-text="code"></button>
+                            </template>
+                        </div>
+                    </div>
+                    <label class="block min-w-0 w-2/3">
+                        <span class="label" x-text="$t('Note')"></span>
+                        <input x-model="editing.note" class="field w-full" maxlength="255">
                     </label>
                 </div>
                 {{-- Photo of the product: shown for every item with this name --}}

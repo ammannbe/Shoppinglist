@@ -27,7 +27,7 @@ export const lists = {
 };
 
 export const items = {
-    version: 2,
+    version: 3,
     primaryKey: 'id',
     type: 'object',
     properties: {
@@ -36,6 +36,9 @@ export const items = {
         name: { type: 'string', maxLength: 255 },
         amount: { type: ['number', 'null'] },
         unit: { type: ['string', 'null'] },
+        // Shop code (M, A, L, …) and free note (e.g. the offer).
+        store: { type: ['string', 'null'] },
+        note: { type: ['string', 'null'] },
         // Image of the product (copied when added, so members of shared lists see it too).
         image: { type: ['string', 'null'] },
         done: { type: 'boolean', default: false },
@@ -87,6 +90,7 @@ export const migrations = {
         1: (doc) => ({ ...doc, position: null, image: null }),
         // Version 1 briefly existed without image (development builds only).
         2: (doc) => ({ ...doc, image: doc.image ?? null }),
+        3: (doc) => ({ ...doc, store: null, note: null }),
     },
     products: { 1: (doc) => ({ ...doc, image: null }) },
     // Units were pull only, all of them public.

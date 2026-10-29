@@ -9,6 +9,7 @@ import { registerServiceWorker } from './pwa.js';
 import { shrinkImage } from './image.js';
 import { createLightboxStore } from './lightbox.js';
 import { createPrefsStore } from './prefs.js';
+import { planner } from './planner.js';
 import { suggestField } from './suggest.js';
 import { swipeRow } from './swipe.js';
 import { createUndoStore } from './undo.js';
@@ -16,6 +17,8 @@ import { createInstallStore } from './install.js';
 
 const RESYNC_INTERVAL = 30_000;
 const DEFAULT_UNITS = ['Stk.', 'g', 'kg', 'ml', 'dl', 'l', 'Pck.', 'Bund', 'Fl.'];
+// Shop codes offered in the edit dialog (any short code is possible).
+const DEFAULT_STORES = ['M', 'C', 'A', 'L', 'D'];
 const OWNER_KEY = 'shoppinglist.owner';
 const USER_KEY = 'shoppinglist.user';
 
@@ -87,6 +90,7 @@ async function setLocale(locale) {
 
 Alpine.data('swipeRow', swipeRow);
 Alpine.data('suggestField', suggestField);
+Alpine.data('planner', planner);
 
 // The products/units view renders at most this many rows, the search narrows it down.
 const CATALOG_SHOWN = 200;
@@ -193,6 +197,63 @@ Alpine.data('shoppinglist', () => ({
     get shownCatalog() {
         return this.catalog.slice(0, CATALOG_SHOWN);
     },
+    get storeCodes() {
+        const used = Alpine.store('data').items.map((item) => item.store).filter(Boolean);
+
+        return [...new Set([...DEFAULT_STORES, ...used])];
+    },
+    /**
+     * Week planner with AI: configured on the server, needs a verified account.
+     */
+    get assistantEnabled() {
+        return Boolean(Alpine.store('sync').user?.assistant && Alpine.store('sync').user?.verified);
+    },
+
+    get recipeApp() {
+        return Alpine.store('sync').user?.recipes ?? null;
+    },
+
+    async disconnectRecipes() {
+        if (!confirm(this.$t('Disconnect from :name?', { name: this.recipeApp.name }))) return;
+        await this.online(async () => {
+            await api.delete('/recipes/connection');
+            Alpine.store('sync').user = await api.get('/me');
+        });
+    },
+
+    /**
+     * Items from the planner: into an existing list or a new one.
+     *
+     * @returns {Promise<string>} list id
+     */
+    async addPlannedItems(target, name, items) {
+        let listId = target;
+        if (!listId) {
+            listId = uuid7();
+            await db.lists.insert({
+                id: listId, name, owner_email: Alpine.store('sync').user?.email ?? null, is_owner: true, members: [], position: nextPosition(this.lists),
+            });
+        }
+        let position = nextPosition(this.itemsOf(listId)) ?? 0;
+        for (const item of items) {
+            await db.items.insert({
+                id: uuid7(),
+                shopping_list_id: listId,
+                name: item.name,
+                amount: item.amount ?? null,
+                unit: item.unit ?? null,
+                store: item.store ?? null,
+                note: item.note ?? null,
+                image: ownProduct(item.name)?.image ?? null,
+                position: position++,
+                creator_email: Alpine.store('sync').user?.email ?? null,
+            });
+            await remember('products', item.name);
+        }
+
+        return listId;
+    },
+
     get loggedIn() {
         return Alpine.store('sync').user !== null;
     },
@@ -364,7 +425,7 @@ Alpine.data('shoppinglist', () => ({
     },
 
     async saveItem() {
-        const { id, name, amount, unit } = this.editing;
+        const { id, name, amount, unit, store, note } = this.editing;
         if (name.trim()) {
             const doc = await db.items.findOne(id).exec();
             // Renamed: the image of the (own) product with the new name.
@@ -374,6 +435,8 @@ Alpine.data('shoppinglist', () => ({
                 image,
                 amount: amount === '' || amount === null ? null : Number(String(amount).replace(',', '.')) || null,
                 unit: unit?.trim() || null,
+                store: store?.trim().toUpperCase().slice(0, 10) || null,
+                note: note?.trim().slice(0, 255) || null,
             });
             await remember('products', name.trim());
             if (unit?.trim() && !this.unitNames.some((known) => sameName(known, unit))) await remember('units', unit.trim());
@@ -735,5 +798,15 @@ document.addEventListener('click', (event) => {
 
 window.Alpine = Alpine;
 Alpine.start();
+// Back from "Connect with <recipe app>" (RecipesConnectionController): show the result once.
+const recipesResult = new URLSearchParams(location.search).get('recipes');
+if (recipesResult) {
+    history.replaceState(null, '', `/${location.hash}`);
+    Alpine.store('notice').show(translate(Alpine.store('i18n').locale, {
+        connected: 'Connected.',
+        denied: 'The connection was not allowed.',
+    }[recipesResult] ?? 'The connection failed. Please try again.'));
+}
+
 boot();
 registerServiceWorker((apply) => { Alpine.store('update').apply = apply; });

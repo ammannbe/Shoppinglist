@@ -47,6 +47,14 @@ Shoppinglist: offline-first PWA for shared shopping lists. One Laravel app serve
 - Row gestures (`resources/js/swipe.js` + `drag.js`): touch hold and move drags a row (rows with `data-sort-id`, event `row-move` → `moveRow()`), mouse drags directly; hold and release opens the menu in the long-press setting. While a row is held, `touchmove` is prevented to block scrolling.
 - Deletions are undoable (`resources/js/undo.js`): rows are hidden, the RxDB remove runs after 5 s or when the app is hidden. Never revive deleted documents.
 
+## Week planner (AI) and recipe app
+
+- `#/planner` (`resources/views/partials/planner.blade.php`, `resources/js/planner.js`): offers (images, PDF, text) → pantry photos (optional) → recipe suggestions → shopping list into a new or existing list. Shown for verified users when `OPENAI_API_KEY` is set (`/me` `assistant`). State kept in localStorage (`shoppinglist.planner`).
+- Server: `PlannerController` (stateless, the client sends offers/pantry back), `app/Ai/Assistant.php` (prompts + strict JSON schemas), `app/Ai/OpenAiClient.php` (Responses API via `Http`, no SDK; `OPENAI_MODEL` default gpt-6-luna (cheapest model that read the test offers reliably), `OPENAI_REASONING_EFFORT`). One global key for all users (free); keep the client per request so own user keys can be added later. Rate limit `throttle:ai` (60/h per user). Requests may take up to ~2 min (`set_time_limit`, `OPENAI_TIMEOUT`).
+- Shop codes: `Assistant::SHOPS` (Migros M, Coop C, Aldi A, Lidl L, Denner D) → `items.store`; offer details → `items.note`.
+- Recipe app ("white label"): `RECIPES_NAME`, `RECIPES_URL`, `RECIPES_CLIENT_ID`, `RECIPES_CLIENT_SECRET` (Passport client in the recipe app, redirect URI `<APP_URL>/recipes/callback`). OAuth flow in `RecipesConnectionController`, API calls and token refresh in `app/Recipes/RecipesClient.php`, tokens encrypted in `users.recipes_connection`. API contract: RecipeManager `AGENTS.md`.
+- Tests fake OpenAI and the recipe app with `Http::fake()` (`tests/Feature/PlannerTest.php`).
+
 ## Link previews
 
 - `resources/views/partials/meta.blade.php` (fixed German texts, cached app shell) in the app shell and the guest layout; image `public/og-image.jpg` (1200×630). `og:url`/`og:image` use `APP_URL`.

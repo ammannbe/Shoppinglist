@@ -29,6 +29,8 @@ class ItemResource extends SyncResource
             'name' => $model->name,
             'amount' => $model->amount,
             'unit' => $model->unit,
+            'store' => $model->store,
+            'note' => $model->note,
             'image' => $model->image,
             'done' => $model->done,
             'position' => $model->position,
@@ -109,6 +111,8 @@ class ItemResource extends SyncResource
 
         return [
             'image' => $image,
+            'store' => $doc['store'] ?? null,
+            'note' => $doc['note'] ?? null,
             'name' => $doc['name'],
             'amount' => $doc['amount'] ?? null,
             'unit' => $doc['unit'] ?? null,
