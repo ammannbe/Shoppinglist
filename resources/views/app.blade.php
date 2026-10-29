@@ -14,10 +14,10 @@
     App shell: cached by the service worker and used offline. It must not contain user data
     or server side translations, the UI translates itself ($t) and reads the local database.
 --}}
-<body class="min-h-dvh bg-stone-50 text-stone-900 antialiased" x-data="shoppinglist" x-cloak>
+<body class="min-h-dvh bg-stone-50 text-stone-900 antialiased" :class="$store.sync.online || 'is-offline'" x-data="shoppinglist" x-cloak>
     <header class="sticky top-0 z-10 border-b border-stone-200 bg-white/95 pt-[env(safe-area-inset-top)] backdrop-blur">
         <div class="mx-auto flex h-14 max-w-xl items-center gap-2 px-3">
-            <a href="#/" x-show="route.view !== 'lists'" class="icon-button" :aria-label="$t('Back')">
+            <a href="#/" x-show="!['lists', 'offline'].includes(route.view)" class="icon-button" :aria-label="$t('Back')">
                 <svg viewBox="0 0 24 24" class="size-6"><path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </a>
 
@@ -25,6 +25,7 @@
                 <span x-show="route.view === 'lists'" class="block truncate" x-text="$t('Shopping lists')"></span>
                 <span x-show="route.view === 'settings'" class="block truncate" x-text="$t('Settings')"></span>
                 <span x-show="route.view === 'install'" class="block truncate" x-text="$t('Install app')"></span>
+                <span x-show="route.view === 'offline'" class="block truncate" x-text="$t('Offline')"></span>
                 <template x-if="route.view === 'list' && list">
                     <span class="block min-w-0">
                         <span x-show="renaming === null" x-text="list.name" @click="startRename()" class="block cursor-text truncate"></span>
@@ -83,16 +84,16 @@
     <div class="mx-auto max-w-xl px-3">
         <p x-show="$store.sync.status === 'local'" class="notice mt-3">
             <span x-text="$t('Log in to sync your lists across devices and share them.')"></span>
-            <a href="/login" class="font-medium underline" x-text="$t('Log in')"></a> ·
-            <a href="/register" class="font-medium underline" x-text="$t('Register')"></a>
+            <a href="/login" data-online class="font-medium underline" x-text="$t('Log in')"></a> ·
+            <a href="/register" data-online class="font-medium underline" x-text="$t('Register')"></a>
         </p>
         <p x-show="$store.sync.status === 'expired'" class="notice mt-3">
             <span x-text="$t('Your session has expired. Please log in again.')"></span>
-            <a href="/login" class="font-medium underline" x-text="$t('Log in')"></a>
+            <a href="/login" data-online class="font-medium underline" x-text="$t('Log in')"></a>
         </p>
         <p x-show="$store.sync.status === 'unverified'" class="notice mt-3">
             <span x-text="$t('Please verify your email address to sync.')"></span>
-            <a href="/email/verify" class="font-medium underline" x-text="$t('Resend Verification Email')"></a>
+            <a href="/email/verify" data-online class="font-medium underline" x-text="$t('Resend Verification Email')"></a>
         </p>
     </div>
 
@@ -202,14 +203,14 @@
                         <div class="flex flex-wrap items-center justify-between gap-3">
                             <span class="min-w-0 break-all" x-text="$t('Logged in as :email', { email: $store.sync.user.email })"></span>
                             <button type="button" class="button-secondary shrink-0 whitespace-nowrap" @click="logout()" :disabled="busy" x-text="$t('Log Out')"></button>
-                            <a href="/account" class="w-full text-sm font-medium underline" x-text="$t('Change password and passkeys')"></a>
+                            <a href="/account" data-online class="w-full text-sm font-medium underline" x-text="$t('Change password and passkeys')"></a>
                         </div>
                     </template>
                     <template x-if="!loggedIn">
                         <p>
                             <span x-text="$t('Log in to sync your lists across devices and share them.')"></span>
-                            <a href="/login" class="font-medium underline" x-text="$t('Log in')"></a> ·
-                            <a href="/register" class="font-medium underline" x-text="$t('Register')"></a>
+                            <a href="/login" data-online class="font-medium underline" x-text="$t('Log in')"></a> ·
+                            <a href="/register" data-online class="font-medium underline" x-text="$t('Register')"></a>
                         </p>
                     </template>
                 </div>
@@ -223,6 +224,16 @@
                 </a>
             </div>
         </section>
+        {{-- A server page (login, account, …) was opened without a connection: the service worker served the app shell. --}}
+        <section x-show="route.view === 'offline'" class="space-y-4 py-8 text-center">
+            <p class="text-lg font-semibold" x-text="$t('This page needs an internet connection.')"></p>
+            <p class="text-stone-600" x-text="$t('Your lists are still available offline.')"></p>
+            <div class="flex flex-wrap justify-center gap-2 pt-2">
+                <button type="button" class="button-secondary" @click="location.reload()" x-text="$t('Try again')"></button>
+                <a href="/" class="button" x-text="$t('Back to the lists')"></a>
+            </div>
+        </section>
+
         {{-- Install instructions (offline available, part of the app shell) --}}
         <section x-show="route.view === 'install'" class="space-y-6">
             <p class="text-stone-600" x-text="$t('Installed, Shoppinglist starts like an app from the home screen, in full screen and without a connection.')"></p>
@@ -369,6 +380,11 @@
         <span class="min-w-0 flex-1" x-text="$t('A new version is available.')"></span>
         <button type="button" class="shrink-0 font-semibold underline" @click="$store.update.reload()" x-text="$t('Reload')"></button>
     </div>
+
+    {{-- Short notices (e.g. offline) --}}
+    <div x-show="$store.notice.text" x-transition role="alert"
+        class="fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-50 mx-auto max-w-xl rounded-lg bg-stone-900 px-4 py-3 text-sm text-white shadow-lg"
+        x-text="$store.notice.text" @click="$store.notice.text = null"></div>
 
     {{-- Undo deletion --}}
     <div x-show="$store.undo.toast" x-transition role="status" aria-live="polite"

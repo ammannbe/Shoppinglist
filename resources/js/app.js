@@ -37,6 +37,17 @@ Alpine.store('update', {
     },
 });
 
+// Short notice at the bottom, hides itself.
+Alpine.store('notice', {
+    text: null,
+    timer: null,
+    show(text) {
+        clearTimeout(this.timer);
+        this.text = text;
+        this.timer = setTimeout(() => { this.text = null; }, 4000);
+    },
+});
+
 Alpine.magic('t', () => (key, replace) => translate(Alpine.store('i18n').locale, key, replace));
 
 document.documentElement.lang = htmlLang(Alpine.store('i18n').locale);
@@ -74,7 +85,8 @@ Alpine.data('shoppinglist', () => ({
     init() {
         const parse = () => {
             const [, view, id = null] = location.hash.split('/');
-            this.route = { view: view || 'lists', id };
+            // Any other path means the service worker served the app shell offline.
+            this.route = location.pathname === '/' ? { view: view || 'lists', id } : { view: 'offline', id: null };
             this.renaming = null;
             this.menu = null;
         };
@@ -306,7 +318,7 @@ Alpine.data('shoppinglist', () => ({
     /**
      * Runs an action that needs the server and reports errors.
      */
-    async online(action, onError = (message) => alert(message)) {
+    async online(action, onError = (message) => Alpine.store('notice').show(message)) {
         if (!navigator.onLine) return onError(this.$t('This needs an internet connection.'));
         this.busy = true;
         try {
@@ -359,7 +371,10 @@ async function boot() {
     db.units.find({ sort: [{ name: 'asc' }] }).$.subscribe((docs) => { data.units = docs.map((doc) => doc.toJSON()); });
 
     window.addEventListener('online', () => { sync.online = true; });
-    window.addEventListener('offline', () => { sync.online = false; });
+    window.addEventListener('offline', () => {
+        sync.online = false;
+        if (['synced', 'syncing', 'error'].includes(sync.status)) sync.status = 'offline';
+    });
 
     await connect();
 }
@@ -442,6 +457,13 @@ function startSync() {
     document.addEventListener('visibilitychange', resync);
     setInterval(resync, RESYNC_INTERVAL);
 }
+
+// Links to server pages (login, account, …) need a connection.
+document.addEventListener('click', (event) => {
+    if (navigator.onLine || !event.target.closest('a[data-online]')) return;
+    event.preventDefault();
+    Alpine.store('notice').show(translate(Alpine.store('i18n').locale, 'This needs an internet connection.'));
+});
 
 window.Alpine = Alpine;
 Alpine.start();

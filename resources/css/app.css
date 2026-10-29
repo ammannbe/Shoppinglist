@@ -12,6 +12,12 @@
     display: none !important;
 }
 
+/* Links to server pages are unavailable offline. */
+.is-offline a[data-online] {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 @layer components {
     .field {
         @apply rounded-lg border border-stone-300 bg-white px-3 py-2 text-base focus:border-emerald-600 focus:outline-none;
