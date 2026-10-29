@@ -47,6 +47,7 @@ Shoppinglist: offline-first PWA for shared shopping lists. One Laravel app serve
 
 - Tests: `ddev artisan test`. Code style: `ddev exec vendor/bin/pint`.
 - Assets: `ddev npm run build` (or `ddev npm run dev`).
+- Production database: `ddev pull production` (`.ddev/providers/production.yaml`, SSH data in git-ignored `.ddev/config.local.yaml`: `SSH_USER`, `SSH_HOST`, `PROJECT_PATH`). No files are pulled.
 - Import of the old Laravel 7 API database: `ddev artisan shoppinglist:import-legacy` (connection `legacy`, `LEGACY_DB_*`). Aborts if lists already exist.
 
 ## Gotchas

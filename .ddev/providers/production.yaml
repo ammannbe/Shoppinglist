@@ -1,0 +1,45 @@
+# `ddev pull production`: database from the production server (like RecipeManager).
+# Provided via .ddev/config.local.yaml (git-ignored):
+# web_environment:
+#   - SSH_USER=
+#   - SSH_HOST=
+#   - PROJECT_PATH=
+
+auth_command:
+  command: |
+    set -eu -o pipefail
+    ssh-add -l >/dev/null || ( echo "Please 'ddev auth ssh' before running this command." && exit 1 )
+
+db_pull_command:
+  command: |
+    set -eu -o pipefail
+    ssh "${SSH_USER}@${SSH_HOST}" "cd '${PROJECT_PATH}' && bash -s" <<'REMOTE'
+    set -eu -o pipefail
+    set -a; source .env; set +a
+    mkdir -p storage/backups
+    mysqldump --single-transaction --quick --no-tablespaces \
+      -h "${DB_HOST:-127.0.0.1}" -P "${DB_PORT:-3306}" \
+      -u "${DB_USERNAME}" -p"${DB_PASSWORD}" "${DB_DATABASE}" \
+      | gzip > storage/backups/db.sql.gz
+    REMOTE
+    scp "${SSH_USER}@${SSH_HOST}:${PROJECT_PATH}/storage/backups/db.sql.gz" /var/www/html/.ddev/.downloads/db.sql.gz
+    # The dump contains personal data, don't leave it on the server.
+    ssh "${SSH_USER}@${SSH_HOST}" "rm -f '${PROJECT_PATH}/storage/backups/db.sql.gz'"
+  service: web
+
+# No user uploads, all data lives in the database: skip files (and never touch storage/app).
+files_pull_command:
+  command: |
+    true
+
+files_import_command:
+  command: |
+    true
+
+db_push_command:
+  command: |
+    echo "ddev push is not implemented."
+
+files_push_command:
+  command: |
+    echo "ddev push is not implemented."
