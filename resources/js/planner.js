@@ -179,16 +179,27 @@ export function planner({ addItems, lists }) {
             });
         },
 
+        // Hands the idea to the recipe app as a draft and opens its import, where the user
+        // matches foods, units and the category and picks cookbook and visibility.
         async saveIdea(suggestion) {
-            await this.run(this.$t('Saving …'), async () => {
+            // Open the tab while still in the click, otherwise browsers block it as a pop-up.
+            const tab = navigator.onLine ? window.open('', '_blank') : null;
+            await this.run(this.$t('Handing over …'), async () => {
                 const { url } = await api.post('/planner/recipes', {
                     name: suggestion.name,
                     servings: suggestion.servings,
+                    category: suggestion.category ?? null,
+                    complexity: suggestion.complexity ?? null,
                     instructions: suggestion.instructions,
                     ingredients: suggestion.ingredients,
                 });
                 suggestion.savedUrl = url;
             });
+            if (tab && suggestion.savedUrl) {
+                tab.location.href = suggestion.savedUrl;
+            } else {
+                tab?.close();
+            }
         },
 
         // ---- 4. shopping list

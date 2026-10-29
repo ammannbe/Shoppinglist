@@ -8,6 +8,7 @@ use App\Http\Requests\PlannerListRequest;
 use App\Http\Requests\PlannerSuggestionsRequest;
 use App\Recipes\RecipesClient;
 use App\Recipes\RecipesException;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -52,6 +53,7 @@ class PlannerController extends Controller
             $result = $this->assistant->suggest(
                 $offers, $pantry, $candidates, (int) $data['servings'], (int) $data['count'],
                 (bool) $data['ideas'] || $candidates === [], $data['wishes'] ?? null, $this->language(),
+                $this->vocabulary($user),
             );
             $names = array_column($candidates, 'name', 'id');
 
@@ -110,32 +112,61 @@ class PlannerController extends Controller
     }
 
     /**
-     * Save an AI recipe idea in the recipe app.
+     * Hand an AI recipe idea to the recipe app as a draft. The user checks and imports it there
+     * (matching foods, units and the category), so nothing is created without a person.
      */
     public function saveRecipe(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
+            'name' => ['required', 'string', 'max:100'],
             'servings' => ['required', 'integer', 'min:1', 'max:100'],
+            'category' => ['nullable', 'string', 'max:50'],
+            'complexity' => ['nullable', 'string', 'max:20'],
             'instructions' => ['required', 'string', 'max:20000'],
             'ingredients' => ['required', 'array', 'min:1', 'max:100'],
-            'ingredients.*.name' => ['required', 'string', 'max:255'],
+            'ingredients.*.name' => ['required', 'string', 'max:50'],
             'ingredients.*.amount' => ['nullable', 'numeric', 'min:0'],
-            'ingredients.*.unit' => ['nullable', 'string', 'max:50'],
+            'ingredients.*.unit' => ['nullable', 'string', 'max:20'],
         ]);
 
         try {
-            $result = $this->recipes->post($request->user(), '/api/recipes', [
-                ...$data,
+            $result = $this->recipes->post($request->user(), '/api/recipe-drafts', [
+                'name' => $data['name'],
+                // Required by the import format; an unknown category is matched in the import wizard.
+                'category' => filled($data['category'] ?? null) ? $data['category'] : __('Recipe ideas'),
+                'complexity' => in_array($data['complexity'] ?? null, Assistant::COMPLEXITIES, true) ? $data['complexity'] : 'normal',
+                'servings' => $data['servings'],
+                'instructions' => $data['instructions'],
                 'ingredients' => array_map(fn (array $i) => ['amount' => $i['amount'] ?? null, 'unit' => $i['unit'] ?? null, 'food' => $i['name']], $data['ingredients']),
             ]);
         } catch (RecipesException $e) {
             report($e);
 
-            return response()->json(['message' => __('The recipe could not be saved in :name.', ['name' => config('services.recipes.name')])], 502);
+            return response()->json(['message' => __('The recipe could not be handed over to :name.', ['name' => config('services.recipes.name')])], 502);
         }
 
         return response()->json(['url' => $result['data']['url'] ?? null]);
+    }
+
+    /**
+     * Categories, units and complexities of the recipe app, so AI ideas fit its import.
+     *
+     * @return array{categories?: list<string>, units?: list<string>, complexities?: list<string>}|null
+     */
+    private function vocabulary($user): ?array
+    {
+        if (! RecipesClient::connected($user)) {
+            return null;
+        }
+
+        try {
+            return $this->recipes->get($user, '/api/vocabulary')['data'] ?? null;
+        } catch (RecipesException|ConnectionException $e) {
+            // Optional: the ideas just fit the recipe app less well.
+            report($e);
+
+            return null;
+        }
     }
 
     /**

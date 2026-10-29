@@ -16,6 +16,9 @@ class Assistant
      */
     public const SHOPS = ['Migros' => 'M', 'Coop' => 'C', 'Aldi' => 'A', 'Lidl' => 'L', 'Denner' => 'D'];
 
+    /** Complexities of the recipe app's import format, used when it cannot be asked. */
+    public const COMPLEXITIES = ['simple', 'normal', 'difficult'];
+
     public function __construct(private OpenAiClient $client) {}
 
     /**
@@ -142,10 +145,15 @@ class Assistant
      * @param  list<array<string, mixed>>  $offers
      * @param  list<array<string, mixed>>  $pantry
      * @param  list<array{id: int, name: string, foods: list<string>}>  $candidates
+     * @param  array{categories?: list<string>, units?: list<string>, complexities?: list<string>}|null  $vocabulary  of the recipe app
      * @return array{picks: list<array<string, mixed>>, ideas: list<array<string, mixed>>}
      */
-    public function suggest(array $offers, array $pantry, array $candidates, int $servings, int $count, bool $ideas, ?string $wishes, string $language): array
+    public function suggest(array $offers, array $pantry, array $candidates, int $servings, int $count, bool $ideas, ?string $wishes, string $language, ?array $vocabulary = null): array
     {
+        $complexities = ($vocabulary['complexities'] ?? []) ?: self::COMPLEXITIES;
+        $categories = $vocabulary['categories'] ?? [];
+        $units = $vocabulary['units'] ?? [];
+
         $result = $this->client->structured(
             'You are a meal planner. Suggest '.$count.' dinners for the coming week that use the current supermarket offers and '
             .'what is already at home (pantry) as much as possible. Be efficient: prefer dishes that combine several offers at once '
@@ -154,7 +162,10 @@ class Assistant
             .($ideas ? 'fill up with new recipe ideas if fewer than '.$count.' candidates fit well. ' : 'do not invent new recipes, return no ideas. ')
             .'Ideas should combine at least two offers that go well together. '
             .'Ideas are complete recipes for '.$servings.' servings with ingredients (amount as number or null, unit like g, kg, '
-            .'ml, dl, l, Stk., EL, TL, Prise or null) and short step-by-step instructions. "reason" is one short sentence why it fits. '
+            .'ml, dl, l, Stk., EL, TL, Prise or null) and short step-by-step instructions as a numbered list. '
+            .($units !== [] ? 'Use these units where possible: '.implode(', ', $units).'. ' : '')
+            .'"category" is '.($categories !== [] ? 'one of: '.implode(', ', $categories) : 'a short dish category like "Suppen"').'. '
+            .'"complexity" is how hard the recipe is. "reason" is one short sentence why it fits. '
             .'"uses_offers" and "uses_pantry" contain the exact names from the input. Vary the dishes. Write in '.$language.'.',
             [OpenAiClient::text(json_encode(compact('offers', 'pantry', 'candidates', 'wishes'), JSON_UNESCAPED_UNICODE))],
             'suggestions',
@@ -169,6 +180,8 @@ class Assistant
                     'name' => ['type' => 'string'],
                     'reason' => ['type' => 'string'],
                     'servings' => ['type' => 'integer'],
+                    'category' => ['type' => 'string'],
+                    'complexity' => ['type' => 'string', 'enum' => array_values($complexities)],
                     'ingredients' => $this->list($this->ingredient()),
                     'instructions' => ['type' => 'string'],
                     'uses_offers' => $this->list(['type' => 'string']),

@@ -116,8 +116,8 @@
                                     <p class="mt-2 whitespace-pre-line" x-text="suggestion.instructions"></p>
                                     <template x-if="recipes?.connected">
                                         <p class="mt-2">
-                                            <a x-show="suggestion.savedUrl" :href="suggestion.savedUrl" target="_blank" rel="noopener" class="font-medium underline" x-text="$t('Saved in :name', { name: recipes.name })"></a>
-                                            <button x-show="!suggestion.savedUrl" type="button" class="font-medium underline" :disabled="busy" @click="saveIdea(suggestion)" x-text="$t('Save in :name', { name: recipes.name })"></button>
+                                            <a x-show="suggestion.savedUrl" :href="suggestion.savedUrl" target="_blank" rel="noopener" class="font-medium underline" x-text="$t('Check and import in :name', { name: recipes.name })"></a>
+                                            <button x-show="!suggestion.savedUrl" type="button" class="font-medium underline" :disabled="busy" @click="saveIdea(suggestion)" x-text="$t('Import into :name', { name: recipes.name })"></button>
                                         </p>
                                     </template>
                                 </details>
