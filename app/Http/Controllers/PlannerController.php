@@ -139,9 +139,9 @@ class PlannerController extends Controller
     }
 
     /**
-     * Recipes of the recipe app that use the offers or the pantry.
+     * Recipes of the recipe app that use the offers or the pantry; recipes using several offers come first.
      *
-     * @return array{0: list<array{id: int, name: string, foods: list<string>}>, 1: array<int, string>, 2: ?string}
+     * @return array{0: list<array{id: int, name: string, foods: list<string>, offers: list<string>, pantry: list<string>}>, 1: array<int, string>, 2: ?string}
      */
     private function candidates($user, array $offers, array $pantry): array
     {
@@ -151,13 +151,25 @@ class PlannerController extends Controller
 
         try {
             $foods = $this->recipes->get($user, '/api/foods')['data'] ?? [];
-            $names = array_values(array_unique([...array_column($offers, 'name'), ...array_column($pantry, 'name')]));
-            $foodIds = array_values(array_unique(array_filter($this->assistant->matchFoods($names, $foods))));
-            if ($foodIds === []) {
+            $offerNames = array_values(array_unique(array_column($offers, 'name')));
+            $pantryNames = array_values(array_unique(array_column($pantry, 'name')));
+            $matches = $this->assistant->matchFoods(array_values(array_unique([...$offerNames, ...$pantryNames])), $foods);
+            $offerFoods = array_filter(array_intersect_key($matches, array_flip($offerNames)));
+            $pantryFoods = array_filter(array_intersect_key($matches, array_flip($pantryNames)));
+            if ($offerFoods === [] && $pantryFoods === []) {
                 return [[], [], null];
             }
 
-            $found = $this->recipes->post($user, '/api/recipes/search', ['food_ids' => array_slice($foodIds, 0, 200), 'limit' => 30])['data'] ?? [];
+            // The recipe app ranks by matched foods: search the offers on their own so recipes
+            // combining several offers are not pushed out by pantry matches, then add pantry recipes.
+            $found = [];
+            foreach ([[$offerFoods, 25], [$pantryFoods, $offerFoods === [] ? 30 : 10]] as [$ids, $limit]) {
+                $ids = array_values(array_unique($ids));
+                if ($ids !== []) {
+                    $found = [...$found, ...$this->recipes->post($user, '/api/recipes/search', ['food_ids' => array_slice($ids, 0, 200), 'limit' => $limit])['data'] ?? []];
+                }
+            }
+            $found = collect($found)->unique('id')->values()->all();
         } catch (RecipesException $e) {
             report($e);
 
@@ -165,13 +177,22 @@ class PlannerController extends Controller
         }
 
         $foodNames = array_column($foods, 'name', 'id');
+        $using = fn (array $recipe, array $products) => array_keys(array_filter(
+            $products, fn ($foodId) => in_array($foodId, $recipe['food_ids'] ?? [], true),
+        ));
 
         return [
-            array_map(fn (array $recipe) => [
-                'id' => $recipe['id'],
-                'name' => $recipe['name'],
-                'foods' => array_values(array_filter(array_map(fn ($id) => $foodNames[$id] ?? null, $recipe['food_ids'] ?? []))),
-            ], $found),
+            collect($found)
+                ->map(fn (array $recipe) => [
+                    'id' => $recipe['id'],
+                    'name' => $recipe['name'],
+                    'foods' => array_values(array_filter(array_map(fn ($id) => $foodNames[$id] ?? null, $recipe['food_ids'] ?? []))),
+                    'offers' => array_map('strval', $using($recipe, $offerFoods)),
+                    'pantry' => array_map('strval', $using($recipe, $pantryFoods)),
+                ])
+                ->sortByDesc(fn (array $recipe) => count($recipe['offers']) * 100 + count($recipe['pantry']))
+                ->values()
+                ->all(),
             array_column($found, 'url', 'id'),
             null,
         ];

@@ -148,8 +148,11 @@ class Assistant
     {
         $result = $this->client->structured(
             'You are a meal planner. Suggest '.$count.' dinners for the coming week that use the current supermarket offers and '
-            .'what is already at home (pantry) as much as possible. Prefer the user\'s own recipes ("candidates", pick by id); '
+            .'what is already at home (pantry) as much as possible. Be efficient: prefer dishes that combine several offers at once '
+            .'(and pantry items) over one offer per dish, and spread the offers over the week so most of them get used. '
+            .'Prefer the user\'s own recipes ("candidates", pick by id; their "offers" and "pantry" list what they use, best first); '
             .($ideas ? 'fill up with new recipe ideas if fewer than '.$count.' candidates fit well. ' : 'do not invent new recipes, return no ideas. ')
+            .'Ideas should combine at least two offers that go well together. '
             .'Ideas are complete recipes for '.$servings.' servings with ingredients (amount as number or null, unit like g, kg, '
             .'ml, dl, l, Stk., EL, TL, Prise or null) and short step-by-step instructions. "reason" is one short sentence why it fits. '
             .'"uses_offers" and "uses_pantry" contain the exact names from the input. Vary the dishes. Write in '.$language.'.',
