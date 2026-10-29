@@ -62,26 +62,10 @@
                 }[$store.sync.status]"></span>
             </span>
 
-            <a href="#/settings" x-show="route.view === 'lists'" class="icon-button" :aria-label="$t('Settings')">
+            <a href="#/settings" x-show="['lists', 'list'].includes(route.view)" class="icon-button" :aria-label="$t('Settings')">
                 <svg viewBox="0 0 24 24" class="size-6" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10.3 4.3c.4-1.7 3-1.7 3.4 0a1.7 1.7 0 0 0 2.6 1.1c1.5-.9 3.3.8 2.4 2.4a1.7 1.7 0 0 0 1 2.5c1.8.4 1.8 3 0 3.4a1.7 1.7 0 0 0-1 2.6c.9 1.5-.9 3.3-2.4 2.4a1.7 1.7 0 0 0-2.6 1c-.4 1.8-3 1.8-3.4 0a1.7 1.7 0 0 0-2.5-1c-1.6.9-3.3-.9-2.4-2.4a1.7 1.7 0 0 0-1.1-2.6c-1.7-.4-1.7-3 0-3.4a1.7 1.7 0 0 0 1.1-2.5c-.9-1.6.8-3.3 2.4-2.4a1.7 1.7 0 0 0 2.5-1.1z"/><circle cx="12" cy="12" r="3"/></svg>
             </a>
 
-            {{-- List menu --}}
-            <template x-if="route.view === 'list' && list">
-                <div class="relative" x-data="{ open: false }" @click.outside="open = false">
-                    <button type="button" class="icon-button" @click="open = !open" :aria-label="$t('Menu')">
-                        <svg viewBox="0 0 24 24" class="size-6" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
-                    </button>
-                    <div x-show="open" x-transition @click="open = false" class="absolute right-0 mt-1 w-52 overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-lg">
-                        <button type="button" class="menu-item" @click="startRename()" x-text="$t('Rename')"></button>
-                        <button type="button" class="menu-item" :class="$store.sync.online || 'opacity-50'" x-show="loggedIn && list.is_owner" @click="openShare()" x-text="$t('Share')"></button>
-                        <button type="button" class="menu-item" x-show="doneItems.length" @click="clearDone()" x-text="$t('Clear done')"></button>
-                        <button type="button" class="menu-item text-red-700" :class="$store.sync.online || 'opacity-50'" x-show="loggedIn && !list.is_owner" @click="leaveList()" x-text="$t('Leave list')"></button>
-                        <button type="button" class="menu-item text-red-700" x-show="list.is_owner" @click="deleteList()" x-text="$t('Delete list')"></button>
-                        <a href="#/settings" class="menu-item border-t border-stone-200" x-text="$t('Settings')"></a>
-                    </div>
-                </div>
-            </template>
         </div>
     </header>
 
@@ -126,7 +110,7 @@
             <ul x-show="lists.length" class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white" @row-move="moveRow('lists', $event.detail)">
                 <template x-for="item in lists" :key="item.id">
                     <x-swipe-row actions="listActions(item)" x-bind:data-sort-id="item.id">
-                        <a :href="`#/list/${item.id}`" class="flex min-w-0 flex-1 items-center gap-3 py-3 pl-4 pointer-coarse:pr-4" draggable="false">
+                        <a :href="`#/list/${item.id}`" class="flex min-w-0 flex-1 items-center gap-3 py-3 pl-4 pointer-coarse:pr-4 pointer-fine:pr-3" draggable="false">
                             <span class="min-w-0 flex-1">
                                 <span class="block truncate font-medium" x-text="item.name"></span>
                                 <span x-show="item.is_owner === false" class="block truncate text-xs text-stone-500" x-text="$t('Shared by :email', { email: item.owner_email })"></span>
