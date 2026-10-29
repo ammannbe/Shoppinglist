@@ -33,10 +33,13 @@ class Assistant
 
         $result = $this->client->structured(
             'You read weekly grocery offers (promotions) of Swiss supermarkets from flyers, app screenshots, PDFs or text. '
-            .'Return every food or household product on offer, one entry per product. Use a short, generic product name a shopper '
+            .'Return every food or household product with a visible promotion (discount, reduced price, "Hit", "2 für 1"), '
+            .'one entry per product; skip products without a visible promotion and cut-off cards. Use a short, generic product name a shopper '
             .'would write on a list (e.g. "Rindshackfleisch" instead of a long marketing title) and put the brand or product line '
             .'separately. Prices in CHF as numbers. "discount" is the offer as written, e.g. "−30 %" or "2 für 1". '
-            .'"valid_until" as YYYY-MM-DD if visible. "shop" is the retailer of the offer if recognisable. '
+            .'"valid_until" as YYYY-MM-DD if visible. "shop" is the retailer of the offer if recognisable from logos, '
+            .'brands (e.g. M-Classic, Migros Bio, Sélection → Migros; Naturaplan, Prix Garantie → Coop) or the app design; '
+            .'one flyer or screenshot usually belongs to one retailer, so use the same shop for all its offers unless clearly different. '
             .'Ignore non-offer content. Write names in '.$language.'.',
             $content,
             'offers',
@@ -194,7 +197,9 @@ class Assistant
             'Turn the ingredients of these recipes into one shopping list. Merge the same ingredient across recipes and add up the '
             .'amounts when the units fit (convert g/kg, ml/dl/l); keep separate entries otherwise. Use short, generic names. '
             .'Skip water, salt, pepper and other basics a household always has unless listed with a large amount. '
-            .'If an entry matches an offer, set "offer" to the exact offer name. If it is in the pantry, set "at_home" true. '
+            .'If an offer can be bought for an entry, set "offer" to the exact offer name (also for a more specific product, '
+            .'e.g. "Kürbis" ↔ "Butternusskürbis", "Kartoffeln" ↔ "Raclette-Kartoffeln") and prefer the offer\'s name for the entry. '
+            .'If it is in the pantry, set "at_home" true. '
             .'"recipes" lists the recipe names that need it. Write in '.$language.'.',
             [OpenAiClient::text(json_encode(compact('recipes', 'offers', 'pantry'), JSON_UNESCAPED_UNICODE))],
             'shopping_list',
@@ -217,7 +222,7 @@ class Assistant
 
                 return [
                     'name' => $item['name'],
-                    'amount' => $item['amount'] ?? null,
+                    'amount' => $this->roundForShopping($item['amount'] ?? null, $item['unit'] ?? null),
                     'unit' => $item['unit'] ?? null,
                     'store' => $offer['store'] ?? null,
                     'note' => $offer ? $this->offerNote($offer) : null,
@@ -227,6 +232,27 @@ class Assistant
             })
             ->values()
             ->all();
+    }
+
+    /**
+     * Scaled recipes give amounts like 3.33 onions or 66.67 g: round up to what one buys.
+     * Pieces (no unit, Stk., Bund, …) to whole numbers, weights and volumes to sensible steps.
+     */
+    public function roundForShopping(int|float|null $amount, ?string $unit): int|float|null
+    {
+        if ($amount === null || $amount <= 0) {
+            return null;
+        }
+
+        $unit = mb_strtolower(trim((string) $unit, ' .'));
+        $step = match (true) {
+            in_array($unit, ['g', 'ml'], true) => $amount >= 200 ? 50 : ($amount >= 50 ? 10 : 5),
+            in_array($unit, ['kg', 'l'], true) => 0.1,
+            in_array($unit, ['dl', 'cl'], true) => 0.5,
+            default => 1,
+        };
+
+        return round(ceil(round($amount / $step, 6)) * $step, 2);
     }
 
     /**

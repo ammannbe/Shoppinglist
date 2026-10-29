@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Ai\Assistant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -177,6 +178,19 @@ class PlannerTest extends TestCase
             ->assertJsonPath('items.1.store', null);
 
         Http::assertSent(fn (Request $request) => str_contains($request->url(), '/api/recipes/5?servings=4'));
+    }
+
+    public function test_amounts_are_rounded_to_what_one_buys(): void
+    {
+        $assistant = app(Assistant::class);
+
+        $this->assertSame(4.0, $assistant->roundForShopping(3.33, 'Stk.'));
+        $this->assertSame(1.0, $assistant->roundForShopping(0.5, 'Wf'));
+        $this->assertSame(70.0, $assistant->roundForShopping(66.67, 'g'));
+        $this->assertSame(1950.0, $assistant->roundForShopping(1940, 'g'));
+        $this->assertSame(0.7, $assistant->roundForShopping(0.67, 'kg'));
+        $this->assertSame(2.0, $assistant->roundForShopping(1.33, null));
+        $this->assertNull($assistant->roundForShopping(null, 'g'));
     }
 
     public function test_ai_recipes_are_saved_in_the_recipe_app(): void

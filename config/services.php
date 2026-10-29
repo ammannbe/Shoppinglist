@@ -32,7 +32,7 @@ return [
     // without a key the feature is hidden. See app/Ai.
     'openai' => [
         'key' => env('OPENAI_API_KEY'),
-        'model' => env('OPENAI_MODEL', 'gpt-5-mini'),
+        'model' => env('OPENAI_MODEL', 'gpt-6-luna'),
         // Only for reasoning models (gpt-5, o-series); empty to omit the parameter.
         'reasoning_effort' => env('OPENAI_REASONING_EFFORT', 'low'),
         'url' => env('OPENAI_URL', 'https://api.openai.com/v1'),

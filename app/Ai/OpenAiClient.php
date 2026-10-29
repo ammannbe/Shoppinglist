@@ -5,6 +5,7 @@ namespace App\Ai;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 /**
@@ -52,6 +53,9 @@ class OpenAiClient
             report($e);
             throw new AiException('The AI request failed.', previous: $e);
         }
+
+        // Cost control of the global key: tokens per request in the log.
+        Log::info('OpenAI request', ['schema' => $name, 'model' => $response['model'] ?? null, 'usage' => $response['usage'] ?? null]);
 
         $text = collect($response['output'] ?? [])
             ->where('type', 'message')
