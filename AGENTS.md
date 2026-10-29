@@ -57,6 +57,7 @@ Shoppinglist: offline-first PWA for shared shopping lists. One Laravel app serve
 ## Gotchas
 
 - After renaming/moving the project, Blade may serve stale compiled views (Mutagen keeps old mtimes): `ddev artisan optimize:clear`.
+- After renaming the DDEV project, delete the old `.ddev/traefik/{certs,config}/<old-name>.*` files: `.ddev/.gitignore` only ignores the certificates of the current name, so dev keys would end up in a commit.
 - `node` on the host may be a Docker wrapper; use `ddev npm …` or `~/.openclaw/tools/node-*/bin/node` for host scripts.
 
 ## Rules
