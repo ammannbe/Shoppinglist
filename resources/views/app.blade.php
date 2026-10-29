@@ -26,6 +26,7 @@
                 <span x-show="route.view === 'lists'" class="block truncate" x-text="$t('Shopping lists')"></span>
                 <span x-show="route.view === 'settings'" class="block truncate" x-text="$t('Settings')"></span>
                 <span x-show="route.view === 'install'" class="block truncate" x-text="$t('Install app')"></span>
+                <span x-show="route.view === 'planner'" class="block truncate" x-text="$t('Week planner')"></span>
                 <span x-show="route.view === 'products'" class="block truncate" x-text="$t('Products')"></span>
                 <span x-show="route.view === 'units'" class="block truncate" x-text="$t('Units')"></span>
                 <span x-show="route.view === 'offline'" class="block truncate" x-text="$t('Offline')"></span>
@@ -94,6 +95,15 @@
     <main x-show="$store.sync.status !== 'broken'" class="mx-auto max-w-xl px-3 pt-4 pb-[calc(2rem+env(safe-area-inset-bottom))]">
         {{-- Lists --}}
         <section x-show="route.view === 'lists'">
+            <a x-show="assistantEnabled" href="#/planner" class="mb-4 flex items-center gap-3 rounded-lg border border-violet-200 bg-violet-50 p-4 hover:bg-violet-100">
+                <span class="text-2xl" aria-hidden="true">✨</span>
+                <span class="min-w-0 flex-1">
+                    <span class="block font-medium" x-text="$t('Week planner')"></span>
+                    <span class="block text-sm text-stone-600" x-text="$t('Offers, what is at home, recipes and the shopping list')"></span>
+                </span>
+                <span aria-hidden="true">›</span>
+            </a>
+
             <form @submit.prevent="createList()" class="mb-4 flex gap-2">
                 <input x-model="newListName" class="field min-w-0 flex-1" :placeholder="$t('New list')" :aria-label="$t('New list')" enterkeyhint="done">
                 <button class="button shrink-0 px-3 min-[400px]:px-4" :aria-label="$t('Add')">
@@ -263,6 +273,26 @@
             </div>
 
             <div>
+                <template x-if="recipeApp && loggedIn">
+                    <div class="mb-6">
+                        <h2 class="mb-2 text-sm font-medium text-stone-600" x-text="recipeApp.name"></h2>
+                        <div class="rounded-lg border border-stone-200 bg-white p-4">
+                            <template x-if="recipeApp.connected">
+                                <div class="flex flex-wrap items-center justify-between gap-3">
+                                    <span class="min-w-0 break-all" x-text="$t('Connected as :account', { account: recipeApp.account?.email ?? recipeApp.account?.name ?? '' })"></span>
+                                    <button type="button" class="button-secondary shrink-0" :disabled="busy" @click="disconnectRecipes()" x-text="$t('Disconnect')"></button>
+                                </div>
+                            </template>
+                            <template x-if="!recipeApp.connected">
+                                <div class="space-y-3">
+                                    <p class="text-sm text-stone-600" x-text="$t('Connect your account so the week planner suggests your recipes and can save new ones.')"></p>
+                                    <a href="/recipes/connect" data-online class="button inline-block" x-text="$t('Connect with :name', { name: recipeApp.name })"></a>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+
                 <h2 class="mb-2 text-sm font-medium text-stone-600" x-text="$t('Suggestions')"></h2>
                 <div class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
                     <a href="#/products" class="flex items-center justify-between gap-3 p-4 hover:bg-stone-50">
@@ -319,6 +349,8 @@
             <p x-show="catalog.length > shownCatalog.length" class="text-center text-sm text-stone-500"
                 x-text="$t('Showing :shown of :total, search to narrow down.', { shown: shownCatalog.length, total: catalog.length })"></p>
         </section>
+
+        @include('partials.planner')
 
         {{-- A server page (login, account, …) was opened without a connection: the service worker served the app shell. --}}
         <section x-show="route.view === 'offline'" class="space-y-4 py-8 text-center">

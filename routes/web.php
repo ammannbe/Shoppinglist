@@ -1,14 +1,14 @@
 <?php
 
+use App\Ai\OpenAiClient;
 use App\Http\Controllers\ImageController;
 use App\Http\Controllers\LocaleController;
-use App\Ai\OpenAiClient;
 use App\Http\Controllers\MemberController;
 use App\Http\Controllers\PlannerController;
-use App\Http\Controllers\RecipesConnectionController;
-use App\Recipes\RecipesClient;
 use App\Http\Controllers\PreferenceController;
+use App\Http\Controllers\RecipesConnectionController;
 use App\Http\Controllers\SyncController;
+use App\Recipes\RecipesClient;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 

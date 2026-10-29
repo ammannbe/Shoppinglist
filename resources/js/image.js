@@ -23,7 +23,29 @@ export async function shrinkImage(file) {
     }
 }
 
-async function encode(bitmap, max, quality) {
+/**
+ * Photos for the AI (offers, pantry): large enough to read small print, but no 12 MP
+ * originals over the mobile network. PDFs and other files are sent unchanged.
+ *
+ * @param {File} file
+ * @returns {Promise<Blob|File>}
+ */
+export async function prepareForAi(file) {
+    if (!file.type.startsWith('image/')) return file;
+    try {
+        const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+        try {
+            return await encode(bitmap, 2048, 0.85, ['image/jpeg']);
+        } finally {
+            bitmap.close();
+        }
+    } catch {
+        // Formats the browser cannot decode (e.g. HEIC on some devices): the server decides.
+        return file;
+    }
+}
+
+async function encode(bitmap, max, quality, types = ['image/webp', 'image/jpeg']) {
     const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(bitmap.width * scale);
@@ -32,7 +54,7 @@ async function encode(bitmap, max, quality) {
     context.imageSmoothingQuality = 'high';
     context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
 
-    for (const type of ['image/webp', 'image/jpeg']) {
+    for (const type of types) {
         const blob = await new Promise((resolve) => canvas.toBlob(resolve, type, quality));
         if (blob?.type === type) return blob;
     }

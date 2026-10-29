@@ -9,6 +9,7 @@ import { registerServiceWorker } from './pwa.js';
 import { shrinkImage } from './image.js';
 import { createLightboxStore } from './lightbox.js';
 import { createPrefsStore } from './prefs.js';
+import { planner } from './planner.js';
 import { suggestField } from './suggest.js';
 import { swipeRow } from './swipe.js';
 import { createUndoStore } from './undo.js';
@@ -89,6 +90,7 @@ async function setLocale(locale) {
 
 Alpine.data('swipeRow', swipeRow);
 Alpine.data('suggestField', suggestField);
+Alpine.data('planner', planner);
 
 // The products/units view renders at most this many rows, the search narrows it down.
 const CATALOG_SHOWN = 200;
@@ -200,6 +202,58 @@ Alpine.data('shoppinglist', () => ({
 
         return [...new Set([...DEFAULT_STORES, ...used])];
     },
+    /**
+     * Week planner with AI: configured on the server, needs a verified account.
+     */
+    get assistantEnabled() {
+        return Boolean(Alpine.store('sync').user?.assistant && Alpine.store('sync').user?.verified);
+    },
+
+    get recipeApp() {
+        return Alpine.store('sync').user?.recipes ?? null;
+    },
+
+    async disconnectRecipes() {
+        if (!confirm(this.$t('Disconnect from :name?', { name: this.recipeApp.name }))) return;
+        await this.online(async () => {
+            await api.delete('/recipes/connection');
+            Alpine.store('sync').user = await api.get('/me');
+        });
+    },
+
+    /**
+     * Items from the planner: into an existing list or a new one.
+     *
+     * @returns {Promise<string>} list id
+     */
+    async addPlannedItems(target, name, items) {
+        let listId = target;
+        if (!listId) {
+            listId = uuid7();
+            await db.lists.insert({
+                id: listId, name, owner_email: Alpine.store('sync').user?.email ?? null, is_owner: true, members: [], position: nextPosition(this.lists),
+            });
+        }
+        let position = nextPosition(this.itemsOf(listId)) ?? 0;
+        for (const item of items) {
+            await db.items.insert({
+                id: uuid7(),
+                shopping_list_id: listId,
+                name: item.name,
+                amount: item.amount ?? null,
+                unit: item.unit ?? null,
+                store: item.store ?? null,
+                note: item.note ?? null,
+                image: ownProduct(item.name)?.image ?? null,
+                position: position++,
+                creator_email: Alpine.store('sync').user?.email ?? null,
+            });
+            await remember('products', item.name);
+        }
+
+        return listId;
+    },
+
     get loggedIn() {
         return Alpine.store('sync').user !== null;
     },
@@ -744,5 +798,15 @@ document.addEventListener('click', (event) => {
 
 window.Alpine = Alpine;
 Alpine.start();
+// Back from "Connect with <recipe app>" (RecipesConnectionController): show the result once.
+const recipesResult = new URLSearchParams(location.search).get('recipes');
+if (recipesResult) {
+    history.replaceState(null, '', `/${location.hash}`);
+    Alpine.store('notice').show(translate(Alpine.store('i18n').locale, {
+        connected: 'Connected.',
+        denied: 'The connection was not allowed.',
+    }[recipesResult] ?? 'The connection failed. Please try again.'));
+}
+
 boot();
 registerServiceWorker((apply) => { Alpine.store('update').apply = apply; });

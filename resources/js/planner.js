@@ -1,0 +1,226 @@
+import Alpine from 'alpinejs';
+import { createApi, HttpError } from './api.js';
+import { prepareForAi } from './image.js';
+
+// Week planner (#/planner): offers (screenshots, PDFs, text) and pantry photos are read by the
+// AI on the server, recipes come from the connected recipe app and/or the AI, the result is
+// added to a list. The state is kept in localStorage, so a reload (Android may kill the
+// browser while the camera is open) does not lose the progress.
+
+const STORAGE_KEY = 'shoppinglist.planner';
+const api = createApi();
+
+function initialState() {
+    return {
+        offers: [],
+        pantry: [],
+        servings: 4,
+        count: 5,
+        ideas: true,
+        wishes: '',
+        suggestions: [],
+        warning: null,
+        items: [],
+        target: '',
+        listName: '',
+    };
+}
+
+/**
+ * @param {object} options
+ * @param {(target: string, name: string, items: object[]) => Promise<string>} options.addItems adds the items, returns the list id
+ * @param {() => object[]} options.lists lists to add to
+ */
+export function planner({ addItems, lists }) {
+    return {
+        ...initialState(),
+        ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}'),
+        offerText: '',
+        newPantryItem: '',
+        busy: null,
+        error: null,
+
+        init() {
+            const save = () => {
+                const state = Object.fromEntries(Object.keys(initialState()).map((key) => [key, this[key]]));
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+            };
+            Object.keys(initialState()).forEach((key) => this.$watch(key, save));
+        },
+
+        get recipes() {
+            return Alpine.store('sync').user?.recipes ?? null;
+        },
+
+        get selectedOffers() {
+            return this.offers.filter((offer) => offer.selected);
+        },
+
+        get selectedPantry() {
+            return this.pantry.filter((item) => item.selected);
+        },
+
+        get selectedSuggestions() {
+            return this.suggestions.filter((suggestion) => suggestion.selected);
+        },
+
+        get selectedItems() {
+            return this.items.filter((item) => item.selected);
+        },
+
+        reset() {
+            Object.assign(this, initialState());
+            this.error = null;
+        },
+
+        /**
+         * Runs a server request with a progress label and readable errors.
+         */
+        async run(label, action) {
+            if (!navigator.onLine) {
+                this.error = this.$t('This needs an internet connection.');
+                return;
+            }
+            this.busy = label;
+            this.error = null;
+            try {
+                await action();
+            } catch (error) {
+                this.error = error instanceof HttpError
+                    ? (error.status === 429 ? this.$t('Too many requests. Please try again later.') : error.body?.message ?? error.message)
+                    : this.$t('This needs an internet connection.');
+            } finally {
+                this.busy = null;
+            }
+        },
+
+        // ---- 1. offers
+
+        async readOfferFiles(event) {
+            const files = [...event.target.files];
+            event.target.value = '';
+            for (const [index, file] of files.entries()) {
+                await this.run(this.$t('Reading offers :current/:total …', { current: index + 1, total: files.length }), async () => {
+                    const form = new FormData();
+                    form.append('file', await prepareForAi(file), file.name);
+                    this.addOffers((await api.post('/planner/offers', form)).offers);
+                });
+                if (this.error) break;
+            }
+        },
+
+        async readOfferText() {
+            const text = this.offerText.trim();
+            if (!text) return;
+            await this.run(this.$t('Reading offers …'), async () => {
+                this.addOffers((await api.post('/planner/offers', { text })).offers);
+                this.offerText = '';
+            });
+        },
+
+        addOffers(offers) {
+            this.offers = [...this.offers, ...offers.map((offer) => ({ ...offer, selected: true }))];
+        },
+
+        removeOffer(index) {
+            this.offers.splice(index, 1);
+        },
+
+        // ---- 2. pantry
+
+        async readPantry(event) {
+            const files = [...event.target.files].slice(0, 6);
+            event.target.value = '';
+            if (!files.length) return;
+            await this.run(this.$t('Looking at the photos …'), async () => {
+                const form = new FormData();
+                for (const file of files) form.append('photos[]', await prepareForAi(file), file.name);
+                const { items } = await api.post('/planner/pantry', form);
+                this.addPantry(items);
+            });
+        },
+
+        addPantry(items) {
+            const known = new Set(this.pantry.map((item) => item.name.toLowerCase()));
+            this.pantry = [...this.pantry, ...items.filter((item) => !known.has(item.name.toLowerCase())).map((item) => ({ ...item, selected: true }))];
+        },
+
+        addPantryItem() {
+            const name = this.newPantryItem.trim();
+            if (name) this.addPantry([{ name, amount: null }]);
+            this.newPantryItem = '';
+        },
+
+        // ---- 3. recipes
+
+        offerPayload() {
+            return this.selectedOffers.map(({ selected, ...offer }) => offer);
+        },
+
+        pantryPayload() {
+            return this.selectedPantry.map(({ name, amount }) => ({ name, amount }));
+        },
+
+        async suggest() {
+            await this.run(this.$t('Looking for recipes …'), async () => {
+                const result = await api.post('/planner/suggestions', {
+                    offers: this.offerPayload(),
+                    pantry: this.pantryPayload(),
+                    servings: Number(this.servings) || 4,
+                    count: Number(this.count) || 5,
+                    ideas: this.ideas,
+                    wishes: this.wishes.trim() || null,
+                });
+                this.suggestions = result.suggestions.map((suggestion) => ({
+                    ...suggestion, selected: true, servings: Number(this.servings) || 4, savedUrl: null,
+                }));
+                this.warning = result.warning;
+                this.items = [];
+            });
+        },
+
+        async saveIdea(suggestion) {
+            await this.run(this.$t('Saving …'), async () => {
+                const { url } = await api.post('/planner/recipes', {
+                    name: suggestion.name,
+                    servings: suggestion.servings,
+                    instructions: suggestion.instructions,
+                    ingredients: suggestion.ingredients,
+                });
+                suggestion.savedUrl = url;
+            });
+        },
+
+        // ---- 4. shopping list
+
+        async buildList() {
+            await this.run(this.$t('Creating the shopping list …'), async () => {
+                const { items } = await api.post('/planner/list', {
+                    offers: this.offerPayload(),
+                    pantry: this.pantryPayload(),
+                    recipes: this.selectedSuggestions.map((suggestion) => ({
+                        source: suggestion.source,
+                        recipe_id: suggestion.recipe_id ?? null,
+                        name: suggestion.name,
+                        servings: Number(suggestion.servings) || 1,
+                        ingredients: suggestion.source === 'ai' ? suggestion.ingredients : undefined,
+                    })),
+                });
+                this.items = items.map((item) => ({ ...item, selected: !item.at_home }));
+                if (!this.listName) this.listName = this.$t('Weekly shopping :date', { date: new Date().toLocaleDateString(Alpine.store('i18n').locale.replace('_', '-')) });
+            });
+        },
+
+        async addToList() {
+            const items = this.selectedItems.map(({ name, amount, unit, store, note }) => ({ name, amount, unit, store, note }));
+            if (!items.length) return;
+            const listId = await addItems(this.target, this.listName.trim() || this.$t('Shopping list'), items);
+            this.reset();
+            location.hash = `#/list/${listId}`;
+        },
+
+        get lists() {
+            return lists();
+        },
+    };
+}
