@@ -30,7 +30,12 @@ ddev npm run dev
 - PHP 8.3+, MariaDB/MySQL, HTTPS (required for service worker and offline mode).
 - Document root: `public/`.
 - `composer install --no-dev --optimize-autoloader`, `npm ci && npm run build`, `php artisan migrate --force`, `php artisan optimize`.
-- Cron every minute: `php /path/to/artisan schedule:run` (also works off the mail queue, no queue worker needed).
+- Cron jobs, every minute (same as RecipeManager):
+  ```
+  * * * * *  cd /path-to-the-project && php artisan schedule:run >> /dev/null 2>&1
+  * * * * *  cd /path-to-the-project && php artisan queue:work --max-time=50 >> /dev/null 2>&1
+  ```
+  The queue sends the mails (verification, password reset, invitations).
 - Apache: `public/.htaccess` sets the manifest MIME type and disables caching of `sw.js` (needs `mod_headers`).
 
 ### Automatic deployment (Forgejo Actions)
