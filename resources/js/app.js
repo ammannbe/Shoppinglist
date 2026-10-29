@@ -8,6 +8,7 @@ import { hasPendingLocale, htmlLang, initialLocale, LOCALES, storeLocale, transl
 import { registerServiceWorker } from './pwa.js';
 import { swipeRow } from './swipe.js';
 import { createUndoStore } from './undo.js';
+import { createInstallStore } from './install.js';
 
 const RESYNC_INTERVAL = 30_000;
 const DEFAULT_UNITS = ['Stk.', 'g', 'kg', 'ml', 'dl', 'l', 'Pck.', 'Bund', 'Fl.'];
@@ -25,6 +26,7 @@ Alpine.store('i18n', { locale: initialLocale(), locales: LOCALES });
 Alpine.store('sync', { status: 'starting', user: null, online: navigator.onLine });
 Alpine.store('data', { lists: [], items: [], products: [], units: [] });
 Alpine.store('undo', createUndoStore());
+Alpine.store('install', createInstallStore());
 
 Alpine.magic('t', () => (key, replace) => translate(Alpine.store('i18n').locale, key, replace));
 
@@ -59,7 +61,6 @@ Alpine.data('shoppinglist', () => ({
     shareError: null,
     busy: false,
     menu: null,
-    installHintDismissed: localStorage.getItem('shoppinglist.install-hint') === 'dismissed',
 
     init() {
         const parse = () => {
@@ -104,9 +105,6 @@ Alpine.data('shoppinglist', () => ({
     },
     get loggedIn() {
         return Alpine.store('sync').user !== null;
-    },
-    get isIos() {
-        return /iphone|ipad|ipod/i.test(navigator.userAgent) && !navigator.standalone;
     },
     amount(item) {
         return [formatAmount(item.amount, Alpine.store('i18n').locale), item.unit].filter(Boolean).join(' ');
@@ -294,11 +292,6 @@ Alpine.data('shoppinglist', () => ({
             await wipeLocalData();
             location.replace('/');
         });
-    },
-
-    dismissInstallHint() {
-        localStorage.setItem('shoppinglist.install-hint', 'dismissed');
-        this.installHintDismissed = true;
     },
 
     /**

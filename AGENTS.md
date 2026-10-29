@@ -36,6 +36,8 @@ Shoppinglist: offline-first PWA for shared shopping lists. One Laravel app serve
 
 ## UI patterns
 
+- Install instructions: `resources/js/install.js` (platform detection, steps per OS/browser, native `beforeinstallprompt` button), first visit hint + `#/install` view, linked in the settings.
+
 - Rows use `<x-swipe-row actions="…">` (`resources/js/swipe.js`): touch swipe left reveals the actions, full swipe runs the last one; mouse gets a hover "…" menu (`pointer-fine`/`pointer-coarse`). Actions are defined once in `listActions()`/`itemActions()`.
 - Deletions are undoable (`resources/js/undo.js`): rows are hidden, the RxDB remove runs after 5 s or when the app is hidden. Never revive deleted documents.
 

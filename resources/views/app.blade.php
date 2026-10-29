@@ -24,6 +24,7 @@
             <h1 class="min-w-0 flex-1 truncate text-lg font-semibold">
                 <span x-show="route.view === 'lists'" class="block truncate" x-text="$t('Shopping lists')"></span>
                 <span x-show="route.view === 'settings'" class="block truncate" x-text="$t('Settings')"></span>
+                <span x-show="route.view === 'install'" class="block truncate" x-text="$t('Install app')"></span>
                 <template x-if="route.view === 'list' && list">
                     <span class="block min-w-0">
                         <span x-show="renaming === null" x-text="list.name" @click="startRename()" class="block cursor-text truncate"></span>
@@ -108,7 +109,7 @@
 
             <p x-show="!lists.length" class="py-8 text-center text-stone-500" x-text="$t('No lists yet.')"></p>
 
-            <ul class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
+            <ul x-show="lists.length" class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
                 <template x-for="item in lists" :key="item.id">
                     <x-swipe-row actions="listActions(item)">
                         <a :href="`#/list/${item.id}`" class="flex min-w-0 flex-1 items-center gap-3 py-3 pl-4 pointer-coarse:pr-4" draggable="false">
@@ -214,17 +215,66 @@
                 </div>
             </div>
 
-            <div x-show="isIos">
+            <div>
                 <h2 class="mb-2 text-sm font-medium text-stone-600" x-text="$t('Install app')"></h2>
-                <p class="rounded-lg border border-stone-200 bg-white p-4" x-text="$t('On iPhone and iPad: open this page in Safari, tap “Share” and then “Add to Home Screen”.')"></p>
+                <a href="#/install" class="flex items-center justify-between gap-3 rounded-lg border border-stone-200 bg-white p-4 hover:bg-stone-50">
+                    <span x-text="$store.install.installed ? $t('The app is installed on this device.') : $t('How to add Shoppinglist to your home screen or dock')"></span>
+                    <span aria-hidden="true">›</span>
+                </a>
+            </div>
+        </section>
+        {{-- Install instructions (offline available, part of the app shell) --}}
+        <section x-show="route.view === 'install'" class="space-y-6">
+            <p class="text-stone-600" x-text="$t('Installed, Shoppinglist starts like an app from the home screen, in full screen and without a connection.')"></p>
+
+            <div class="rounded-lg border border-stone-200 bg-white p-4">
+                <h2 class="mb-3 font-semibold" x-text="`${$t('This device')}: ${$store.install.current.name}`"></h2>
+                <p x-show="$store.install.installed" class="text-emerald-700" x-text="$t('The app is installed on this device.')"></p>
+                <template x-if="!$store.install.installed">
+                    <div>
+                        <button type="button" x-show="$store.install.prompt" class="button mb-4 w-full" @click="$store.install.install()" x-text="$t('Install now')"></button>
+                        <ol class="list-decimal space-y-1 pl-5">
+                            <template x-for="text in $store.install.current.steps" :key="text"><li x-text="$t(text)"></li></template>
+                        </ol>
+                        <p x-show="$store.install.current.note" class="mt-3 text-sm text-stone-500" x-text="$t($store.install.current.note ?? '')"></p>
+                    </div>
+                </template>
+            </div>
+
+            <div>
+                <h2 class="mb-2 text-sm font-medium text-stone-600" x-text="$t('Other devices and browsers')"></h2>
+                <div class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
+                    <template x-for="[id, platform] in $store.install.others" :key="id">
+                        <details class="group/details">
+                            <summary class="flex cursor-pointer list-none items-center justify-between px-4 py-3 hover:bg-stone-50">
+                                <span x-text="platform.name"></span>
+                                <span class="transition-transform group-open/details:rotate-90" aria-hidden="true">›</span>
+                            </summary>
+                            <div class="px-4 pb-4">
+                                <ol class="list-decimal space-y-1 pl-5 text-sm">
+                                    <template x-for="text in platform.steps" :key="text"><li x-text="$t(text)"></li></template>
+                                </ol>
+                                <p x-show="platform.note" class="mt-2 text-sm text-stone-500" x-text="$t(platform.note ?? '')"></p>
+                            </div>
+                        </details>
+                    </template>
+                </div>
             </div>
         </section>
     </main>
 
-    {{-- iOS install hint (Safari has no install prompt) --}}
-    <div x-show="isIos && !installHintDismissed && route.view === 'lists' && !$store.undo.toast" class="fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] mx-auto max-w-xl rounded-lg bg-stone-900 p-4 text-sm text-white shadow-lg">
-        <p x-text="$t('On iPhone and iPad: open this page in Safari, tap “Share” and then “Add to Home Screen”.')"></p>
-        <button type="button" class="mt-2 font-medium underline" @click="dismissInstallHint()" x-text="$t('Got it')"></button>
+    {{-- First visit: install hint for the current platform --}}
+    <div x-show="$store.install.showHint && route.view === 'lists' && !$store.undo.toast" x-transition
+        class="fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-20 mx-auto max-w-xl rounded-lg bg-stone-900 p-4 text-sm text-white shadow-lg">
+        <p class="mb-1 font-semibold" x-text="$t('Install Shoppinglist as an app')"></p>
+        <p x-show="$store.install.prompt" x-text="$t('Works offline and starts from your home screen.')"></p>
+        <p x-show="!$store.install.prompt" x-text="$t($store.install.current.steps[0]) + ' ' + ($store.install.current.steps[1] ? $t($store.install.current.steps[1]) : '')"></p>
+        <p class="mt-2 text-xs text-stone-300" x-text="$t('You can find these instructions in the settings at any time.')"></p>
+        <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <button type="button" x-show="$store.install.prompt" class="rounded-lg bg-white px-3 py-1.5 font-medium text-stone-900" @click="$store.install.install()" x-text="$t('Install now')"></button>
+            <a href="#/install" class="font-medium underline" @click="$store.install.dismiss()" x-text="$t('Instructions')"></a>
+            <button type="button" class="ml-auto font-medium underline" @click="$store.install.dismiss()" x-text="$t('Got it')"></button>
+        </div>
     </div>
 
     {{-- Edit item --}}
