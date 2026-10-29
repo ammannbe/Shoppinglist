@@ -110,6 +110,7 @@ class PlannerTest extends TestCase
     {
         Http::fake([
             'recipes.test/api/foods' => Http::response(['data' => [['id' => 1, 'name' => 'Hackfleisch'], ['id' => 2, 'name' => 'Tomaten']]]),
+            'recipes.test/api/vocabulary' => Http::response(['data' => ['categories' => ['Eierspeisen', 'Suppen'], 'units' => ['g', 'Stk'], 'complexities' => ['simple', 'normal', 'difficult']]]),
             'recipes.test/api/recipes/search' => Http::response(['data' => [
                 ['id' => 5, 'name' => 'Lasagne', 'url' => 'https://recipes.test/recipes/5', 'food_ids' => [1, 2], 'matched_food_ids' => [1]],
             ]]),
@@ -134,6 +135,11 @@ class PlannerTest extends TestCase
             ->assertJsonPath('suggestions.1.source', 'ai')
             ->assertJsonPath('suggestions.1.name', 'Omelette');
 
+        // Ideas use the categories and units of the recipe app.
+        Http::assertSent(fn (Request $request) => str_contains($request['instructions'] ?? '', 'one of: Eierspeisen, Suppen')
+            && str_contains($request['instructions'], 'units where possible: g, Stk')
+            && $request['text']['format']['schema']['properties']['ideas']['items']['properties']['complexity']['enum'] === ['simple', 'normal', 'difficult']);
+
         // Only matched, known food ids are searched.
         Http::assertSent(fn (Request $request) => str_ends_with($request->url(), '/api/recipes/search')
             && $request['food_ids'] === [1] && $request->hasHeader('Authorization', 'Bearer token'));
@@ -143,6 +149,7 @@ class PlannerTest extends TestCase
     {
         Http::fake([
             'recipes.test/api/foods' => Http::response(['data' => [['id' => 1, 'name' => 'Hackfleisch'], ['id' => 2, 'name' => 'Tomaten'], ['id' => 3, 'name' => 'Eier']]]),
+            'recipes.test/api/vocabulary' => Http::response(['data' => ['categories' => [], 'units' => [], 'complexities' => []]]),
             'recipes.test/api/recipes/search' => Http::sequence()
                 ->push(['data' => [
                     ['id' => 6, 'name' => 'Tomatensalat', 'url' => 'https://recipes.test/recipes/6', 'food_ids' => [2]],
@@ -235,16 +242,33 @@ class PlannerTest extends TestCase
         $this->assertNull($assistant->roundForShopping(null, 'g'));
     }
 
-    public function test_ai_recipes_are_saved_in_the_recipe_app(): void
+    public function test_ai_recipes_are_handed_over_as_a_draft(): void
     {
-        Http::fake(['recipes.test/api/recipes' => Http::response(['data' => ['id' => 9, 'url' => 'https://recipes.test/recipes/9']], 201)]);
+        Http::fake(['recipes.test/api/recipe-drafts' => Http::response(['data' => ['id' => 'abc', 'url' => 'https://recipes.test/admin/import-recipe?draft=abc']], 201)]);
 
         $this->actingAs($this->connected())->postJson('/planner/recipes', [
-            'name' => 'Omelette', 'servings' => 2, 'instructions' => '1. Braten',
+            'name' => 'Omelette', 'servings' => 2, 'category' => 'Eierspeisen', 'complexity' => 'simple', 'instructions' => '1. Braten',
             'ingredients' => [['amount' => 4, 'unit' => 'Stk.', 'name' => 'Eier']],
-        ])->assertOk()->assertJsonPath('url', 'https://recipes.test/recipes/9');
+        ])->assertOk()->assertJsonPath('url', 'https://recipes.test/admin/import-recipe?draft=abc');
 
-        Http::assertSent(fn (Request $request) => $request['ingredients'][0]['food'] === 'Eier');
+        Http::assertSent(fn (Request $request) => $request->url() === 'https://recipes.test/api/recipe-drafts'
+            && $request['name'] === 'Omelette' && $request['category'] === 'Eierspeisen' && $request['complexity'] === 'simple'
+            && $request['ingredients'] === [['amount' => 4, 'unit' => 'Stk.', 'food' => 'Eier']]);
+    }
+
+    public function test_drafts_get_a_default_category_and_complexity(): void
+    {
+        Http::fake(['recipes.test/api/recipe-drafts' => Http::response(['data' => ['url' => 'https://recipes.test/x']], 201)]);
+
+        $user = $this->connected();
+        $user->forceFill(['locale' => 'de_CH'])->save();
+
+        $this->actingAs($user)->postJson('/planner/recipes', [
+            'name' => 'Omelette', 'servings' => 2, 'complexity' => 'very hard', 'instructions' => '1. Braten',
+            'ingredients' => [['name' => 'Eier']],
+        ])->assertOk();
+
+        Http::assertSent(fn (Request $request) => $request['category'] === 'Rezeptideen' && $request['complexity'] === 'normal');
     }
 
     public function test_an_expired_token_is_refreshed(): void
@@ -254,7 +278,7 @@ class PlannerTest extends TestCase
 
         Http::fake([
             'recipes.test/oauth/token' => Http::response(['access_token' => 'new', 'refresh_token' => 'refresh2', 'expires_in' => 3600]),
-            'recipes.test/api/recipes' => Http::response(['data' => ['url' => 'https://recipes.test/recipes/1']], 201),
+            'recipes.test/api/recipe-drafts' => Http::response(['data' => ['url' => 'https://recipes.test/x']], 201),
         ]);
         $this->actingAs($user)->postJson('/planner/recipes', [
             'name' => 'X', 'servings' => 1, 'instructions' => 'y', 'ingredients' => [['name' => 'Eier']],

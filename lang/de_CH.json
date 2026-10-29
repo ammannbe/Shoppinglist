@@ -317,9 +317,6 @@
     "Save & Close": "Speichern und schliessen",
     "Save & Return": "Speichern und zurückgeben",
     "Save :name": "Sparen Sie :name",
-    "Save in :name": "In :name speichern",
-    "Saved in :name": "In :name gespeichert",
-    "Saving …": "Speichern …",
     "Screenshots from the shop app, the flyer as PDF or photos of it. Migros, Coop, Aldi, Lidl and Denner get their shop code automatically.": "Screenshots aus der App des Ladens, der Prospekt als PDF oder Fotos davon. Migros, Coop, Aldi, Lidl und Denner erhalten automatisch ihr Laden-Kürzel.",
     "Search": "Suchen",
     "Search :name": "Suche :name",
@@ -399,7 +396,6 @@
     "The provided password was incorrect.": "Das angegebene Passwort war falsch.",
     "The provided two factor authentication code was invalid.": "Der angegebene Zwei-Faktor-Authentifizierungscode war ungültig.",
     "The provided two factor recovery code was invalid.": "Der angegebene Zwei-Faktor-Wiederherstellungscode war ungültig.",
-    "The recipe could not be saved in :name.": "Das Rezept konnte nicht in :name gespeichert werden.",
     "The recipes of :name could not be loaded.": "Die Rezepte aus :name konnten nicht geladen werden.",
     "The response is not a streamed response.": "Die Antwort ist keine gestreamte Antwort.",
     "The response is not a view.": "Die Antwort ist keine Ansicht.",
@@ -462,5 +458,11 @@
     "{0} Set up passkey|{1} Manage passkey (:count)|[2,*] Manage passkeys (:count)": "{0} Passkey einrichten|{1} Passkey verwalten (:count)|[2,*] Passkeys verwalten (:count)",
     "“:name” deleted": "«:name» gelöscht",
     "“:name” is already on the list.": "«:name» ist schon auf der Liste.",
-    "… or paste the offers as text": "… oder die Aktionen als Text einfügen"
+    "… or paste the offers as text": "… oder die Aktionen als Text einfügen",
+    "Handing over …": "Wird übergeben …",
+    "Check and import in :name": "In :name prüfen und importieren",
+    "Import into :name": "In :name übernehmen",
+    "Recipe ideas": "Rezeptideen",
+    "The recipe could not be handed over to :name.": "Das Rezept konnte nicht an :name übergeben werden.",
+    "Saving …": "Speichern …"
 }
