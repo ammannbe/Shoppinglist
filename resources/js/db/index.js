@@ -1,10 +1,13 @@
-import { createRxDatabase } from 'rxdb/plugins/core';
+import { addRxPlugin, createRxDatabase } from 'rxdb/plugins/core';
+import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
 import { replicateRxCollection } from 'rxdb/plugins/replication';
 import { Subject, map } from 'rxjs';
 import * as schemas from './schemas.js';
 
+// Local documents are migrated when a schema version increases (schemas.migrations).
+addRxPlugin(RxDBMigrationSchemaPlugin);
+
 export const SYNCED_COLLECTIONS = ['lists', 'items', 'products', 'units'];
-const PULL_ONLY = ['units'];
 
 /**
  * Local database. Everything the UI shows is read from here, the
@@ -22,11 +25,11 @@ export async function createDatabase({ storage, name = 'shoppinglist', multiInst
     });
 
     await db.addCollections(Object.fromEntries(
-        SYNCED_COLLECTIONS.map((collection) => [collection, { schema: schemas[collection] }]),
+        SYNCED_COLLECTIONS.map((collection) => [collection, { schema: schemas[collection], migrationStrategies: schemas.migrations[collection] ?? {} }]),
     ));
 
     // Every local change gets a new version, the server detects conflicts with it.
-    for (const collection of ['lists', 'items', 'products']) {
+    for (const collection of ['lists', 'items', 'products', 'units']) {
         db[collection].preSave((data, doc) => {
             data.version = (doc.version ?? 0) + 1;
         }, false);
@@ -56,7 +59,7 @@ export function startReplication(db, api, { retryTime = 5000 } = {}) {
             // The server has no push channel: re-check on demand (online, app visible, interval).
             stream$: resync$.pipe(map(() => 'RESYNC')),
         },
-        push: PULL_ONLY.includes(collection) ? undefined : {
+        push: {
             batchSize: 50,
             handler: (rows) => api.post(`/sync/${collection}/push`, rows),
         },

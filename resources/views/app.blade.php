@@ -17,7 +17,7 @@
 <body class="min-h-dvh bg-stone-50 text-stone-900 antialiased" :class="$store.sync.online || 'is-offline'" x-data="shoppinglist" x-cloak>
     <header class="sticky top-0 z-10 border-b border-stone-200 bg-white/95 pt-[env(safe-area-inset-top)] backdrop-blur">
         <div class="mx-auto flex h-14 max-w-xl items-center gap-2 px-3">
-            <a href="#/" x-show="!['lists', 'offline'].includes(route.view)" class="icon-button" :aria-label="$t('Back')">
+            <a :href="backLink" x-show="!['lists', 'offline'].includes(route.view)" class="icon-button" :aria-label="$t('Back')">
                 <svg viewBox="0 0 24 24" class="size-6"><path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </a>
 
@@ -25,6 +25,8 @@
                 <span x-show="route.view === 'lists'" class="block truncate" x-text="$t('Shopping lists')"></span>
                 <span x-show="route.view === 'settings'" class="block truncate" x-text="$t('Settings')"></span>
                 <span x-show="route.view === 'install'" class="block truncate" x-text="$t('Install app')"></span>
+                <span x-show="route.view === 'products'" class="block truncate" x-text="$t('Products')"></span>
+                <span x-show="route.view === 'units'" class="block truncate" x-text="$t('Units')"></span>
                 <span x-show="route.view === 'offline'" class="block truncate" x-text="$t('Offline')"></span>
                 <template x-if="route.view === 'list' && list">
                     <span class="block min-w-0">
@@ -74,6 +76,7 @@
                         <button type="button" class="menu-item" x-show="doneItems.length" @click="clearDone()" x-text="$t('Clear done')"></button>
                         <button type="button" class="menu-item text-red-700" :class="$store.sync.online || 'opacity-50'" x-show="loggedIn && !list.is_owner" @click="leaveList()" x-text="$t('Leave list')"></button>
                         <button type="button" class="menu-item text-red-700" x-show="list.is_owner" @click="deleteList()" x-text="$t('Delete list')"></button>
+                        <a href="#/settings" class="menu-item border-t border-stone-200" x-text="$t('Settings')"></a>
                     </div>
                 </div>
             </template>
@@ -110,9 +113,12 @@
 
             <p x-show="!lists.length" class="py-8 text-center text-stone-500" x-text="$t('No lists yet.')"></p>
 
-            <ul x-show="lists.length" class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
+            <x-sort-select x-show="lists.length > 1" value="$store.prefs.list_sort" change="$store.prefs.set('list_sort', $event.target.value)" />
+
+            {{-- Hold a row and move it (touch) or drag it (mouse) to change the order. --}}
+            <ul x-show="lists.length" class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white" @row-move="moveRow('lists', $event.detail)">
                 <template x-for="item in lists" :key="item.id">
-                    <x-swipe-row actions="listActions(item)">
+                    <x-swipe-row actions="listActions(item)" x-bind:data-sort-id="item.id">
                         <a :href="`#/list/${item.id}`" class="flex min-w-0 flex-1 items-center gap-3 py-3 pl-4 pointer-coarse:pr-4" draggable="false">
                             <span class="min-w-0 flex-1">
                                 <span class="block truncate font-medium" x-text="item.name"></span>
@@ -138,24 +144,48 @@
             <template x-if="list">
                 <div>
                     <form @submit.prevent="addItem()" class="mb-4 flex gap-2">
-                        <input x-model="newItemText" list="product-names" class="field min-w-0 flex-1" autocomplete="off" enterkeyhint="enter"
-                            :placeholder="$t('Add item, e.g. “2 l milk”')" :aria-label="$t('Add item')">
+                        {{-- Picking a suggestion adds the item right away, the amount typed before is kept. --}}
+                        <div class="relative min-w-0 flex-1" @click.outside="close()"
+                            x-data="suggestField({ source: 'item', get: () => newItemText, set: (value) => newItemText = value, units: () => unitNames, onPick: () => addItem(), openItems: () => openItems })">
+                            <input x-model="newItemText" class="field w-full" autocomplete="off" autocorrect="off" enterkeyhint="enter"
+                                role="combobox" aria-autocomplete="list" aria-controls="item-suggestions" :aria-expanded="visible"
+                                :aria-activedescendant="active >= 0 ? `item-suggestions-${active}` : null"
+                                @input="input()" @focus="input()" @blur="blur()" @keydown.down.prevent="move(1)" @keydown.up.prevent="move(-1)"
+                                @keydown.enter="enter($event)" @keydown.escape="close()"
+                                :placeholder="$t('Add item, e.g. “2 l milk”')" :aria-label="$t('Add item')">
+                            <x-suggestions id="item-suggestions" />
+                        </div>
                         <button class="button shrink-0 px-3 min-[400px]:px-4" :aria-label="$t('Add')">
                     <span class="hidden min-[400px]:inline" x-text="$t('Add')"></span>
                     <svg viewBox="0 0 24 24" class="size-6 min-[400px]:hidden"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
                 </button>
                     </form>
 
+                    {{-- Same product already open on the list --}}
+                    <template x-if="duplicate">
+                        <div class="notice -mt-2 mb-4 flex flex-wrap items-center gap-x-4 gap-y-2" role="status">
+                            <span class="min-w-0 flex-1 basis-full min-[400px]:basis-auto"
+                                x-text="$t('“:name” is already on the list.', { name: duplicate.existing.name }) + (amount(duplicate.existing) ? ` (${amount(duplicate.existing)})` : '')"></span>
+                            <button type="button" x-show="duplicate.merged !== null" class="font-medium underline" @click="mergeDuplicate()"
+                                x-text="$t('Increase to :amount', { amount: amount({ amount: duplicate.merged, unit: duplicate.existing.unit ?? duplicate.parsed.unit }) })"></button>
+                            <button type="button" class="font-medium underline" @click="addDuplicate()" x-text="$t('Add anyway')"></button>
+                            <button type="button" class="ml-auto" @click="duplicate = null" :aria-label="$t('Close')">✕</button>
+                        </div>
+                    </template>
+
                     <p x-show="!openItems.length" class="py-6 text-center text-stone-500" x-text="$t('Nothing to buy.')"></p>
 
-                    <ul class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white" x-show="openItems.length">
+                    <x-sort-select x-show="openItems.length > 1" value="itemSort" change="setItemSort($event.target.value)" />
+
+                    <ul class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white" x-show="openItems.length" @row-move="moveRow('items', $event.detail)">
                         <template x-for="item in openItems" :key="item.id">
-                            <x-swipe-row actions="itemActions(item)">
+                            <x-swipe-row actions="itemActions(item)" x-bind:data-sort-id="item.id">
                                 {{-- Tap marks as done, edit/delete via swipe or "…" --}}
                                 <button type="button" class="flex min-w-0 flex-1 items-center py-3 pr-4 text-left" role="checkbox" aria-checked="false" @click="toggle(item)">
                                     <span class="check" aria-hidden="true"></span>
-                                    <span class="mr-2 truncate" x-text="item.name"></span>
-                                    <span class="shrink-0 text-sm text-stone-500" x-text="amount(item)"></span>
+                                    <img x-show="item.image" :src="imageUrl(item.image)" alt="" loading="lazy" decoding="async" class="mr-3 size-10 shrink-0 rounded-md bg-stone-100 object-cover">
+                                    <span x-show="amount(item)" class="mr-2 shrink-0 tabular-nums text-stone-500" x-text="amount(item)"></span>
+                                    <span class="truncate" x-text="item.name"></span>
                                 </button>
                             </x-swipe-row>
                         </template>
@@ -174,8 +204,9 @@
                                         <span class="check check-done" aria-hidden="true">
                                             <svg viewBox="0 0 24 24" class="size-4"><path d="M5 12l5 5 9-10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
                                         </span>
-                                        <span class="mr-2 truncate line-through" x-text="item.name"></span>
-                                        <span class="shrink-0 text-sm" x-text="amount(item)"></span>
+                                        <img x-show="item.image" :src="imageUrl(item.image)" alt="" loading="lazy" decoding="async" class="mr-3 opacity-50 size-10 shrink-0 rounded-md bg-stone-100 object-cover">
+                                        <span x-show="amount(item)" class="mr-2 shrink-0 tabular-nums line-through" x-text="amount(item)"></span>
+                                        <span class="truncate line-through" x-text="item.name"></span>
                                     </button>
                                 </x-swipe-row>
                             </template>
@@ -195,6 +226,25 @@
                     </template>
                 </select>
             </div>
+
+            <fieldset>
+                <legend class="mb-2 text-sm font-medium text-stone-600" x-text="$t('Actions on touch devices')"></legend>
+                <div class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
+                    <template x-for="option in [
+                        { value: 'swipe', label: $t('Swipe left'), hint: $t('Edit, share and delete appear next to the row.') },
+                        { value: 'longpress', label: $t('Long press'), hint: $t('A menu with edit, share and delete opens.') },
+                    ]" :key="option.value">
+                        <label class="flex cursor-pointer items-start gap-3 p-4 hover:bg-stone-50">
+                            <input type="radio" name="row-actions" class="mt-1 accent-emerald-700" :value="option.value"
+                                :checked="$store.prefs.rowActions === option.value" @change="setRowActions(option.value)">
+                            <span>
+                                <span class="block" x-text="option.label"></span>
+                                <span class="block text-sm text-stone-500" x-text="option.hint"></span>
+                            </span>
+                        </label>
+                    </template>
+                </div>
+            </fieldset>
 
             <div>
                 <h2 class="mb-2 text-sm font-medium text-stone-600" x-text="$t('Account')"></h2>
@@ -217,6 +267,20 @@
             </div>
 
             <div>
+                <h2 class="mb-2 text-sm font-medium text-stone-600" x-text="$t('Suggestions')"></h2>
+                <div class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
+                    <a href="#/products" class="flex items-center justify-between gap-3 p-4 hover:bg-stone-50">
+                        <span x-text="$t('Products')"></span>
+                        <span aria-hidden="true">›</span>
+                    </a>
+                    <a href="#/units" class="flex items-center justify-between gap-3 p-4 hover:bg-stone-50">
+                        <span x-text="$t('Units')"></span>
+                        <span aria-hidden="true">›</span>
+                    </a>
+                </div>
+            </div>
+
+            <div>
                 <h2 class="mb-2 text-sm font-medium text-stone-600" x-text="$t('Install app')"></h2>
                 <a href="#/install" class="flex items-center justify-between gap-3 rounded-lg border border-stone-200 bg-white p-4 hover:bg-stone-50">
                     <span x-text="$store.install.installed ? $t('The app is installed on this device.') : $t('How to add Shoppinglist to your home screen or dock')"></span>
@@ -224,6 +288,42 @@
                 </a>
             </div>
         </section>
+        {{-- Products and units suggested when adding items: own ones can be edited, public ones are read-only --}}
+        <section x-show="['products', 'units'].includes(route.view)" class="space-y-4">
+            <p class="text-stone-600" x-text="route.view === 'units'
+                ? $t('Units are suggested after the amount. Rename or delete your own units here, the standard units cannot be changed.')
+                : $t('Products are suggested when adding items. Rename or delete misspelled and unused ones here.')"></p>
+            <input x-model="catalogSearch" type="search" class="field w-full" autocomplete="off"
+                :placeholder="route.view === 'units' ? $t('Search units') : $t('Search products')" :aria-label="route.view === 'units' ? $t('Search units') : $t('Search products')">
+
+            <p x-show="!catalog.length" class="py-6 text-center text-stone-500" x-text="route.view === 'units' ? $t('No units found.') : $t('No products found.')"></p>
+
+            <template x-if="['products', 'units'].includes(route.view) && catalog.length">
+                <div class="space-y-4">
+                    <ul x-show="shownCatalog.some((entry) => !entry.is_public)" class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
+                        <template x-for="entry in shownCatalog.filter((entry) => !entry.is_public)" :key="entry.id">
+                            <x-swipe-row actions="catalogActions(entry)">
+                                <span class="flex min-w-0 flex-1 items-center gap-3 py-2 pl-4 pointer-coarse:pr-4">
+                                    <img x-show="entry.image" :src="imageUrl(entry.image)" alt="" loading="lazy" decoding="async" class="size-10 shrink-0 rounded-md bg-stone-100 object-cover">
+                                    <span class="min-w-0 flex-1 truncate py-1" x-text="entry.name"></span>
+                                </span>
+                            </x-swipe-row>
+                        </template>
+                    </ul>
+                    <div x-show="shownCatalog.some((entry) => entry.is_public)">
+                        <h2 class="mb-2 text-sm font-medium text-stone-600" x-text="$t('Standard')"></h2>
+                        <ul class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white text-stone-600">
+                            <template x-for="entry in shownCatalog.filter((entry) => entry.is_public)" :key="entry.id">
+                                <li class="truncate px-4 py-3" x-text="entry.name"></li>
+                            </template>
+                        </ul>
+                    </div>
+                </div>
+            </template>
+            <p x-show="catalog.length > shownCatalog.length" class="text-center text-sm text-stone-500"
+                x-text="$t('Showing :shown of :total, search to narrow down.', { shown: shownCatalog.length, total: catalog.length })"></p>
+        </section>
+
         {{-- A server page (login, account, …) was opened without a connection: the service worker served the app shell. --}}
         <section x-show="route.view === 'offline'" class="space-y-4 py-8 text-center">
             <p class="text-lg font-semibold" x-text="$t('This page needs an internet connection.')"></p>
@@ -289,12 +389,19 @@
     </div>
 
     {{-- Edit item --}}
-    <dialog x-ref="editDialog" class="dialog" @close="editing = null">
+    <dialog x-ref="editDialog" class="dialog overflow-visible" @close="editing = null">
         <template x-if="editing">
             <form @submit.prevent="saveItem()" class="space-y-4">
                 <label class="block">
                     <span class="label" x-text="$t('Name')"></span>
-                    <input x-model="editing.name" list="product-names" class="field w-full" required>
+                    <span class="relative block" @click.outside="close()" x-data="suggestField({ source: 'product', get: () => editing.name, set: (value) => editing.name = value })">
+                        <input x-model="editing.name" class="field w-full" required autocomplete="off" autocorrect="off"
+                            role="combobox" aria-autocomplete="list" aria-controls="edit-suggestions" :aria-expanded="visible"
+                            :aria-activedescendant="active >= 0 ? `edit-suggestions-${active}` : null"
+                            @input="input()" @blur="blur()" @keydown.down.prevent="move(1)" @keydown.up.prevent="move(-1)"
+                            @keydown.enter="enter($event)" @keydown.escape="if (visible) { $event.preventDefault(); close() }">
+                        <x-suggestions id="edit-suggestions" />
+                    </span>
                 </label>
                 <div class="flex gap-3">
                     <label class="block min-w-0 w-1/2">
@@ -303,8 +410,30 @@
                     </label>
                     <label class="block min-w-0 w-1/2">
                         <span class="label" x-text="$t('Unit')"></span>
-                        <input x-model="editing.unit" list="unit-names" class="field w-full">
+                        <span class="relative block" @click.outside="close()"
+                            x-data="suggestField({ source: 'unit', get: () => editing.unit ?? '', set: (value) => editing.unit = value, units: () => unitNames })">
+                            <input x-model="editing.unit" class="field w-full" autocomplete="off" autocorrect="off" autocapitalize="off"
+                                role="combobox" aria-autocomplete="list" aria-controls="unit-suggestions" :aria-expanded="visible"
+                                :aria-activedescendant="active >= 0 ? `unit-suggestions-${active}` : null"
+                                @input="input()" @focus="input()" @blur="blur()" @keydown.down.prevent="move(1)" @keydown.up.prevent="move(-1)"
+                                @keydown.enter="enter($event)" @keydown.escape="if (visible) { $event.preventDefault(); close() }">
+                            <x-suggestions id="unit-suggestions" />
+                        </span>
                     </label>
+                </div>
+                {{-- Photo of the product: shown for every item with this name --}}
+                <div x-show="loggedIn" class="flex items-center gap-3">
+                    <img x-show="editing.image" :src="imageUrl(editing.image)" alt="" class="size-20 shrink-0 rounded-lg bg-stone-100 object-cover">
+                    <div class="min-w-0 space-y-1 text-sm">
+                        <span class="label" x-text="$t('Photo for all “:name”', { name: editing.name.trim() || '…' })"></span>
+                        <div class="flex flex-wrap gap-x-4 gap-y-1">
+                            <label class="cursor-pointer font-medium underline" :class="(imageBusy || !$store.sync.online) && 'opacity-50'">
+                                <input type="file" accept="image/*" class="sr-only" :disabled="imageBusy" @change="chooseImage($event)">
+                                <span x-text="imageBusy ? $t('Saving …') : editing.image ? $t('Change photo') : $t('Add photo')"></span>
+                            </label>
+                            <button type="button" x-show="editing.image && !imageBusy" class="text-red-700 underline" @click="removeImage()" x-text="$t('Remove photo')"></button>
+                        </div>
+                    </div>
                 </div>
                 <p x-show="editing.creator_email" class="text-xs text-stone-500" x-text="$t('Added by :email', { email: editing.creator_email })"></p>
                 <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
@@ -349,13 +478,13 @@
         </template>
     </dialog>
 
-    {{-- Rename list (overview) --}}
-    <dialog x-ref="renameDialog" class="dialog" @close="renamingList = null">
-        <template x-if="renamingList">
+    {{-- Rename list (overview) or product --}}
+    <dialog x-ref="renameDialog" class="dialog" @close="renamingDoc = null">
+        <template x-if="renamingDoc">
             <form @submit.prevent="saveRename()" class="space-y-4">
                 <label class="block">
                     <span class="label" x-text="$t('Name')"></span>
-                    <input x-model="renamingList.name" class="field w-full" required>
+                    <input x-model="renamingDoc.name" class="field w-full" required>
                 </label>
                 <div class="flex flex-wrap justify-end gap-2 pt-2">
                     <button type="button" class="button-secondary" @click="$refs.renameDialog.close()" x-text="$t('Cancel')"></button>
@@ -393,11 +522,5 @@
         <button type="button" class="shrink-0 font-semibold text-emerald-300 uppercase" @click="$store.undo.undo()" x-text="$t('Undo')"></button>
     </div>
 
-    <datalist id="product-names">
-        <template x-for="name in productNames" :key="name"><option :value="name"></option></template>
-    </datalist>
-    <datalist id="unit-names">
-        <template x-for="name in unitNames" :key="name"><option :value="name"></option></template>
-    </datalist>
 </body>
 </html>

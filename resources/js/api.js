@@ -19,13 +19,14 @@ export function createApi({ baseUrl = '', fetch: fetchImpl = globalThis.fetch.bi
         const headers = { Accept: 'application/json' };
         const token = xsrfToken();
         if (token) headers['X-XSRF-TOKEN'] = token;
-        if (body !== undefined) headers['Content-Type'] = 'application/json';
+        const form = body instanceof FormData;
+        if (body !== undefined && !form) headers['Content-Type'] = 'application/json';
 
         const response = await fetchImpl(baseUrl + path, {
             method,
             headers,
             credentials: 'same-origin',
-            body: body === undefined ? undefined : JSON.stringify(body),
+            body: body === undefined || form ? body : JSON.stringify(body),
         });
 
         const data = response.status === 204 ? null : await response.json().catch(() => null);
@@ -36,6 +37,7 @@ export function createApi({ baseUrl = '', fetch: fetchImpl = globalThis.fetch.bi
 
     return {
         get: (path) => request('GET', path),
+        // A FormData body is sent as multipart (file uploads).
         post: (path, body) => request('POST', path, body ?? {}),
         put: (path, body) => request('PUT', path, body ?? {}),
         delete: (path) => request('DELETE', path),
