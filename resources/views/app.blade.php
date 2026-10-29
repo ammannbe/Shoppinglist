@@ -29,6 +29,7 @@
                 <span x-show="route.view === 'planner'" class="block truncate" x-text="$t('Week planner')"></span>
                 <span x-show="route.view === 'products'" class="block truncate" x-text="$t('Products')"></span>
                 <span x-show="route.view === 'units'" class="block truncate" x-text="$t('Units')"></span>
+                <span x-show="route.view === 'stores'" class="block truncate" x-text="$t('Shops')"></span>
                 <span x-show="route.view === 'offline'" class="block truncate" x-text="$t('Offline')"></span>
                 <template x-if="route.view === 'list' && list">
                     <span class="block min-w-0">
@@ -185,7 +186,7 @@
                                 <button type="button" class="flex min-w-0 flex-1 items-center py-3 pr-4 text-left" role="checkbox" aria-checked="false" @click="toggle(item)">
                                     <span class="check" aria-hidden="true"></span>
                                     <img x-show="item.image" :src="imageUrl(item.image, 'thumb')" @click.stop="openImage(item.image)" :alt="$t('Show photo')" loading="lazy" decoding="async" class="mr-3 size-10 shrink-0 cursor-zoom-in rounded-md bg-stone-100 object-cover">
-                                    <span x-show="item.store" class="mr-2 grid h-5 min-w-5 shrink-0 place-items-center rounded bg-orange-100 px-1 text-xs font-semibold text-orange-800" :title="$t('Shop')" x-text="item.store"></span>
+                                    <span x-show="item.store" class="mr-2 grid h-5 min-w-5 shrink-0 place-items-center rounded bg-orange-100 px-1 text-xs font-semibold text-orange-800" :title="storeLabel(item.store)" x-text="item.store"></span>
                                     <span x-show="amount(item)" class="mr-2 shrink-0 tabular-nums text-stone-500" x-text="amount(item)"></span>
                                     <span class="min-w-0">
                                         <span class="block truncate" x-text="item.name"></span>
@@ -210,7 +211,7 @@
                                             <svg viewBox="0 0 24 24" class="size-4"><path d="M5 12l5 5 9-10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
                                         </span>
                                         <img x-show="item.image" :src="imageUrl(item.image, 'thumb')" @click.stop="openImage(item.image)" :alt="$t('Show photo')" loading="lazy" decoding="async" class="mr-3 opacity-50 size-10 shrink-0 cursor-zoom-in rounded-md bg-stone-100 object-cover">
-                                        <span x-show="item.store" class="mr-2 grid h-5 min-w-5 shrink-0 place-items-center rounded bg-stone-100 px-1 text-xs font-semibold" :title="$t('Shop')" x-text="item.store"></span>
+                                        <span x-show="item.store" class="mr-2 grid h-5 min-w-5 shrink-0 place-items-center rounded bg-stone-100 px-1 text-xs font-semibold" :title="storeLabel(item.store)" x-text="item.store"></span>
                                         <span x-show="amount(item)" class="mr-2 shrink-0 tabular-nums line-through" x-text="amount(item)"></span>
                                         <span class="truncate line-through" x-text="item.name"></span>
                                     </button>
@@ -303,6 +304,10 @@
                         <span x-text="$t('Units')"></span>
                         <span aria-hidden="true">›</span>
                     </a>
+                    <a href="#/stores" class="flex items-center justify-between gap-3 p-4 hover:bg-stone-50">
+                        <span x-text="$t('Shops')"></span>
+                        <span aria-hidden="true">›</span>
+                    </a>
                 </div>
             </div>
 
@@ -314,22 +319,32 @@
                 </a>
             </div>
         </section>
-        {{-- Products and units suggested when adding items: own ones can be edited, public ones are read-only --}}
-        <section x-show="['products', 'units'].includes(route.view)" class="space-y-4">
-            <p class="text-stone-600" x-text="route.view === 'units'
-                ? $t('Units are suggested after the amount. Rename or delete your own units here, the standard units cannot be changed.')
-                : $t('Products are suggested when adding items. Rename or delete misspelled and unused ones here.')"></p>
+        {{-- Products, units and shops suggested when adding items: own ones can be edited, public ones are read-only --}}
+        <section x-show="['products', 'units', 'stores'].includes(route.view)" class="space-y-4">
+            <p class="text-stone-600" x-text="{
+                units: $t('Units are suggested after the amount. Rename or delete your own units here, the standard units cannot be changed.'),
+                stores: $t('Shops can be chosen when editing an item, the item shows the code. Add, edit or delete your own shops here, the standard shops cannot be changed.'),
+                products: $t('Products are suggested when adding items. Rename or delete misspelled and unused ones here.'),
+            }[route.view]"></p>
+            <form x-show="route.view === 'stores'" @submit.prevent="createStore()" class="flex gap-2">
+                <input x-model="newStore.name" class="field min-w-0 flex-1" maxlength="255" required :placeholder="$t('New shop, e.g. Amazon')" :aria-label="$t('Name')">
+                <input x-model="newStore.code" class="field w-24 uppercase" maxlength="10" autocapitalize="characters"
+                    :placeholder="newStore.name.trim() ? suggestedCode(newStore.name) : $t('Code')" :aria-label="$t('Code')">
+                <button class="button-secondary" x-text="$t('Add')"></button>
+            </form>
             <input x-model="catalogSearch" type="search" class="field w-full" autocomplete="off"
-                :placeholder="route.view === 'units' ? $t('Search units') : $t('Search products')" :aria-label="route.view === 'units' ? $t('Search units') : $t('Search products')">
+                :placeholder="{ units: $t('Search units'), stores: $t('Search shops'), products: $t('Search products') }[route.view]"
+                :aria-label="{ units: $t('Search units'), stores: $t('Search shops'), products: $t('Search products') }[route.view]">
 
-            <p x-show="!catalog.length" class="py-6 text-center text-stone-500" x-text="route.view === 'units' ? $t('No units found.') : $t('No products found.')"></p>
+            <p x-show="!catalog.length" class="py-6 text-center text-stone-500" x-text="{ units: $t('No units found.'), stores: $t('No shops found.'), products: $t('No products found.') }[route.view]"></p>
 
-            <template x-if="['products', 'units'].includes(route.view) && catalog.length">
+            <template x-if="['products', 'units', 'stores'].includes(route.view) && catalog.length">
                 <div class="space-y-4">
                     <ul x-show="shownCatalog.some((entry) => !entry.is_public)" class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
                         <template x-for="entry in shownCatalog.filter((entry) => !entry.is_public)" :key="entry.id">
                             <x-swipe-row actions="catalogActions(entry)">
                                 <span class="flex min-w-0 flex-1 items-center gap-3 py-2 pl-4 pointer-coarse:pr-4">
+<span x-show="entry.code" class="grid h-5 min-w-5 shrink-0 place-items-center rounded bg-orange-100 px-1 text-xs font-semibold text-orange-800" x-text="entry.code"></span>
                                     <img x-show="entry.image" :src="imageUrl(entry.image, 'thumb')" @click.stop="openImage(entry.image)" :alt="$t('Show photo')" loading="lazy" decoding="async" class="size-10 shrink-0 cursor-zoom-in rounded-md bg-stone-100 object-cover">
                                     <span class="min-w-0 flex-1 truncate py-1" x-text="entry.name"></span>
                                 </span>
@@ -340,7 +355,10 @@
                         <h2 class="mb-2 text-sm font-medium text-stone-600" x-text="$t('Standard')"></h2>
                         <ul class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white text-stone-600">
                             <template x-for="entry in shownCatalog.filter((entry) => entry.is_public)" :key="entry.id">
-                                <li class="truncate px-4 py-3" x-text="entry.name"></li>
+                                <li class="flex items-center gap-3 px-4 py-3">
+                                    <span x-show="entry.code" class="grid h-5 min-w-5 shrink-0 place-items-center rounded bg-stone-100 px-1 text-xs font-semibold" x-text="entry.code"></span>
+                                    <span class="min-w-0 flex-1 truncate" x-text="entry.name"></span>
+                                </li>
                             </template>
                         </ul>
                     </div>
@@ -450,19 +468,19 @@
                     </label>
                 </div>
                 <div class="flex gap-3">
-                    <div class="min-w-0 w-1/3">
-                        <label class="block">
-                            <span class="label" x-text="$t('Shop')"></span>
-                            <input x-model="editing.store" class="field w-full uppercase" maxlength="10" autocomplete="off" autocapitalize="characters">
-                        </label>
-                        <div class="mt-1 flex flex-wrap gap-1">
-                            <template x-for="code in storeCodes" :key="code">
-                                <button type="button" class="rounded px-1.5 text-xs font-semibold"
-                                    :class="(editing.store ?? '').toUpperCase() === code ? 'bg-orange-600 text-white' : 'bg-orange-100 text-orange-800'"
-                                    @click="editing.store = (editing.store ?? '').toUpperCase() === code ? '' : code" x-text="code"></button>
-                            </template>
-                        </div>
-                    </div>
+                    {{-- Name or code of a shop; an unknown one becomes an own shop (code from its name) --}}
+                    <label class="block min-w-0 w-1/3">
+                        <span class="label" x-text="$t('Shop')"></span>
+                        <span class="relative block" @click.outside="close()"
+                            x-data="suggestField({ source: 'store', get: () => editing.store ?? '', set: (value) => editing.store = value, stores: () => stores })">
+                            <input x-model="editing.store" class="field w-full" maxlength="255" autocomplete="off" autocorrect="off"
+                                role="combobox" aria-autocomplete="list" aria-controls="store-suggestions" :aria-expanded="visible"
+                                :aria-activedescendant="active >= 0 ? `store-suggestions-${active}` : null"
+                                @input="input()" @focus="input()" @blur="blur()" @keydown.down.prevent="move(1)" @keydown.up.prevent="move(-1)"
+                                @keydown.enter="enter($event)" @keydown.escape="if (visible) { $event.preventDefault(); close() }">
+                            <x-suggestions id="store-suggestions" />
+                        </span>
+                    </label>
                     <label class="block min-w-0 w-2/3">
                         <span class="label" x-text="$t('Note')"></span>
                         <input x-model="editing.note" class="field w-full" maxlength="255">
@@ -531,13 +549,17 @@
         </template>
     </dialog>
 
-    {{-- Rename list (overview) or product --}}
+    {{-- Rename list (overview), product, unit or shop (with code) --}}
     <dialog x-ref="renameDialog" class="dialog" @close="renamingDoc = null">
         <template x-if="renamingDoc">
             <form @submit.prevent="saveRename()" class="space-y-4">
                 <label class="block">
                     <span class="label" x-text="$t('Name')"></span>
                     <input x-model="renamingDoc.name" class="field w-full" required>
+                </label>
+                <label x-show="renamingDoc.collection === 'stores'" class="block">
+                    <span class="label" x-text="$t('Code')"></span>
+                    <input x-model="renamingDoc.code" class="field w-full uppercase" maxlength="10" autocapitalize="characters" :required="renamingDoc.collection === 'stores'">
                 </label>
                 <div class="flex flex-wrap justify-end gap-2 pt-2">
                     <button type="button" class="button-secondary" @click="$refs.renameDialog.close()" x-text="$t('Cancel')"></button>

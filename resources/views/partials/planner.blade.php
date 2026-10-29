@@ -5,6 +5,10 @@
 <section x-show="route.view === 'planner'" class="space-y-6"
     x-data="planner({ addItems: (target, name, items) => addPlannedItems(target, name, items), lists: () => lists })">
     <p class="text-stone-600" x-text="$t('Read the offers of the week, check what you have at home and get recipe ideas with a shopping list.')"></p>
+    <div x-show="recipes && !recipes.connected" class="notice flex flex-wrap items-center justify-between gap-3">
+        <span x-text="$t('Not connected with :name yet: connect to get your own recipes suggested and to create new recipes there right away.', { name: recipes?.name })"></span>
+        <a href="/recipes/connect" data-online class="button-secondary shrink-0 text-sm" x-text="$t('Connect with :name', { name: recipes?.name })"></a>
+    </div>
 
     <p x-show="error" class="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-800" role="alert" x-text="error"></p>
     <p x-show="busy" class="flex items-center gap-3 rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-900" role="status">
@@ -20,6 +24,56 @@
             <input type="file" accept="image/*,application/pdf" multiple class="sr-only" :disabled="busy" @change="readOfferFiles($event)">
             <span x-text="$t('Add screenshots, photos or PDF')"></span>
         </label>
+        @php
+            // How to get the offers of each shop (shop pages are German, the labels quoted here too).
+            $offerSources = [
+                ['Migros', 'https://www.migros.ch/de/offers/home', [
+                    'Open the offers page.',
+                    'Select all text (Ctrl+A, on the Mac Cmd+A) and copy it.',
+                    'Paste it into the text field below and tap “Read text”.',
+                ]],
+                ['Coop', 'https://www.coop.ch/de/aktionen/aktuelle-aktionen/c/m_1011', [
+                    'Open the offers page and choose your store.',
+                    'Click “Aktionsmagazin auswählen”.',
+                    'Menu → “Speichern”, choose “Alle” pages.',
+                    'Add the PDF above.',
+                ]],
+                ['Aldi', 'https://www.aldi-suisse.ch/de/broschuere', [
+                    'Open the flyer and click “Durchblättern”.',
+                    'Download it with “PDF herunterladen”.',
+                    'Add the PDF above.',
+                ]],
+                ['Lidl', 'https://www.lidl.ch/de/unternehmen/werbeprospekte-als-pdf', [
+                    'Open the flyer, then “Menü” → “PDF Download”.',
+                    'Add the PDF above.',
+                ]],
+                ['Denner', 'https://www.denner.ch/de/aktionen/aktuelle-aktionen', [
+                    'Open the offers page.',
+                    'For more offers, click “Weitere Produkte anzeigen” at the end of the page (repeatedly if needed).',
+                    'Select all text (Ctrl+A, on the Mac Cmd+A) and copy it.',
+                    'Paste it into the text field below and tap “Read text”.',
+                ]],
+            ];
+        @endphp
+        <details class="group/details overflow-hidden rounded-lg border border-stone-200 bg-white text-sm">
+            <summary class="flex cursor-pointer list-none items-center justify-between px-4 py-3 hover:bg-stone-50">
+                <span x-text="$t('How to get the offers of each shop')"></span>
+                <span class="transition-transform group-open/details:rotate-90" aria-hidden="true">›</span>
+            </summary>
+            <div class="space-y-4 border-t border-stone-200 px-4 py-3">
+                @foreach ($offerSources as [$shop, $url, $steps])
+                    <div>
+                        <a href="{{ $url }}" target="_blank" rel="noopener" class="font-medium underline">{{ $shop }}</a>
+                        <ol class="mt-1 list-decimal space-y-0.5 pl-5 text-stone-600">
+                            @foreach ($steps as $step)
+                                <li x-text="$t(@js($step))"></li>
+                            @endforeach
+                        </ol>
+                    </div>
+                @endforeach
+                <p class="text-stone-500" x-text="$t('Copying works best on a computer. Long texts are read in several parts.')"></p>
+            </div>
+        </details>
         <form @submit.prevent="readOfferText()" class="space-y-2">
             <textarea x-model="offerText" rows="2" class="field w-full text-sm" :placeholder="$t('… or paste the offers as text')"></textarea>
             <button x-show="offerText.trim()" class="button-secondary text-sm" :disabled="busy" x-text="$t('Read text')"></button>
@@ -29,7 +83,7 @@
             <template x-for="(offer, index) in offers" :key="index">
                 <li class="flex items-center gap-3 px-3 py-2">
                     <input type="checkbox" class="size-5 shrink-0 accent-emerald-700" x-model="offer.selected" :aria-label="offer.name">
-                    <span x-show="offer.store" class="grid h-5 min-w-5 shrink-0 place-items-center rounded bg-orange-100 px-1 text-xs font-semibold text-orange-800" x-text="offer.store"></span>
+                    <span x-show="offer.store" class="grid h-5 min-w-5 shrink-0 place-items-center rounded bg-orange-100 px-1 text-xs font-semibold text-orange-800" :title="storeLabel(offer.store)" x-text="offer.store"></span>
                     <span class="min-w-0 flex-1">
                         <span class="block truncate" x-text="offer.name"></span>
                         <span class="block truncate text-xs text-stone-500" x-text="[offer.brand, offer.discount, offer.price != null ? 'CHF ' + Number(offer.price).toFixed(2) : null].filter(Boolean).join(' · ')"></span>
@@ -67,10 +121,6 @@
     {{-- 3. Recipes --}}
     <div class="space-y-3">
         <h2 class="font-semibold" x-text="'3. ' + $t('Recipes')"></h2>
-        <p x-show="recipes && !recipes.connected" class="text-sm text-stone-500">
-            <span x-text="$t('Connect :name in the settings to get your own recipes suggested.', { name: recipes?.name })"></span>
-            <a href="#/settings" class="underline" x-text="$t('Settings')"></a>
-        </p>
         <div class="grid grid-cols-2 gap-3">
             <label class="block">
                 <span class="label" x-text="$t('Servings')"></span>
@@ -144,7 +194,7 @@
                     <template x-for="(item, index) in items" :key="index">
                         <li class="flex items-center gap-3 px-3 py-2" :class="item.selected || 'text-stone-400'">
                             <input type="checkbox" class="size-5 shrink-0 accent-emerald-700" x-model="item.selected" :aria-label="item.name">
-                            <span x-show="item.store" class="grid h-5 min-w-5 shrink-0 place-items-center rounded bg-orange-100 px-1 text-xs font-semibold text-orange-800" x-text="item.store"></span>
+                            <span x-show="item.store" class="grid h-5 min-w-5 shrink-0 place-items-center rounded bg-orange-100 px-1 text-xs font-semibold text-orange-800" :title="storeLabel(item.store)" x-text="item.store"></span>
                             <span x-show="item.amount != null" class="shrink-0 tabular-nums text-stone-500" x-text="[item.amount, item.unit].filter((part) => part != null).join(' ')"></span>
                             <span class="min-w-0 flex-1">
                                 <span class="block truncate" x-text="item.name"></span>

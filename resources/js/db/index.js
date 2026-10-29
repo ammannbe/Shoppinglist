@@ -7,7 +7,7 @@ import * as schemas from './schemas.js';
 // Local documents are migrated when a schema version increases (schemas.migrations).
 addRxPlugin(RxDBMigrationSchemaPlugin);
 
-export const SYNCED_COLLECTIONS = ['lists', 'items', 'products', 'units'];
+export const SYNCED_COLLECTIONS = ['lists', 'items', 'products', 'units', 'stores'];
 
 /**
  * Local database. Everything the UI shows is read from here, the
@@ -29,7 +29,7 @@ export async function createDatabase({ storage, name = 'shoppinglist', multiInst
     ));
 
     // Every local change gets a new version, the server detects conflicts with it.
-    for (const collection of ['lists', 'items', 'products', 'units']) {
+    for (const collection of SYNCED_COLLECTIONS) {
         db[collection].preSave((data, doc) => {
             data.version = (doc.version ?? 0) + 1;
         }, false);

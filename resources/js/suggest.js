@@ -2,7 +2,7 @@ import Alpine from 'alpinejs';
 import { normalizeName, splitItemInput, suggestNames, usageOf } from './helpers.js';
 
 /**
- * Suggestions below a text field, searched in the local products and units.
+ * Suggestions below a text field, searched in the local products, units and shops.
  * Replaces <datalist>: matches only the relevant part of "2 l Milch", ranks by usage
  * and behaves the same in every browser.
  *
@@ -10,18 +10,20 @@ import { normalizeName, splitItemInput, suggestNames, usageOf } from './helpers.
  *   typing), then products (picking one runs onPick, e.g. adds the item).
  * - source "product": the whole text is a product name.
  * - source "unit": the whole text is a unit, all units are listed on focus.
+ * - source "store": the whole text is a shop (name or code), all shops are listed on focus.
  *
  * Usage: x-data="suggestField({ source: 'item', get: () => text, set: (v) => text = v, units: () => unitNames, onPick, openItems })"
  *
  * @param {object} options
- * @param {'item'|'product'|'unit'} options.source
+ * @param {'item'|'product'|'unit'|'store'} options.source
  * @param {() => string} options.get current text
  * @param {(value: string) => void} options.set
  * @param {() => string[]} [options.units] known units
+ * @param {() => {name: string, code: string}[]} [options.stores] known shops
  * @param {() => void} [options.onPick] runs after a product was picked
  * @param {() => object[]} [options.openItems] open items of the list, marked in the suggestions
  */
-export function suggestField({ source, get, set, units = () => [], onPick = null, openItems = () => [] }) {
+export function suggestField({ source, get, set, units = () => [], stores = () => [], onPick = null, openItems = () => [] }) {
     return {
         source,
         open: false,
@@ -40,6 +42,7 @@ export function suggestField({ source, get, set, units = () => [], onPick = null
             const { query, amount, unit } = this.parts;
 
             if (source === 'unit') return this.unitOptions(query, 8);
+            if (source === 'store') return this.storeOptions(query);
 
             // Right after the amount the next word may be a unit.
             const unitOptions = source === 'item' && amount && !unit && !/\s/.test(query)
@@ -57,6 +60,30 @@ export function suggestField({ source, get, set, units = () => [], onPick = null
         unitOptions(query, limit) {
             return suggestNames(query, units(), usageOf(Alpine.store('data').items, 'unit'), { limit, all: true })
                 .map((name) => ({ kind: 'unit', name, onList: false }));
+        },
+
+        /**
+         * Shops by name or code: exact, then start, then anywhere in the name; then by usage.
+         */
+        storeOptions(query) {
+            const needle = normalizeName(query);
+            const usage = usageOf(Alpine.store('data').items, 'store');
+            const matches = stores().map((store) => {
+                const name = normalizeName(store.name);
+                const code = normalizeName(store.code);
+                const rank = !needle || name === needle || code === needle ? 0
+                    : name.startsWith(needle) || code.startsWith(needle) ? 1
+                        : name.includes(needle) ? 2 : -1;
+
+                return { store, rank, count: usage.get(code)?.count ?? 0 };
+            }).filter((match) => match.rank >= 0);
+            // Nothing to suggest when the only match is what was typed.
+            if (needle && matches.length === 1 && matches[0].rank === 0) return [];
+
+            return matches
+                .sort((a, b) => a.rank - b.rank || b.count - a.count)
+                .slice(0, 8)
+                .map(({ store }) => ({ kind: 'store', name: store.name, code: store.code, onList: false }));
         },
 
         get visible() {

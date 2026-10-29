@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Item;
 use App\Models\Product;
 use App\Models\ShoppingList;
+use App\Models\Store;
 use App\Models\Unit;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -310,6 +311,40 @@ class SyncTest extends TestCase
 
         $this->assertSame($user->id, Unit::find($ownId)->owner_id);
         $this->pull($user, 'units')->assertJsonCount(2, 'documents')->assertJsonPath('documents.1.is_public', false);
+    }
+
+    public function test_standard_shops_are_read_only_and_own_shops_have_a_code(): void
+    {
+        $user = User::factory()->create();
+        $other = User::factory()->create();
+
+        // The standard shops come from the migration.
+        $docs = $this->pull($user, 'stores')->assertJsonCount(5, 'documents')->json('documents');
+        $migros = collect($docs)->firstWhere('code', 'M');
+        $this->assertSame('Migros', $migros['name']);
+        $this->assertTrue($migros['is_public']);
+
+        $this->push($user, 'stores', [['assumedMasterState' => $migros, 'newDocumentState' => [...$migros, 'code' => 'MI']]])
+            ->assertJsonPath('0.code', 'M');
+        $this->assertSame('M', Store::find($migros['id'])->code);
+
+        $ownId = (string) Str::uuid();
+        $this->push($user, 'stores', [['newDocumentState' => ['id' => $ownId, 'name' => 'Amazon', 'code' => ' amz ']]])
+            ->assertExactJson([]);
+        $this->assertSame(['Amazon', 'AMZ', $user->id], [Store::find($ownId)->name, Store::find($ownId)->code, Store::find($ownId)->owner_id]);
+
+        // Without a code: the start of the name.
+        $otherId = (string) Str::uuid();
+        $this->push($other, 'stores', [['newDocumentState' => ['id' => $otherId, 'name' => 'Volg']]])->assertExactJson([]);
+        $this->assertSame('VOL', Store::find($otherId)->code);
+
+        $doc = collect($this->pull($user, 'stores')->assertJsonCount(6, 'documents')->json('documents'))->firstWhere('id', $ownId);
+        $this->push($user, 'stores', [['assumedMasterState' => $doc, 'newDocumentState' => [...$doc, 'name' => 'Amazon.de', 'code' => 'AZ', 'version' => 2]]])
+            ->assertExactJson([]);
+        $this->assertSame(['Amazon.de', 'AZ'], [Store::find($ownId)->name, Store::find($ownId)->code]);
+
+        $this->push($user, 'stores', [['newDocumentState' => ['id' => $ownId, 'name' => 'x', 'code' => str_repeat('X', 11)]]])
+            ->assertUnprocessable();
     }
 
     public function test_store_and_note_of_items_are_synced(): void

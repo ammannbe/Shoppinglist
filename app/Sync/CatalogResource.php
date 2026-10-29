@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * Products and units: own entries per user plus public ones (no owner), which are read-only.
+ * Products, units and shops: own entries per user plus public ones (no owner), which are read-only.
  */
 abstract class CatalogResource extends SyncResource
 {
@@ -44,6 +44,16 @@ abstract class CatalogResource extends SyncResource
         return [];
     }
 
+    /**
+     * Attributes of a pushed document.
+     *
+     * @return array<string, mixed>
+     */
+    protected function attributes(array $new): array
+    {
+        return ['name' => $new['name']];
+    }
+
     protected function pushRow(User $user, ?array $assumed, array $new): ?array
     {
         $entry = $this->findForUpdate($this->model(), $new['id']);
@@ -53,7 +63,7 @@ abstract class CatalogResource extends SyncResource
                 return null;
             }
 
-            $entry = new ($this->model())(['name' => $new['name']]);
+            $entry = new ($this->model())($this->attributes($new));
             $entry->id = $new['id'];
             $entry->owner()->associate($user);
             $entry->save();
@@ -79,7 +89,7 @@ abstract class CatalogResource extends SyncResource
             return null;
         }
 
-        $entry->fill(['name' => $new['name']])->save();
+        $entry->fill($this->attributes($new))->save();
 
         return null;
     }
