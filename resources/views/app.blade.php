@@ -232,7 +232,7 @@
                     ]" :key="option.value">
                         <label class="flex cursor-pointer items-start gap-3 p-4 hover:bg-stone-50">
                             <input type="radio" name="row-actions" class="mt-1 accent-emerald-700" :value="option.value"
-                                :checked="$store.prefs.rowActions === option.value" @change="setRowActions(option.value)">
+                                :checked="$store.prefs.row_actions === option.value" @change="$store.prefs.set('row_actions', option.value)">
                             <span>
                                 <span class="block" x-text="option.label"></span>
                                 <span class="block text-sm text-stone-500" x-text="option.hint"></span>
