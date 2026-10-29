@@ -27,6 +27,15 @@ Alpine.store('sync', { status: 'starting', user: null, online: navigator.onLine 
 Alpine.store('data', { lists: [], items: [], products: [], units: [] });
 Alpine.store('undo', createUndoStore());
 Alpine.store('install', createInstallStore());
+// New app version ready (service worker waiting).
+Alpine.store('update', {
+    apply: null,
+    async reload() {
+        // Deletions waiting for undo must not get lost.
+        Alpine.store('undo').flush();
+        await this.apply?.();
+    },
+});
 
 Alpine.magic('t', () => (key, replace) => translate(Alpine.store('i18n').locale, key, replace));
 
@@ -437,4 +446,4 @@ function startSync() {
 window.Alpine = Alpine;
 Alpine.start();
 boot();
-registerServiceWorker();
+registerServiceWorker((apply) => { Alpine.store('update').apply = apply; });

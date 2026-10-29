@@ -363,6 +363,13 @@
         </template>
     </div>
 
+    {{-- New version available --}}
+    <div x-show="$store.update.apply && !$store.undo.toast" x-transition role="status" aria-live="polite"
+        class="fixed inset-x-3 top-[calc(4rem+env(safe-area-inset-top))] z-40 mx-auto flex max-w-xl items-center gap-3 rounded-lg bg-emerald-800 px-4 py-3 text-sm text-white shadow-lg">
+        <span class="min-w-0 flex-1" x-text="$t('A new version is available.')"></span>
+        <button type="button" class="shrink-0 font-semibold underline" @click="$store.update.reload()" x-text="$t('Reload')"></button>
+    </div>
+
     {{-- Undo deletion --}}
     <div x-show="$store.undo.toast" x-transition role="status" aria-live="polite"
         class="fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-40 mx-auto flex max-w-xl items-center gap-3 rounded-lg bg-stone-900 px-4 py-3 text-sm text-white shadow-lg">

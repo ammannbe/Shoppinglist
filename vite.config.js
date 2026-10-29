@@ -21,7 +21,8 @@ export default defineConfig({
             outDir: 'public',
             buildBase: '/',
             scope: '/',
-            registerType: 'autoUpdate',
+            // A new version waits until the user reloads (hint in the app) or restarts the app.
+            registerType: 'prompt',
             injectRegister: false,
             // Favicons and public/site.webmanifest come from `npm run favicon` (RealFaviconGenerator).
             manifest: false,

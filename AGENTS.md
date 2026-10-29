@@ -32,6 +32,7 @@ Shoppinglist: offline-first PWA for shared shopping lists. One Laravel app serve
 
 - `vite-plugin-pwa` (generateSW) writes `public/sw.js` (not committed, built on deploy).
 - Favicons + `public/site.webmanifest`: RealFaviconGenerator via `ddev npm run favicon -- --source src/favicon.png --theme '#047857' --bg '#fafaf9' --padding-bg '#ffd6d6'` (`src/scripts/favicon.mjs`, keeps extra manifest fields). Never use `/icons/`: Apache has a global `Alias /icons/`.
+- Updates: `registerType: 'prompt'`; `resources/js/pwa.js` checks for a new service worker on foreground, reconnect and hourly, the app shows "Neue Version verfügbar" and reloads on click (otherwise the new version starts with the next app start).
 - The service worker precaches the app shell `/`, build assets and favicons (one 404 aborts the install!); other navigations fall back to the app shell offline.
 
 ## UI patterns
