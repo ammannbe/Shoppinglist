@@ -21,7 +21,7 @@ Shoppinglist: offline-first PWA for shared shopping lists. One Laravel app serve
 - Sharing/leaving lists needs a connection (`MemberController`). Unknown emails get an account and a password-reset invitation.
 - Products and units (`CatalogResource`): own entries per user, public ones (no owner) are read only.
 - Sorting: options `manual`, `name_asc`, `name_desc`, `newest`, `oldest` (ids are UUID v7 = creation time). Lists overview per user (`preferences.list_sort`), items per list (`shopping_lists.item_sort`, shared). Manual order: `items.position` (shared) and `shopping_list_user.position` (personal, list document field `position`); null positions sort after the positioned ones. Dragging a row writes the shown order as positions (only changed ones) and switches to `manual`.
-- Product images: `POST/DELETE /products/{id}/image` (`ImageController`, creates the product if not synced yet), files in `storage/app/private/images/<uuid>` (not in `ddev pull`), served by `GET /images/{uuid}` to the product owner and members of lists with an item using it. The client scales photos to max. 480 px WebP/JPEG (`resources/js/image.js`, also drops EXIF), the server accepts max. 400 KB. The image id is copied to `items.image` (push only accepts images of own products); the service worker caches `/images/*` (CacheFirst).
+- Product images: `POST/DELETE /products/{id}/image` (`ImageController`, creates the product if not synced yet), files in `storage/app/private/images/<uuid>`, served by `GET /images/{uuid}` to the product owner and members of lists with an item using it. The client scales photos to max. 480 px WebP/JPEG (`resources/js/image.js`, also drops EXIF), the server accepts max. 400 KB. The image id is copied to `items.image` (push only accepts images of own products); the service worker caches `/images/*` (CacheFirst).
 
 ## Translations
 
@@ -59,7 +59,7 @@ Shoppinglist: offline-first PWA for shared shopping lists. One Laravel app serve
 
 - Tests: `ddev artisan test`. Code style: `ddev exec vendor/bin/pint`.
 - Assets: `ddev npm run build` (or `ddev npm run dev`).
-- Production database: `ddev pull production` (`.ddev/providers/production.yaml`, SSH data in git-ignored `.ddev/config.local.yaml`: `SSH_USER`, `SSH_HOST`, `PROJECT_PATH`). No files are pulled.
+- Production database: `ddev pull production` (`.ddev/providers/production.yaml`, SSH data in git-ignored `.ddev/config.local.yaml`: `SSH_USER`, `SSH_HOST`, `PROJECT_PATH`). Pulls the database and mirrors the product images into `storage/app/private/images` (nothing else of `storage/app`).
 - Import of the old Laravel 7 API database: `ddev artisan shoppinglist:import-legacy` (connection `legacy`, `LEGACY_DB_*`). Aborts if lists already exist.
 
 ## Gotchas

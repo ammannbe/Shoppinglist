@@ -1,4 +1,4 @@
-# `ddev pull production`: database from the production server (like RecipeManager).
+# `ddev pull production`: database and product images from the production server (like RecipeManager).
 # Provided via .ddev/config.local.yaml (git-ignored):
 # web_environment:
 #   - SSH_USER=
@@ -27,14 +27,24 @@ db_pull_command:
     ssh "${SSH_USER}@${SSH_HOST}" "rm -f '${PROJECT_PATH}/storage/backups/db.sql.gz'"
   service: web
 
-# No user uploads, all data lives in the database: skip files (and never touch storage/app).
+# Files: only the product images (storage/app/private/images). Never touch the rest of storage/app.
 files_pull_command:
   command: |
-    true
+    set -eu -o pipefail
+    mkdir -p /var/www/html/.ddev/.downloads/files
+    # Nothing to pull before the first image was uploaded.
+    if ssh "${SSH_USER}@${SSH_HOST}" "test -d '${PROJECT_PATH}/storage/app/private/images'"; then
+      rsync -az --delete "${SSH_USER}@${SSH_HOST}:${PROJECT_PATH}/storage/app/private/images/" /var/www/html/.ddev/.downloads/files/
+    fi
+  service: web
 
+# The images belong to the pulled database: mirror them exactly (local-only images are dropped).
 files_import_command:
   command: |
-    true
+    set -eu -o pipefail
+    mkdir -p /var/www/html/storage/app/private/images
+    rsync -a --delete /var/www/html/.ddev/.downloads/files/ /var/www/html/storage/app/private/images/
+  service: web
 
 db_push_command:
   command: |
