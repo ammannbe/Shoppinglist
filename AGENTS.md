@@ -5,7 +5,7 @@ Shoppinglist: offline-first PWA for shared shopping lists. One Laravel app serve
 ## Stack
 
 - Laravel 13, PHP 8.4, MariaDB 10.11, DDEV (`shoppinglist.ddev.site`). Run PHP/Composer/Artisan/npm via `ddev`.
-- Auth: Fortify (session cookie, Blade views in `resources/views/auth`), email verification required for syncing.
+- Auth: Fortify (session cookie, Blade views in `resources/views/auth`), email verification required for syncing. Passkeys via Fortify + `laravel/passkeys` (client `@laravel/passkeys` in `resources/js/auth.js`); managing them requires a password (or passkey) confirmation. Account page `/account` (password change, passkeys) is server rendered and needs a connection.
 - Frontend: Blade + Alpine.js + Tailwind 4 (Vite). No SPA framework, no Livewire (must work offline).
 - Client database: RxDB (Dexie/IndexedDB storage) with HTTP replication.
 - Hosting target: shared hosting with KeyHelp (PHP-FPM + cron, no long running processes, no websockets).

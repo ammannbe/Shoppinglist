@@ -116,7 +116,6 @@ return [
 
     'limiters' => [
         'login' => 'login',
-        'two-factor' => 'two-factor',
         'passkeys' => 'passkeys',
     ],
 
@@ -167,6 +166,8 @@ return [
         Features::emailVerification(),
         Features::updateProfileInformation(),
         Features::updatePasswords(),
+        // Managing passkeys requires a recent password confirmation.
+        Features::passkeys(['confirmPassword' => true]),
     ],
 
 ];

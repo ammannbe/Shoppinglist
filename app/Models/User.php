@@ -12,13 +12,15 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Passkeys\Contracts\PasskeyUser;
+use Laravel\Passkeys\PasskeyAuthenticatable;
 
 #[Fillable(['name', 'email', 'password', 'locale'])]
 #[Hidden(['password', 'remember_token'])]
-class User extends Authenticatable implements HasLocalePreference, MustVerifyEmail
+class User extends Authenticatable implements HasLocalePreference, MustVerifyEmail, PasskeyUser
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable;
+    use HasFactory, Notifiable, PasskeyAuthenticatable;
 
     /**
      * Get the attributes that should be cast.

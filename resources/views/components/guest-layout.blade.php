@@ -7,10 +7,11 @@
     <title>{{ $title ? $title.' – ' : '' }}{{ config('app.name') }}</title>
     <meta name="theme-color" content="#047857">
     @include('partials.favicon')
-    @vite(['resources/css/app.css'])
+    @vite(['resources/css/app.css', 'resources/js/auth.js'])
 </head>
 <body class="min-h-dvh bg-stone-50 text-stone-900 antialiased">
     <main class="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-6 py-12">
+        <p data-passkey-error data-fallback="{{ __('Passkey could not be used.') }}" hidden class="mb-4 rounded-lg bg-red-100 px-4 py-3 text-sm text-red-800"></p>
         <a href="/" class="mb-8 flex flex-col items-center gap-3">
             <img src="/web-app-manifest-192x192.png" alt="" class="size-16 rounded-2xl">
             <span class="text-2xl font-semibold">{{ config('app.name') }}</span>
@@ -18,9 +19,13 @@
 
         @if (session('status'))
             <p class="mb-4 rounded-lg bg-green-100 px-4 py-3 text-sm text-green-800">
-                {{ session('status') === 'verification-link-sent'
-                    ? __('A new verification link has been sent to the email address you provided during registration.')
-                    : session('status') }}
+                {{ match (session('status')) {
+                    'verification-link-sent' => __('A new verification link has been sent to the email address you provided during registration.'),
+                    'password-updated' => __('Your password has been changed.'),
+                    'passkey-registered' => __('Passkey added.'),
+                    'passkey-deleted' => __('Passkey removed.'),
+                    default => session('status'),
+                } }}
             </p>
         @endif
 

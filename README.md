@@ -5,6 +5,7 @@ Offline-first web app (PWA) to manage shopping lists and share them with your fa
 - **Works offline**: all lists live on the device and sync in the background as soon as a connection is available.
 - **Share lists**: invite others by email, changes of all members are merged.
 - **Installable**: add it to the home screen on Android and iOS, no app store needed.
+- **Passkeys**: log in with Face ID, Touch ID, Windows Hello or the device PIN.
 
 Built with Laravel, Alpine.js and RxDB. See [AGENTS.md](AGENTS.md) for the architecture.
 

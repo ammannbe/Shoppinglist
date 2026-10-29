@@ -19,6 +19,7 @@
         "@laravel/multiplex": "^0.4.1"
     },
     "dependencies": {
+        "@laravel/passkeys": "^0.4.0",
         "alpinejs": "^3.17.5",
         "rxdb": "^17.6.0",
         "rxjs": "^7.8.2"

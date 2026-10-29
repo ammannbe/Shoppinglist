@@ -19,6 +19,14 @@ Route::middleware('auth')->group(function () {
         'locale' => $request->user()->locale,
     ])->name('me');
 
+    // Server rendered account pages (need a connection).
+    Route::get('account', fn (Request $request) => view('account', [
+        'passkeyCount' => $request->user()->passkeys()->count(),
+    ]))->name('account');
+    Route::get('account/passkeys', fn (Request $request) => view('account-passkeys', [
+        'passkeys' => $request->user()->passkeys()->latest()->get(),
+    ]))->middleware('password.confirm')->name('account.passkeys');
+
     Route::middleware('verified')->group(function () {
         Route::get('sync/{collection}/pull', [SyncController::class, 'pull'])->name('sync.pull');
         Route::post('sync/{collection}/push', [SyncController::class, 'push'])->name('sync.push');
