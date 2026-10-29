@@ -17,8 +17,9 @@ import { createInstallStore } from './install.js';
 
 const RESYNC_INTERVAL = 30_000;
 const DEFAULT_UNITS = ['Stk.', 'g', 'kg', 'ml', 'dl', 'l', 'Pck.', 'Bund', 'Fl.'];
-// Shop codes offered in the edit dialog (any short code is possible).
-const DEFAULT_STORES = ['M', 'C', 'A', 'L', 'D'];
+// Standard shops for guests and the first start, the public ones arrive with the sync.
+const DEFAULT_STORES = [['Migros', 'M'], ['Coop', 'C'], ['Aldi', 'A'], ['Lidl', 'L'], ['Denner', 'D']]
+    .map(([name, code]) => ({ id: `default:${code}`, name, code, is_public: true }));
 const OWNER_KEY = 'shoppinglist.owner';
 const USER_KEY = 'shoppinglist.user';
 
@@ -44,7 +45,7 @@ Alpine.store('sync', {
         location.reload();
     },
 });
-Alpine.store('data', { lists: [], items: [], products: [], units: [] });
+Alpine.store('data', { lists: [], items: [], products: [], units: [], stores: [] });
 Alpine.store('undo', createUndoStore());
 Alpine.store('prefs', createPrefsStore(api));
 Alpine.store('lightbox', createLightboxStore());
@@ -92,7 +93,7 @@ Alpine.data('swipeRow', swipeRow);
 Alpine.data('suggestField', suggestField);
 Alpine.data('planner', planner);
 
-// The products/units view renders at most this many rows, the search narrows it down.
+// The products/units/shops view renders at most this many rows, the search narrows it down.
 const CATALOG_SHOWN = 200;
 
 const byName = (a, b) => a.name.localeCompare(b.name, Alpine.store('i18n').locale.replace('_', '-'));
@@ -113,6 +114,7 @@ Alpine.data('shoppinglist', () => ({
     catalogSearch: '',
     renaming: null,
     renamingDoc: null,
+    newStore: { name: '', code: '' },
     shareListId: null,
     shareEmail: '',
     shareError: null,
@@ -127,7 +129,7 @@ Alpine.data('shoppinglist', () => ({
             if (view === 'settings' && event) {
                 const from = new URL(event.oldURL).hash;
                 if (from.startsWith('#/list/')) this.settingsBack = from;
-                else if (!/^#\/(products|units|install)/.test(from)) this.settingsBack = '#/';
+                else if (!/^#\/(products|units|stores|install)/.test(from)) this.settingsBack = '#/';
             }
             // Any other path means the service worker served the app shell offline.
             this.route = location.pathname === '/' ? { view: view || 'lists', id } : { view: 'offline', id: null };
@@ -178,29 +180,43 @@ Alpine.data('shoppinglist', () => ({
     },
 
     /**
-     * Products or units view (route.view), filtered by the search: own entries can be
+     * Shops (standard ones first), the items keep only the code.
+     */
+    get stores() {
+        const stores = Alpine.store('data').stores.filter((store) => !Alpine.store('undo').hidden(store.id));
+
+        return [...(stores.some((store) => store.is_public) ? [] : DEFAULT_STORES), ...stores]
+            .sort((a, b) => Number(b.is_public) - Number(a.is_public) || byName(a, b));
+    },
+    storeByCode(code) {
+        return code ? this.stores.find((store) => sameName(store.code, code)) ?? null : null;
+    },
+    /** Full name of a shop code (tooltip of the badge), the code itself if unknown. */
+    storeLabel(code) {
+        return this.storeByCode(code)?.name ?? code ?? '';
+    },
+
+    /**
+     * Products, units or shops view (route.view), filtered by the search: own entries can be
      * renamed and deleted, public ones are read-only.
      */
     get catalog() {
         const collection = this.route.view;
-        if (!['products', 'units'].includes(collection)) return [];
+        if (!['products', 'units', 'stores'].includes(collection)) return [];
         const search = normalizeName(this.catalogSearch);
-        let entries = Alpine.store('data')[collection].filter((entry) => !Alpine.store('undo').hidden(entry.id));
+        let entries = collection === 'stores'
+            ? this.stores
+            : Alpine.store('data')[collection].filter((entry) => !Alpine.store('undo').hidden(entry.id));
         if (collection === 'units' && !entries.some((entry) => entry.is_public)) {
             entries = [...DEFAULT_UNITS.map((name) => ({ id: `default:${name}`, name, is_public: true })), ...entries];
         }
 
         return entries
-            .filter((entry) => !search || normalizeName(entry.name).includes(search))
+            .filter((entry) => !search || normalizeName(entry.name).includes(search) || normalizeName(entry.code).startsWith(search))
             .sort((a, b) => Number(a.is_public) - Number(b.is_public) || byName(a, b));
     },
     get shownCatalog() {
         return this.catalog.slice(0, CATALOG_SHOWN);
-    },
-    get storeCodes() {
-        const used = Alpine.store('data').items.map((item) => item.store).filter(Boolean);
-
-        return [...new Set([...DEFAULT_STORES, ...used])];
     },
     /**
      * Week planner with AI: configured on the server, needs a verified account.
@@ -284,13 +300,13 @@ Alpine.data('shoppinglist', () => ({
         const collection = this.route.view;
 
         return [
-            { label: this.$t('Rename'), icon: 'edit', run: () => this.openRename(entry, collection) },
+            { label: collection === 'stores' ? this.$t('Edit') : this.$t('Rename'), icon: 'edit', run: () => this.openRename(entry, collection) },
             { label: this.$t('Delete'), icon: 'delete', danger: true, run: () => this.deleteCatalogEntry(entry, collection) },
         ];
     },
 
     get backLink() {
-        if (['products', 'units', 'install'].includes(this.route.view)) return '#/settings';
+        if (['products', 'units', 'stores', 'install'].includes(this.route.view)) return '#/settings';
 
         return this.route.view === 'settings' ? this.settingsBack : '#/';
     },
@@ -337,16 +353,20 @@ Alpine.data('shoppinglist', () => ({
     },
 
     /**
-     * Rename dialog for lists (overview) and products.
+     * Rename dialog for lists (overview), products, units and shops (with code).
      */
     openRename(doc, collection) {
-        this.renamingDoc = { collection, id: doc.id, name: doc.name };
+        this.renamingDoc = { collection, id: doc.id, name: doc.name, code: doc.code ?? null };
         this.$nextTick(() => this.$refs.renameDialog.showModal());
     },
 
     async saveRename() {
         const { collection, id } = this.renamingDoc;
         const name = this.renamingDoc.name.trim();
+        if (collection === 'stores') {
+            if (await this.saveStore(this.renamingDoc)) this.$refs.renameDialog.close();
+            return;
+        }
         const doc = name ? await db[collection].findOne(id).exec() : null;
         // Product or unit renamed to an existing one: keep that one instead of a duplicate.
         const duplicate = collection !== 'lists' && Alpine.store('data')[collection].some((entry) => entry.id !== id
@@ -415,12 +435,91 @@ Alpine.data('shoppinglist', () => ({
         await (await db.items.findOne(existing.id).exec())?.incrementalPatch({ amount: merged, unit: existing.unit ?? parsed.unit });
     },
 
+    // ---- shops (own ones: name + code, the items keep the code)
+
+    /**
+     * Error message if the shop cannot be saved like this, otherwise null.
+     */
+    storeError(id, name, code) {
+        if (!name || !code) return this.$t('Name and code are required.');
+        const others = this.stores.filter((store) => store.id !== id);
+        if (others.some((store) => sameName(store.name, name))) return this.$t('A shop with this name already exists.');
+        if (others.some((store) => sameName(store.code, code))) return this.$t('The code :code is already used.', { code });
+
+        return null;
+    },
+
+    async createStore() {
+        const name = this.newStore.name.trim();
+        const code = this.newStore.code.trim().toUpperCase() || this.suggestedCode(name);
+        const error = this.storeError(null, name, code);
+        if (error) return Alpine.store('notice').show(error);
+        await db.stores.insert({ id: uuid7(), name, code });
+        this.newStore = { name: '', code: '' };
+    },
+
+    /**
+     * Changes name and code of an own shop; items with the old code get the new one.
+     */
+    async saveStore({ id, name, code }) {
+        name = name.trim();
+        code = (code ?? '').trim().toUpperCase();
+        const error = this.storeError(id, name, code);
+        if (error) {
+            Alpine.store('notice').show(error);
+            return false;
+        }
+        const doc = await db.stores.findOne(id).exec();
+        if (!doc) return true;
+        const old = doc.code;
+        await doc.incrementalPatch({ name, code });
+        if (old !== code) {
+            const items = Alpine.store('data').items.filter((item) => item.store === old);
+            const docs = await db.items.findByIds(items.map((item) => item.id)).exec();
+            await Promise.all([...docs.values()].map((item) => item.incrementalPatch({ store: code })));
+        }
+
+        return true;
+    },
+
+    /**
+     * Code for a new shop: short names as they are, otherwise the first letters, as many as
+     * needed to be unique (Amazon → AMA, Aldi Süd → ALD or ALDI).
+     */
+    suggestedCode(name) {
+        const letters = name.replace(/[^\p{L}\p{N}]/gu, '').toUpperCase();
+        if (!letters) return '';
+        const taken = (code) => this.stores.some((store) => sameName(store.code, code));
+        if (letters.length <= 4 && !taken(letters)) return letters;
+        for (let length = 3; length <= Math.min(letters.length, 10); length++) {
+            if (!taken(letters.slice(0, length))) return letters.slice(0, length);
+        }
+        for (let number = 2; ; number++) {
+            const code = `${letters.slice(0, 9 - String(number).length)}${number}`;
+            if (!taken(code)) return code;
+        }
+    },
+
+    /**
+     * Shop field of the edit dialog: a code or name of a known shop, otherwise a new own shop.
+     */
+    async storeCode(text) {
+        text = text?.trim();
+        if (!text) return null;
+        const known = this.storeByCode(text) ?? this.stores.find((store) => sameName(store.name, text));
+        if (known) return known.code;
+        const code = this.suggestedCode(text);
+        await db.stores.insert({ id: uuid7(), name: text, code });
+
+        return code;
+    },
+
     async toggle(item) {
         await (await db.items.findOne(item.id).exec())?.incrementalPatch({ done: !item.done });
     },
 
     edit(item) {
-        this.editing = { ...item, amount: item.amount ?? '' };
+        this.editing = { ...item, amount: item.amount ?? '', store: this.storeByCode(item.store)?.name ?? item.store ?? '' };
         this.$nextTick(() => this.$refs.editDialog.showModal());
     },
 
@@ -435,7 +534,7 @@ Alpine.data('shoppinglist', () => ({
                 image,
                 amount: amount === '' || amount === null ? null : Number(String(amount).replace(',', '.')) || null,
                 unit: unit?.trim() || null,
-                store: store?.trim().toUpperCase().slice(0, 10) || null,
+                store: await this.storeCode(store),
                 note: note?.trim().slice(0, 255) || null,
             });
             await remember('products', name.trim());
@@ -563,7 +662,7 @@ Alpine.data('shoppinglist', () => ({
         }));
     },
 
-    // ---- products and units (suggestions)
+    // ---- products, units and shops (suggestions)
 
     deleteCatalogEntry(entry, collection) {
         Alpine.store('undo').schedule(entry.id, this.$t('“:name” deleted', { name: entry.name }), async () => {
@@ -698,6 +797,7 @@ async function boot() {
     db.items.find({ sort: [{ id: 'asc' }] }).$.subscribe((docs) => { data.items = docs.map((doc) => doc.toJSON()); });
     db.products.find().$.subscribe((docs) => { data.products = docs.map((doc) => doc.toJSON()); });
     db.units.find({ sort: [{ name: 'asc' }] }).$.subscribe((docs) => { data.units = docs.map((doc) => doc.toJSON()); });
+    db.stores.find({ sort: [{ name: 'asc' }] }).$.subscribe((docs) => { data.stores = docs.map((doc) => doc.toJSON()); });
 
     window.addEventListener('online', () => { sync.online = true; });
     window.addEventListener('offline', () => {

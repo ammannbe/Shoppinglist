@@ -9,6 +9,26 @@ import { prepareForAi } from './image.js';
 
 const STORAGE_KEY = 'shoppinglist.planner';
 const api = createApi();
+// The server accepts up to 20,000 characters per text; a copied offers page can be longer.
+const TEXT_LIMIT = 18000;
+
+// Splits the text into parts of at most `limit` characters, at line breaks where possible.
+function splitText(text, limit) {
+    const parts = [];
+    let part = '';
+    for (const line of text.split('\n')) {
+        for (let start = 0; start < Math.max(line.length, 1); start += limit) {
+            const piece = line.slice(start, start + limit);
+            if (part && part.length + piece.length + 1 > limit) {
+                parts.push(part);
+                part = '';
+            }
+            part = part ? `${part}\n${piece}` : piece;
+        }
+    }
+    if (part.trim()) parts.push(part);
+    return parts;
+}
 
 function initialState() {
     return {
@@ -113,8 +133,13 @@ export function planner({ addItems, lists }) {
             const text = this.offerText.trim();
             if (!text) return;
             await this.run(this.$t('Reading offers …'), async () => {
-                this.addOffers((await api.post('/planner/offers', { text })).offers);
-                this.offerText = '';
+                const parts = splitText(text, TEXT_LIMIT);
+                while (parts.length) {
+                    this.addOffers((await api.post('/planner/offers', { text: parts[0] })).offers);
+                    parts.shift();
+                    // Keep only the unread parts, so a retry after an error does not read twice.
+                    this.offerText = parts.join('\n');
+                }
             });
         },
 

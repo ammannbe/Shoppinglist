@@ -6,6 +6,7 @@ use App\Sync\ItemResource;
 use App\Sync\ListResource;
 use App\Sync\ProductResource;
 use App\Sync\RetryLaterException;
+use App\Sync\StoreResource;
 use App\Sync\SyncResource;
 use App\Sync\UnitResource;
 use Illuminate\Http\JsonResponse;
@@ -22,6 +23,7 @@ class SyncController extends Controller
         'items' => ItemResource::class,
         'products' => ProductResource::class,
         'units' => UnitResource::class,
+        'stores' => StoreResource::class,
     ];
 
     public function pull(Request $request, string $collection): JsonResponse
@@ -53,6 +55,7 @@ class SyncController extends Controller
             '*.newDocumentState.amount' => ['nullable', 'numeric', 'min:0', 'max:9999999'],
             '*.newDocumentState.unit' => ['nullable', 'string', 'max:255'],
             '*.newDocumentState.store' => ['nullable', 'string', 'max:10'],
+            '*.newDocumentState.code' => ['nullable', 'string', 'max:10'],
             '*.newDocumentState.note' => ['nullable', 'string', 'max:255'],
             '*.newDocumentState.done' => ['nullable', 'boolean'],
             '*.newDocumentState.position' => ['nullable', 'numeric'],

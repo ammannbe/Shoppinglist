@@ -36,7 +36,7 @@ export const items = {
         name: { type: 'string', maxLength: 255 },
         amount: { type: ['number', 'null'] },
         unit: { type: ['string', 'null'] },
-        // Shop code (M, A, L, …) and free note (e.g. the offer).
+        // Shop code (M, A, AMZ, …, see stores) and free note (e.g. the offer).
         store: { type: ['string', 'null'] },
         note: { type: ['string', 'null'] },
         // Image of the product (copied when added, so members of shared lists see it too).
@@ -77,6 +77,21 @@ export const units = {
         ...syncFields,
     },
     required: ['id', 'name'],
+};
+
+export const stores = {
+    version: 0,
+    primaryKey: 'id',
+    type: 'object',
+    properties: {
+        id: uuid,
+        name: { type: 'string', maxLength: 255 },
+        // Short code shown on the items (items.store keeps the code).
+        code: { type: 'string', maxLength: 10 },
+        is_public: { type: 'boolean', default: false },
+        ...syncFields,
+    },
+    required: ['id', 'name', 'code'],
 };
 
 // Schema migrations of the local documents, keyed by collection and schema version.
