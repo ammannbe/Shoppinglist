@@ -139,6 +139,48 @@ class PlannerTest extends TestCase
             && $request['food_ids'] === [1] && $request->hasHeader('Authorization', 'Bearer token'));
     }
 
+    public function test_candidates_combining_several_offers_come_first(): void
+    {
+        Http::fake([
+            'recipes.test/api/foods' => Http::response(['data' => [['id' => 1, 'name' => 'Hackfleisch'], ['id' => 2, 'name' => 'Tomaten'], ['id' => 3, 'name' => 'Eier']]]),
+            'recipes.test/api/recipes/search' => Http::sequence()
+                ->push(['data' => [
+                    ['id' => 6, 'name' => 'Tomatensalat', 'url' => 'https://recipes.test/recipes/6', 'food_ids' => [2]],
+                    ['id' => 5, 'name' => 'Lasagne', 'url' => 'https://recipes.test/recipes/5', 'food_ids' => [1, 2, 3]],
+                ]])
+                ->push(['data' => [
+                    ['id' => 5, 'name' => 'Lasagne', 'url' => 'https://recipes.test/recipes/5', 'food_ids' => [1, 2, 3]],
+                    ['id' => 7, 'name' => 'Omelette', 'url' => 'https://recipes.test/recipes/7', 'food_ids' => [3]],
+                ]]),
+            'openai.test/*' => Http::sequence()
+                ->push($this->ai(['matches' => [
+                    ['product' => 'Rindshackfleisch', 'food_id' => 1], ['product' => 'Cherry-Tomaten', 'food_id' => 2], ['product' => 'Eier', 'food_id' => 3],
+                ]]))
+                ->push($this->ai(['picks' => [], 'ideas' => []])),
+        ]);
+
+        $this->actingAs($this->connected())->postJson('/planner/suggestions', [
+            'offers' => [['name' => 'Rindshackfleisch'], ['name' => 'Cherry-Tomaten']],
+            'pantry' => [['name' => 'Eier']],
+            'servings' => 2, 'count' => 3, 'ideas' => false,
+        ])->assertOk();
+
+        // Offers and pantry are searched separately.
+        Http::assertSent(fn (Request $request) => str_ends_with($request->url(), '/api/recipes/search') && $request['food_ids'] === [1, 2]);
+        Http::assertSent(fn (Request $request) => str_ends_with($request->url(), '/api/recipes/search') && $request['food_ids'] === [3]);
+
+        Http::assertSent(function (Request $request) {
+            if (! str_contains($request->url(), 'openai.test') || ! str_contains($request['instructions'] ?? '', 'combine several offers')) {
+                return false;
+            }
+            $candidates = json_decode($request['input'][0]['content'][0]['text'], true)['candidates'];
+
+            return array_column($candidates, 'name') === ['Lasagne', 'Tomatensalat', 'Omelette']
+                && $candidates[0]['offers'] === ['Rindshackfleisch', 'Cherry-Tomaten']
+                && $candidates[0]['pantry'] === ['Eier'];
+        });
+    }
+
     public function test_suggestions_without_recipe_app_are_ideas_only(): void
     {
         Http::fake(['openai.test/*' => Http::response($this->ai(['picks' => [], 'ideas' => []]))]);
