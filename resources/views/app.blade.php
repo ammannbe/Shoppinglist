@@ -70,9 +70,9 @@
                     </button>
                     <div x-show="open" x-transition @click="open = false" class="absolute right-0 mt-1 w-52 overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-lg">
                         <button type="button" class="menu-item" @click="startRename()" x-text="$t('Rename')"></button>
-                        <button type="button" class="menu-item" x-show="loggedIn && list.is_owner" @click="openShare()" x-text="$t('Share')"></button>
+                        <button type="button" class="menu-item" :class="$store.sync.online || 'opacity-50'" x-show="loggedIn && list.is_owner" @click="openShare()" x-text="$t('Share')"></button>
                         <button type="button" class="menu-item" x-show="doneItems.length" @click="clearDone()" x-text="$t('Clear done')"></button>
-                        <button type="button" class="menu-item text-red-700" x-show="loggedIn && !list.is_owner" @click="leaveList()" x-text="$t('Leave list')"></button>
+                        <button type="button" class="menu-item text-red-700" :class="$store.sync.online || 'opacity-50'" x-show="loggedIn && !list.is_owner" @click="leaveList()" x-text="$t('Leave list')"></button>
                         <button type="button" class="menu-item text-red-700" x-show="list.is_owner" @click="deleteList()" x-text="$t('Delete list')"></button>
                     </div>
                 </div>
@@ -275,7 +275,7 @@
     </main>
 
     {{-- First visit: install hint for the current platform --}}
-    <div x-show="$store.install.showHint && route.view === 'lists' && !$store.undo.toast" x-transition
+    <div x-show="$store.install.showHint && route.view === 'lists' && !$store.undo.toast && !$store.notice.text" x-transition
         class="fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-20 mx-auto max-w-xl rounded-lg bg-stone-900 p-4 text-sm text-white shadow-lg">
         <p class="mb-1 font-semibold" x-text="$t('Install Shoppinglist as an app')"></p>
         <p x-show="$store.install.prompt" x-text="$t('Works offline and starts from your home screen.')"></p>
@@ -370,7 +370,7 @@
         class="fixed z-30 w-52 overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-lg"
         @click.outside="menu = null" @keydown.escape.window="menu = null" @scroll.window="menu = null" @resize.window="menu = null">
         <template x-for="action in menu?.actions ?? []" :key="action.label">
-            <button type="button" role="menuitem" class="menu-item" :class="action.danger && 'text-red-700'" @click="runMenu(action)" x-text="action.label"></button>
+            <button type="button" role="menuitem" class="menu-item" :class="[action.danger && 'text-red-700', action.online && !$store.sync.online && 'opacity-50']" @click="runMenu(action)" x-text="action.label"></button>
         </template>
     </div>
 

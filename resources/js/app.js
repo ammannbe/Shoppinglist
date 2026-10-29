@@ -136,9 +136,9 @@ Alpine.data('shoppinglist', () => ({
     listActions(list) {
         return [
             { label: this.$t('Rename'), icon: 'edit', run: () => this.openRename(list) },
-            ...(this.loggedIn && list.is_owner !== false ? [{ label: this.$t('Share'), icon: 'share', run: () => this.openShare(list.id) }] : []),
+            ...(this.loggedIn && list.is_owner !== false ? [{ label: this.$t('Share'), icon: 'share', online: true, run: () => this.openShare(list.id) }] : []),
             list.is_owner === false
-                ? { label: this.$t('Leave list'), icon: 'leave', danger: true, run: () => this.leaveList(list.id) }
+                ? { label: this.$t('Leave list'), icon: 'leave', danger: true, online: true, run: () => this.leaveList(list.id) }
                 : { label: this.$t('Delete'), icon: 'delete', danger: true, run: () => this.deleteList(list.id) },
         ];
     },
@@ -208,6 +208,7 @@ Alpine.data('shoppinglist', () => ({
     },
 
     async leaveList(id = this.route.id) {
+        if (!this.requireOnline()) return;
         if (!confirm(this.$t('Leave this list?'))) return;
         await this.online(async () => {
             await api.delete(`/lists/${id}/members/${encodeURIComponent(Alpine.store('sync').user.email)}`);
@@ -278,7 +279,18 @@ Alpine.data('shoppinglist', () => ({
 
     // ---- sharing (needs a connection)
 
+    /**
+     * Sharing and leaving need the server: tell right away instead of opening a dead end.
+     */
+    requireOnline() {
+        if (navigator.onLine) return true;
+        Alpine.store('notice').show(this.$t('This needs an internet connection.'));
+
+        return false;
+    },
+
     openShare(id = this.route.id) {
+        if (!this.requireOnline()) return;
         this.shareListId = id;
         this.shareEmail = '';
         this.shareError = null;

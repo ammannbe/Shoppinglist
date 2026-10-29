@@ -12,7 +12,7 @@
         :class="dragging || 'transition-[width] duration-200 motion-reduce:transition-none'">
         <template x-for="action in {{ $actions }}" :key="action.label">
             <button type="button" tabindex="-1" class="flex w-16 items-center text-white" :title="action.label" :aria-label="action.label"
-                :class="action.danger ? ['shrink-0 grow bg-red-600', armed ? 'justify-end pr-5' : 'justify-center'] : ['shrink-0 justify-center', action.icon === 'share' ? 'bg-sky-700' : 'bg-stone-500', armed && 'hidden']"
+                :class="action.danger ? ['shrink-0 grow bg-red-600', armed ? 'justify-end pr-5' : 'justify-center', action.online && !$store.sync.online && 'opacity-50'] : ['shrink-0 justify-center', action.icon === 'share' ? 'bg-sky-700' : 'bg-stone-500', armed && 'hidden', action.online && !$store.sync.online && 'opacity-50']"
                 @click="act(action.run)">
                 <svg viewBox="0 0 24 24" class="size-6 shrink-0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path x-show="action.icon === 'edit'" d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4"/>
