@@ -34,6 +34,24 @@ function initialState() {
  * @param {(target: string, name: string, items: object[]) => Promise<string>} options.addItems adds the items, returns the list id
  * @param {() => object[]} options.lists lists to add to
  */
+/**
+ * Offers grouped by shop tag, in order of the tag; offers without shop last.
+ *
+ * @returns {{ store: string, offers: object[] }[]}
+ */
+function groupByStore(offers) {
+    const groups = new Map();
+    for (const offer of offers) {
+        const store = offer.store ?? '';
+        if (!groups.has(store)) groups.set(store, []);
+        groups.get(store).push(offer);
+    }
+
+    return [...groups.entries()]
+        .sort(([a], [b]) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b)))
+        .map(([store, list]) => ({ store, offers: list }));
+}
+
 export function planner({ addItems, lists }) {
     return {
         ...initialState(),
@@ -41,6 +59,8 @@ export function planner({ addItems, lists }) {
         offerText: '',
         newPantryItem: '',
         offersNotice: null,
+        // Saved offers (pool) not taken yet, grouped by shop to take them per shop.
+        savedOffers: null,
         ...requests(),
         ...offerReader(),
 
@@ -87,18 +107,41 @@ export function planner({ addItems, lists }) {
             this.offers = [...this.offers, ...offers.filter((offer) => !known.has(offer.id)).map((offer) => ({ ...offer, selected: true }))];
         },
 
-        /** Offers of the pool (#/offers): own and shared ones that have not expired. */
-        async takeSavedOffers() {
+        removeOfferItem(offer) {
+            this.offers = this.offers.filter((each) => each !== offer);
+        },
+
+        /** Offers of the planner by shop (no shop last). */
+        get offerGroups() {
+            return groupByStore(this.offers);
+        },
+
+        /** Selects or clears all offers of a shop. */
+        selectGroup(group, selected) {
+            group.offers.forEach((offer) => { offer.selected = selected; });
+        },
+
+        /** Offers of the pool (#/offers) that are not taken yet: own and shared, not expired. */
+        async loadSavedOffers() {
             await this.run('saved', this.$t('Loading offers …'), async () => {
-                const before = this.offers.length;
-                this.addOffers((await api.get('/offers')).offers);
-                this.offersNotice = this.offers.length === before ? this.$t('No further saved offers.') : null;
+                const taken = new Set(this.offers.map((offer) => offer.id).filter(Boolean));
+                this.savedOffers = (await api.get('/offers')).offers.filter((offer) => !taken.has(offer.id));
+                this.offersNotice = this.savedOffers.length ? null : this.$t('No further saved offers.');
             });
         },
 
-        removeOffer(index) {
-            this.offers.splice(index, 1);
+        get savedGroups() {
+            return groupByStore(this.savedOffers ?? []);
         },
+
+        /** Takes saved offers (one shop or all) into the planner. */
+        takeSaved(offers) {
+            this.addOffers(offers);
+            const taken = new Set(offers.map((offer) => offer.id));
+            this.savedOffers = this.savedOffers.filter((offer) => !taken.has(offer.id));
+            if (!this.savedOffers.length) this.savedOffers = null;
+        },
+
 
         // ---- 2. pantry
 

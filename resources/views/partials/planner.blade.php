@@ -17,7 +17,7 @@
     <div class="space-y-3">
         <h2 class="font-semibold" x-text="'1. ' + $t('Offers')"></h2>
         <div class="flex flex-wrap items-center gap-2">
-            <button type="button" class="button-secondary inline-flex items-center gap-2" :disabled="busy" @click="takeSavedOffers()">
+            <button type="button" class="button-secondary inline-flex items-center gap-2" :disabled="busy" @click="loadSavedOffers()">
                 <x-spinner x-show="busyKey === 'saved'" />
                 <span x-text="label('saved', $t('Take saved offers'))"></span>
             </button>
@@ -25,20 +25,51 @@
         </div>
         <x-planner-error key="saved" />
         <p x-show="offersNotice" class="text-sm text-stone-500" x-text="offersNotice"></p>
-        <x-offer-reader />
-        <ul x-show="offers.length" class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
-            <template x-for="(offer, index) in offers" :key="index">
-                <li class="flex items-center gap-3 px-3 py-2">
-                    <input type="checkbox" class="size-5 shrink-0 accent-emerald-700" x-model="offer.selected" :aria-label="offer.name">
-                    <span x-show="offer.store" class="grid h-5 min-w-5 shrink-0 place-items-center rounded bg-orange-100 px-1 text-xs font-semibold text-orange-800" :title="storeLabel(offer.store)" x-text="offer.store"></span>
+        {{-- Saved offers by shop: take one shop or all --}}
+        <div x-show="savedOffers?.length" class="space-y-2 rounded-lg border border-stone-200 bg-white p-3">
+            <div class="flex items-center justify-between gap-2">
+                <span class="text-sm font-medium" x-text="$t('Saved offers')"></span>
+                <span class="flex gap-3 text-sm">
+                    <button type="button" class="font-medium underline" @click="takeSaved(savedOffers)" x-text="$t('Take all')"></button>
+                    <button type="button" class="text-stone-500 underline" @click="savedOffers = null" x-text="$t('Close')"></button>
+                </span>
+            </div>
+            <template x-for="group in savedGroups" :key="group.store">
+                <div class="flex items-center gap-3 border-t border-stone-100 pt-2">
                     <span class="min-w-0 flex-1">
-                        <span class="block truncate" x-text="offer.name"></span>
-                        <span class="block truncate text-xs text-stone-500" x-text="[offer.brand, offer.discount, offer.price != null ? 'CHF ' + Number(offer.price).toFixed(2) : null, offer.valid_until ? $t('until :date', { date: new Date(offer.valid_until + 'T12:00:00').toLocaleDateString($store.i18n.locale.replace('_', '-'), { day: 'numeric', month: 'numeric' }) }) : null].filter(Boolean).join(' · ')"></span>
+                        <span class="block truncate font-medium" x-text="group.store ? storeLabel(group.store) : $t('Other shops')"></span>
+                        <span class="block truncate text-xs text-stone-500" x-text="group.offers.map((offer) => offer.name).join(', ')"></span>
                     </span>
-                    <button type="button" class="icon-button text-stone-400" @click="removeOffer(index)" :aria-label="$t('Remove')">✕</button>
-                </li>
+                    <button type="button" class="button-secondary shrink-0 text-sm" @click="takeSaved(group.offers)"
+                        x-text="$t('Take :count', { count: group.offers.length })"></button>
+                </div>
             </template>
-        </ul>
+        </div>
+        <x-offer-reader />
+        {{-- Offers by shop, each shop can be (de)selected at once --}}
+        <template x-for="group in offerGroups" :key="group.store">
+            <div>
+                <label class="mb-1 flex cursor-pointer items-center gap-2 text-sm font-medium text-stone-600">
+                    <input type="checkbox" class="size-4 accent-emerald-700"
+                        :checked="group.offers.every((offer) => offer.selected)"
+                        :indeterminate="group.offers.some((offer) => offer.selected) && !group.offers.every((offer) => offer.selected)"
+                        @change="selectGroup(group, $event.target.checked)">
+                    <span x-text="`${group.store ? storeLabel(group.store) : $t('Other shops')} (${group.offers.filter((offer) => offer.selected).length}/${group.offers.length})`"></span>
+                </label>
+                <ul class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
+                    <template x-for="(offer, index) in group.offers" :key="offer.id ?? `${group.store}-${index}`">
+                        <li class="flex items-center gap-3 px-3 py-2">
+                            <input type="checkbox" class="size-5 shrink-0 accent-emerald-700" x-model="offer.selected" :aria-label="offer.name">
+                            <span class="min-w-0 flex-1">
+                                <span class="block truncate" x-text="offer.name"></span>
+                                <span class="block truncate text-xs text-stone-500" x-text="[offer.brand, offer.discount, offer.price != null ? 'CHF ' + Number(offer.price).toFixed(2) : null, offer.valid_until ? $t('until :date', { date: new Date(offer.valid_until + 'T12:00:00').toLocaleDateString($store.i18n.locale.replace('_', '-'), { day: 'numeric', month: 'numeric' }) }) : null].filter(Boolean).join(' · ')"></span>
+                            </span>
+                            <button type="button" class="icon-button text-stone-400" @click="removeOfferItem(offer)" :aria-label="$t('Remove')">✕</button>
+                        </li>
+                    </template>
+                </ul>
+            </div>
+        </template>
         <p x-show="offers.length" class="text-sm text-stone-500" x-text="$t(':selected of :total offers selected', { selected: selectedOffers.length, total: offers.length })"></p>
     </div>
 
