@@ -29,8 +29,9 @@ class ItemResource extends SyncResource
             'name' => $model->name,
             'amount' => $model->amount,
             'unit' => $model->unit,
-            'store' => $model->store,
+            'stores' => $model->stores ?? [],
             'note' => $model->note,
+            'recipes' => $model->recipes ?? [],
             'image' => $model->image,
             'done' => $model->done,
             'position' => $model->position,
@@ -109,10 +110,17 @@ class ItemResource extends SyncResource
             $image = $item?->image;
         }
 
+        // Clients from before the shops list send `store`, and no recipes: keep what the item has.
+        $stores = array_key_exists('stores', $doc) ? $doc['stores'] : (array_key_exists('store', $doc)
+            ? array_filter([$doc['store']])
+            : $item?->stores);
+        $recipes = array_key_exists('recipes', $doc) ? $doc['recipes'] : $item?->recipes;
+
         return [
             'image' => $image,
-            'store' => $doc['store'] ?? null,
+            'stores' => $stores ? array_values(array_unique(array_map('trim', $stores))) : null,
             'note' => $doc['note'] ?? null,
+            'recipes' => $recipes ? array_map(fn (array $recipe) => ['name' => $recipe['name'], 'url' => $recipe['url'] ?? null], $recipes) : null,
             'name' => $doc['name'],
             'amount' => $doc['amount'] ?? null,
             'unit' => $doc['unit'] ?? null,

@@ -21,6 +21,8 @@ const DEFAULT_UNITS = ['Stk.', 'g', 'kg', 'ml', 'dl', 'l', 'Pck.', 'Bund', 'Fl.'
 const DEFAULT_STORES = [['Migros', 'M'], ['Coop', 'C'], ['Aldi', 'A'], ['Lidl', 'L'], ['Denner', 'D']]
     .map(([name, code]) => ({ id: `default:${code}`, name, code, is_public: true }));
 const OWNER_KEY = 'shoppinglist.owner';
+// Shop filter per list (device only): { listId: [tags] }.
+const STORE_FILTER_KEY = 'shoppinglist.store-filter';
 const USER_KEY = 'shoppinglist.user';
 
 const api = createApi();
@@ -116,6 +118,7 @@ Alpine.data('shoppinglist', () => ({
     renaming: null,
     renamingDoc: null,
     newStore: { name: '', code: '' },
+    storeFilters: JSON.parse(localStorage.getItem(STORE_FILTER_KEY) ?? '{}'),
     shareListId: null,
     shareEmail: '',
     shareError: null,
@@ -182,7 +185,7 @@ Alpine.data('shoppinglist', () => ({
     },
 
     /**
-     * Shops (standard ones first), the items keep only the code.
+     * Shops (standard ones first). Items keep their tags: the code, or the name if there is none.
      */
     get stores() {
         const stores = Alpine.store('data').stores.filter((store) => !Alpine.store('undo').hidden(store.id));
@@ -196,6 +199,16 @@ Alpine.data('shoppinglist', () => ({
 
         return this.stores.filter((store) => !store.is_public || !hidden.includes(store.code));
     },
+    storeTag(store) {
+        return store.code || store.name;
+    },
+    /** Shop of a tag on an item: by code, otherwise by name (also a shop that got a code later). */
+    storeByTag(tag) {
+        if (!tag) return null;
+
+        return this.stores.find((store) => store.code && sameName(store.code, tag))
+            ?? this.stores.find((store) => sameName(store.name, tag)) ?? null;
+    },
     storeHidden(store) {
         return (Alpine.store('prefs').hidden_stores ?? []).includes(store.code);
     },
@@ -205,12 +218,9 @@ Alpine.data('shoppinglist', () => ({
             ? hidden.filter((code) => code !== store.code)
             : [...hidden, store.code]);
     },
-    storeByCode(code) {
-        return code ? this.stores.find((store) => sameName(store.code, code)) ?? null : null;
-    },
-    /** Full name of a shop code (tooltip of the badge), the code itself if unknown. */
-    storeLabel(code) {
-        return this.storeByCode(code)?.name ?? code ?? '';
+    /** Full name of a shop tag (tooltip of the badge), the tag itself if unknown. */
+    storeLabel(tag) {
+        return this.storeByTag(tag)?.name ?? tag ?? '';
     },
 
     /**
@@ -278,8 +288,9 @@ Alpine.data('shoppinglist', () => ({
                 name: item.name,
                 amount: item.amount ?? null,
                 unit: item.unit ?? null,
-                store: item.store ?? null,
+                stores: [...(item.stores ?? [])],
                 note: item.note ?? null,
+                recipes: (item.recipes ?? []).map(({ name, url }) => ({ name, url: url ?? null })),
                 image: ownProduct(item.name)?.image ?? null,
                 position: position++,
                 creator_email: Alpine.store('sync').user?.email ?? null,
@@ -455,23 +466,28 @@ Alpine.data('shoppinglist', () => ({
         await (await db.items.findOne(existing.id).exec())?.incrementalPatch({ amount: merged, unit: existing.unit ?? parsed.unit });
     },
 
-    // ---- shops (own ones: name + code, the items keep the code)
+    // ---- shops (own ones: name + optional code, the items keep the tag)
 
     /**
-     * Error message if the shop cannot be saved like this, otherwise null.
+     * Error message if the shop cannot be saved like this, otherwise null. Names and codes
+     * must not collide, because both can be the tag on an item.
      */
     storeError(id, name, code) {
-        if (!name || !code) return this.$t('Name and code are required.');
+        if (!name) return this.$t('The name is required.');
         const others = this.stores.filter((store) => store.id !== id);
-        if (others.some((store) => sameName(store.name, name))) return this.$t('A shop with this name already exists.');
-        if (others.some((store) => sameName(store.code, code))) return this.$t('The code :code is already used.', { code });
+        if (others.some((store) => sameName(store.name, name) || (store.code && sameName(store.code, name)))) {
+            return this.$t('A shop with this name already exists.');
+        }
+        if (code && others.some((store) => sameName(store.name, code) || (store.code && sameName(store.code, code)))) {
+            return this.$t('The code :code is already used.', { code });
+        }
 
         return null;
     },
 
     async createStore() {
         const name = this.newStore.name.trim();
-        const code = this.newStore.code.trim().toUpperCase() || this.suggestedCode(name);
+        const code = this.newStore.code.trim() || null;
         const error = this.storeError(null, name, code);
         if (error) return Alpine.store('notice').show(error);
         await db.stores.insert({ id: uuid7(), name, code });
@@ -479,11 +495,11 @@ Alpine.data('shoppinglist', () => ({
     },
 
     /**
-     * Changes name and code of an own shop; items with the old code get the new one.
+     * Changes name and code of an own shop; the items with its old tag get the new one.
      */
     async saveStore({ id, name, code }) {
         name = name.trim();
-        code = (code ?? '').trim().toUpperCase();
+        code = (code ?? '').trim() || null;
         const error = this.storeError(id, name, code);
         if (error) {
             Alpine.store('notice').show(error);
@@ -491,47 +507,83 @@ Alpine.data('shoppinglist', () => ({
         }
         const doc = await db.stores.findOne(id).exec();
         if (!doc) return true;
-        const old = doc.code;
+        const old = this.storeTag(doc);
         await doc.incrementalPatch({ name, code });
-        if (old !== code) {
-            const items = Alpine.store('data').items.filter((item) => item.store === old);
+        const tag = code || name;
+        if (old !== tag) {
+            const items = Alpine.store('data').items.filter((item) => item.stores?.includes(old));
             const docs = await db.items.findByIds(items.map((item) => item.id)).exec();
-            await Promise.all([...docs.values()].map((item) => item.incrementalPatch({ store: code })));
+            await Promise.all([...docs.values()].map((item) => item.incrementalPatch({
+                stores: [...new Set(item.stores.map((each) => (each === old ? tag : each)))],
+            })));
         }
 
         return true;
     },
 
     /**
-     * Code for a new shop: short names as they are, otherwise the first letters, as many as
-     * needed to be unique (Amazon → AMA, Aldi Süd → ALD or ALDI).
+     * Shop typed in the edit dialog: a code or name of a known shop, otherwise a new own
+     * shop without code. Returns the tag for the item.
      */
-    suggestedCode(name) {
-        const letters = name.replace(/[^\p{L}\p{N}]/gu, '').toUpperCase();
-        if (!letters) return '';
-        const taken = (code) => this.stores.some((store) => sameName(store.code, code));
-        if (letters.length <= 4 && !taken(letters)) return letters;
-        for (let length = 3; length <= Math.min(letters.length, 10); length++) {
-            if (!taken(letters.slice(0, length))) return letters.slice(0, length);
-        }
-        for (let number = 2; ; number++) {
-            const code = `${letters.slice(0, 9 - String(number).length)}${number}`;
-            if (!taken(code)) return code;
-        }
-    },
-
-    /**
-     * Shop field of the edit dialog: a code or name of a known shop, otherwise a new own shop.
-     */
-    async storeCode(text) {
+    async storeTagFor(text) {
         text = text?.trim();
         if (!text) return null;
-        const known = this.storeByCode(text) ?? this.stores.find((store) => sameName(store.name, text));
-        if (known) return known.code;
-        const code = this.suggestedCode(text);
-        await db.stores.insert({ id: uuid7(), name: text, code });
+        const known = this.storeByTag(text);
+        if (known) return this.storeTag(known);
+        await db.stores.insert({ id: uuid7(), name: text.slice(0, 255), code: null });
 
-        return code;
+        return text.slice(0, 255);
+    },
+
+    /** Shops picked in the edit dialog (chips). */
+    addEditingStore(tag) {
+        if (tag && !this.editing.stores.some((each) => sameName(each, tag))) this.editing.stores = [...this.editing.stores, tag];
+        this.editing.storeText = '';
+    },
+    async addTypedStore() {
+        this.addEditingStore(await this.storeTagFor(this.editing.storeText));
+    },
+    removeEditingStore(tag) {
+        this.editing.stores = this.editing.stores.filter((each) => each !== tag);
+    },
+    /** Shop suggestions of the edit dialog: without the picked ones. */
+    get editingStoreChoices() {
+        const picked = this.editing?.stores ?? [];
+
+        return this.choosableStores.filter((store) => !picked.some((tag) => this.storeByTag(tag)?.id === store.id));
+    },
+
+    // ---- filter by shop (per list, on this device)
+
+    /** Tags of the shops on the open items of the list, in the order of the shop list. */
+    get listStoreTags() {
+        const tags = [...new Set(this.openItems.flatMap((item) => item.stores ?? []))];
+        const order = (tag) => {
+            const index = this.stores.findIndex((store) => store.id === this.storeByTag(tag)?.id);
+            return index === -1 ? Infinity : index;
+        };
+
+        return tags.sort((a, b) => order(a) - order(b) || a.localeCompare(b));
+    },
+    get storeFilter() {
+        return (this.storeFilters[this.route.id] ?? []).filter((tag) => this.listStoreTags.includes(tag));
+    },
+    toggleStoreFilter(tag) {
+        const current = this.storeFilter;
+        const next = current.includes(tag) ? current.filter((each) => each !== tag) : [...current, tag];
+        this.storeFilters = { ...this.storeFilters, [this.route.id]: next };
+        localStorage.setItem(STORE_FILTER_KEY, JSON.stringify(this.storeFilters));
+    },
+    clearStoreFilter() {
+        this.storeFilters = { ...this.storeFilters, [this.route.id]: [] };
+        localStorage.setItem(STORE_FILTER_KEY, JSON.stringify(this.storeFilters));
+    },
+    /** Open items shown: with a filter only those of the chosen shops and those without a shop. */
+    get shownOpenItems() {
+        const filter = this.storeFilter;
+        if (!filter.length) return this.openItems;
+
+        return this.openItems.filter((item) => !item.stores?.length || item.stores.some((tag) => filter.includes(tag)));
     },
 
     async toggle(item) {
@@ -539,12 +591,16 @@ Alpine.data('shoppinglist', () => ({
     },
 
     edit(item) {
-        this.editing = { ...item, amount: item.amount ?? '', store: this.storeByCode(item.store)?.name ?? item.store ?? '' };
+        this.editing = { ...item, amount: item.amount ?? '', stores: [...(item.stores ?? [])], storeText: '', recipes: item.recipes ?? [] };
         this.$nextTick(() => this.$refs.editDialog.showModal());
     },
 
     async saveItem() {
-        const { id, name, amount, unit, store, note } = this.editing;
+        const { id, name, amount, unit, note } = this.editing;
+        // A shop typed but not picked yet counts too.
+        const typed = await this.storeTagFor(this.editing.storeText);
+        // Plain arrays: RxDB cannot clone Alpine's proxies (BroadcastChannel to other tabs).
+        const stores = typed && !this.editing.stores.some((tag) => sameName(tag, typed)) ? [...this.editing.stores, typed] : [...this.editing.stores];
         if (name.trim()) {
             const doc = await db.items.findOne(id).exec();
             // Renamed: the image of the (own) product with the new name.
@@ -554,7 +610,7 @@ Alpine.data('shoppinglist', () => ({
                 image,
                 amount: amount === '' || amount === null ? null : Number(String(amount).replace(',', '.')) || null,
                 unit: unit?.trim() || null,
-                store: await this.storeCode(store),
+                stores,
                 note: note?.trim().slice(0, 255) || null,
             });
             await remember('products', name.trim());
@@ -665,7 +721,15 @@ Alpine.data('shoppinglist', () => ({
      */
     async moveRow(kind, { from, to }) {
         const ids = (kind === 'lists' ? this.lists : this.openItems).map((doc) => doc.id);
-        ids.splice(to, 0, ...ids.splice(from, 1));
+        if (kind === 'items' && this.shownOpenItems.length !== this.openItems.length) {
+            // Filtered by shop: move it next to the row it was dropped on, hidden rows stay put.
+            const shown = this.shownOpenItems.map((doc) => doc.id);
+            const [moved, target] = [shown[from], shown[to]];
+            ids.splice(ids.indexOf(moved), 1);
+            ids.splice(ids.indexOf(target) + (to > from ? 1 : 0), 0, moved);
+        } else {
+            ids.splice(to, 0, ...ids.splice(from, 1));
+        }
         await this.reorder(kind, ids);
         if (kind === 'lists' && Alpine.store('prefs').list_sort !== 'manual') Alpine.store('prefs').set('list_sort', 'manual');
         if (kind === 'items' && this.itemSort !== 'manual') await this.setItemSort('manual');

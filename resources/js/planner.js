@@ -273,7 +273,13 @@ export function planner({ addItems, lists }) {
         },
 
         async addToList() {
-            const items = this.selectedItems.map(({ name, amount, unit, store, note }) => ({ name, amount, unit, store, note }));
+            // Recipes as names from the list step, linked if the suggestion has a URL (own recipes).
+            const urls = new Map(this.suggestions.map((suggestion) => [suggestion.name.toLowerCase(), suggestion.url ?? null]));
+            const items = this.selectedItems.map(({ name, amount, unit, store, note, recipes }) => ({
+                name, amount, unit, note,
+                stores: store ? [store] : [],
+                recipes: (recipes ?? []).map((recipe) => ({ name: recipe, url: urls.get(recipe.toLowerCase()) ?? null })),
+            }));
             if (!items.length) return;
             const listId = await addItems(this.target, this.listName.trim() || this.$t('Shopping list'), items);
             this.reset();

@@ -331,12 +331,10 @@ class SyncTest extends TestCase
         $ownId = (string) Str::uuid();
         $this->push($user, 'stores', [['newDocumentState' => ['id' => $ownId, 'name' => 'Amazon', 'code' => ' amz ']]])
             ->assertExactJson([]);
-        $this->assertSame(['Amazon', 'AMZ', $user->id], [Store::find($ownId)->name, Store::find($ownId)->code, Store::find($ownId)->owner_id]);
+        $this->assertSame(['Amazon', 'amz', $user->id], [Store::find($ownId)->name, Store::find($ownId)->code, Store::find($ownId)->owner_id]);
 
-        // Without a code: the start of the name.
-        $otherId = (string) Str::uuid();
-        $this->push($other, 'stores', [['newDocumentState' => ['id' => $otherId, 'name' => 'Volg']]])->assertExactJson([]);
-        $this->assertSame('VOL', Store::find($otherId)->code);
+        // Own shops are private.
+        $this->push($other, 'stores', [['newDocumentState' => ['id' => (string) Str::uuid(), 'name' => 'Volg']]])->assertExactJson([]);
 
         $doc = collect($this->pull($user, 'stores')->assertJsonCount(6, 'documents')->json('documents'))->firstWhere('id', $ownId);
         $this->push($user, 'stores', [['assumedMasterState' => $doc, 'newDocumentState' => [...$doc, 'name' => 'Amazon.de', 'code' => 'AZ', 'version' => 2]]])
@@ -347,15 +345,41 @@ class SyncTest extends TestCase
             ->assertUnprocessable();
     }
 
-    public function test_store_and_note_of_items_are_synced(): void
+    public function test_shops_recipes_and_note_of_items_are_synced(): void
     {
         $user = User::factory()->create();
         $listId = $this->createList($user);
-        $this->createItem($user, $listId, ['store' => 'M', 'note' => 'Aktion −30 %']);
+        $id = $this->createItem($user, $listId, [
+            'stores' => ['M', 'Amazon'], 'note' => "Aktion −30 %\nnur Bio",
+            'recipes' => [['name' => 'Lasagne', 'url' => 'https://recipes.test/recipes/5'], ['name' => 'Omelette', 'url' => null]],
+        ]);
 
-        $this->pull($user, 'items')
-            ->assertJsonPath('documents.0.store', 'M')
-            ->assertJsonPath('documents.0.note', 'Aktion −30 %');
+        $doc = $this->pull($user, 'items')
+            ->assertJsonPath('documents.0.stores', ['M', 'Amazon'])
+            ->assertJsonPath('documents.0.note', "Aktion −30 %\nnur Bio")
+            ->assertJsonPath('documents.0.recipes.1', ['name' => 'Omelette', 'url' => null])
+            ->json('documents.0');
+
+        // Clients from before the shops list send one `store` and no recipes.
+        $old = collect($doc)->except(['stores', 'recipes'])->all();
+        $this->push($user, 'items', [['assumedMasterState' => $doc, 'newDocumentState' => [...$old, 'store' => 'C', 'version' => $doc['version'] + 1]]])
+            ->assertExactJson([]);
+        $this->assertSame([['C'], 'Lasagne'], [Item::find($id)->stores, Item::find($id)->recipes[0]['name']]);
+
+        $this->push($user, 'items', [['newDocumentState' => [...$doc, 'recipes' => [['name' => 'x', 'url' => 'javascript:alert(1)']]]]])
+            ->assertUnprocessable();
+    }
+
+    public function test_shop_codes_are_optional_and_keep_their_case(): void
+    {
+        $user = User::factory()->create();
+        $id = (string) Str::uuid();
+        $this->push($user, 'stores', [['newDocumentState' => ['id' => $id, 'name' => 'Volg', 'code' => null]]])->assertExactJson([]);
+        $this->assertNull(Store::find($id)->code);
+
+        $doc = collect($this->pull($user, 'stores')->json('documents'))->firstWhere('id', $id);
+        $this->push($user, 'stores', [['assumedMasterState' => $doc, 'newDocumentState' => [...$doc, 'code' => 'Vo', 'version' => 2]]])->assertExactJson([]);
+        $this->assertSame('Vo', Store::find($id)->code);
     }
 
     public function test_item_positions_are_shared_and_list_positions_are_personal(): void

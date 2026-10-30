@@ -27,7 +27,7 @@ export const lists = {
 };
 
 export const items = {
-    version: 3,
+    version: 4,
     primaryKey: 'id',
     type: 'object',
     properties: {
@@ -36,9 +36,15 @@ export const items = {
         name: { type: 'string', maxLength: 255 },
         amount: { type: ['number', 'null'] },
         unit: { type: ['string', 'null'] },
-        // Shop code (M, A, AMZ, …, see stores) and free note (e.g. the offer).
-        store: { type: ['string', 'null'] },
+        // Shops as shown (code, or the name of a shop without code, see stores) and free note (e.g. the offer).
+        stores: { type: 'array', items: { type: 'string' }, default: [] },
         note: { type: ['string', 'null'] },
+        // Recipes the item was planned for (week planner): { name, url|null }.
+        recipes: {
+            type: 'array',
+            default: [],
+            items: { type: 'object', properties: { name: { type: 'string' }, url: { type: ['string', 'null'] } }, required: ['name'] },
+        },
         // Image of the product (copied when added, so members of shared lists see it too).
         image: { type: ['string', 'null'] },
         done: { type: 'boolean', default: false },
@@ -80,18 +86,18 @@ export const units = {
 };
 
 export const stores = {
-    version: 0,
+    version: 1,
     primaryKey: 'id',
     type: 'object',
     properties: {
         id: uuid,
         name: { type: 'string', maxLength: 255 },
-        // Short code shown on the items (items.store keeps the code).
-        code: { type: 'string', maxLength: 10 },
+        // Optional short code shown on the items instead of the name (items.stores keep it).
+        code: { type: ['string', 'null'], maxLength: 10 },
         is_public: { type: 'boolean', default: false },
         ...syncFields,
     },
-    required: ['id', 'name', 'code'],
+    required: ['id', 'name'],
 };
 
 // Schema migrations of the local documents, keyed by collection and schema version.
@@ -106,7 +112,10 @@ export const migrations = {
         // Version 1 briefly existed without image (development builds only).
         2: (doc) => ({ ...doc, image: doc.image ?? null }),
         3: (doc) => ({ ...doc, store: null, note: null }),
+        4: ({ store, ...doc }) => ({ ...doc, stores: store ? [store] : [], recipes: [] }),
     },
+    // Codes became optional.
+    stores: { 1: (doc) => doc },
     products: { 1: (doc) => ({ ...doc, image: null }) },
     // Units were pull only, all of them public.
     units: { 1: (doc) => ({ ...doc, is_public: true, version: 1 }) },

@@ -10,7 +10,8 @@ import { normalizeName, splitItemInput, suggestNames, usageOf } from './helpers.
  *   typing), then products (picking one runs onPick, e.g. adds the item).
  * - source "product": the whole text is a product name.
  * - source "unit": the whole text is a unit, all units are listed on focus.
- * - source "store": the whole text is a shop (name or code), all shops are listed on focus.
+ * - source "store": the whole text is a shop (name or code), all shops are listed on focus;
+ *   picking one runs onPick(option) (adds it as a chip) instead of filling in the text.
  *
  * Usage: x-data="suggestField({ source: 'item', get: () => text, set: (v) => text = v, units: () => unitNames, onPick, openItems })"
  *
@@ -20,7 +21,7 @@ import { normalizeName, splitItemInput, suggestNames, usageOf } from './helpers.
  * @param {(value: string) => void} options.set
  * @param {() => string[]} [options.units] known units
  * @param {() => {name: string, code: string}[]} [options.stores] known shops
- * @param {() => void} [options.onPick] runs after a product was picked
+ * @param {(option: object) => void} [options.onPick] runs after a product (or shop) was picked
  * @param {() => object[]} [options.openItems] open items of the list, marked in the suggestions
  */
 export function suggestField({ source, get, set, units = () => [], stores = () => [], onPick = null, openItems = () => [] }) {
@@ -67,19 +68,19 @@ export function suggestField({ source, get, set, units = () => [], stores = () =
          */
         storeOptions(query) {
             const needle = normalizeName(query);
-            const usage = usageOf(Alpine.store('data').items, 'store');
+            const usage = new Map();
+            for (const item of Alpine.store('data').items) {
+                for (const tag of item.stores ?? []) usage.set(normalizeName(tag), (usage.get(normalizeName(tag)) ?? 0) + 1);
+            }
             const matches = stores().map((store) => {
                 const name = normalizeName(store.name);
                 const code = normalizeName(store.code);
-                const rank = !needle || name === needle || code === needle ? 0
-                    : name.startsWith(needle) || code.startsWith(needle) ? 1
+                const rank = !needle || name === needle || (code && code === needle) ? 0
+                    : name.startsWith(needle) || (code && code.startsWith(needle)) ? 1
                         : name.includes(needle) ? 2 : -1;
 
-                return { store, rank, count: usage.get(code)?.count ?? 0 };
+                return { store, rank, count: usage.get(code || name) ?? 0 };
             }).filter((match) => match.rank >= 0);
-            // Nothing to suggest when the only match is what was typed.
-            if (needle && matches.length === 1 && matches[0].rank === 0) return [];
-
             return matches
                 .sort((a, b) => a.rank - b.rank || b.count - a.count)
                 .slice(0, 8)
@@ -127,6 +128,11 @@ export function suggestField({ source, get, set, units = () => [], stores = () =
         },
 
         pick(option) {
+            if (option.kind === 'store' && onPick) {
+                onPick(option);
+                this.close();
+                return;
+            }
             if (source === 'item' && option.kind === 'unit') {
                 // Continue with the product name.
                 set(`${this.parts.prefix}${option.name} `);
