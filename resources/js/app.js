@@ -234,6 +234,7 @@ Alpine.data('shoppinglist', () => ({
         let entries = collection === 'stores'
             ? this.stores
             : Alpine.store('data')[collection].filter((entry) => !Alpine.store('undo').hidden(entry.id));
+        if (collection === 'products') entries = withOwnImages(entries);
         if (collection === 'units' && !entries.some((entry) => entry.is_public)) {
             entries = [...DEFAULT_UNITS.map((name) => ({ id: `default:${name}`, name, is_public: true })), ...entries];
         }
@@ -665,6 +666,9 @@ Alpine.data('shoppinglist', () => ({
         try {
             if (product?.image) await api.delete(`/products/${product.id}/image`);
             await this.applyImage(this.editing.name, null);
+            // Without its photo an own copy of a standard product is not needed anymore.
+            const standard = Alpine.store('data').products.some((each) => each.is_public && sameName(each.name, product?.name ?? ''));
+            if (product && standard) await (await db.products.findOne(product.id).exec())?.remove();
         } catch {
             Alpine.store('notice').show(this.$t('This needs an internet connection.'));
         } finally {
@@ -839,6 +843,23 @@ async function remember(collection, name) {
         && sameName(entry.name, name));
 
     return existing ?? (await db[collection].insert({ id: uuid7(), name })).toJSON();
+}
+
+/**
+ * An own product with the name of a standard product only carries the user's photo of it:
+ * the standard product is shown with that photo instead of listing both.
+ */
+function withOwnImages(products) {
+    // Like sameName: case and spaces are ignored, accents not.
+    const key = (name) => name.trim().replace(/\s+/g, ' ').toLowerCase();
+    const own = new Map(products.filter((product) => !product.is_public).map((product) => [key(product.name), product]));
+    const standard = new Set(products.filter((product) => product.is_public).map((product) => key(product.name)));
+
+    return products
+        .filter((product) => product.is_public || !standard.has(key(product.name)))
+        .map((product) => (product.is_public && own.get(key(product.name))?.image
+            ? { ...product, image: own.get(key(product.name)).image }
+            : product));
 }
 
 function ownProduct(name) {

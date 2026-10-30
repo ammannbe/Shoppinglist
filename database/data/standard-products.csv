@@ -1,0 +1,342 @@
+name,category
+Äpfel,Früchte
+Bananen,Früchte
+Birnen,Früchte
+Orangen,Früchte
+Mandarinen,Früchte
+Zitronen,Früchte
+Limetten,Früchte
+Grapefruit,Früchte
+Kiwi,Früchte
+Trauben,Früchte
+Erdbeeren,Früchte
+Himbeeren,Früchte
+Heidelbeeren,Früchte
+Brombeeren,Früchte
+Johannisbeeren,Früchte
+Kirschen,Früchte
+Aprikosen,Früchte
+Pfirsiche,Früchte
+Nektarinen,Früchte
+Zwetschgen,Früchte
+Melone,Früchte
+Wassermelone,Früchte
+Ananas,Früchte
+Mango,Früchte
+Avocado,Früchte
+Granatapfel,Früchte
+Feigen,Früchte
+Datteln,Früchte
+Tomaten,Gemüse
+Cherrytomaten,Gemüse
+Gurke,Gemüse
+Peperoni,Gemüse
+Zucchetti,Gemüse
+Aubergine,Gemüse
+Rüebli,Gemüse
+Karotten,Gemüse
+Kartoffeln,Gemüse
+Süsskartoffeln,Gemüse
+Zwiebeln,Gemüse
+Rote Zwiebeln,Gemüse
+Frühlingszwiebeln,Gemüse
+Schalotten,Gemüse
+Knoblauch,Gemüse
+Lauch,Gemüse
+Sellerie,Gemüse
+Stangensellerie,Gemüse
+Fenchel,Gemüse
+Broccoli,Gemüse
+Blumenkohl,Gemüse
+Rosenkohl,Gemüse
+Weisskohl,Gemüse
+Blaukraut,Gemüse
+Wirz,Gemüse
+Chinakohl,Gemüse
+Kohlrabi,Gemüse
+Spinat,Gemüse
+Mangold,Gemüse
+Randen,Gemüse
+Radieschen,Gemüse
+Rettich,Gemüse
+Kürbis,Gemüse
+Spargeln,Gemüse
+Grüne Bohnen,Gemüse
+Erbsen,Gemüse
+Zuckermais,Gemüse
+Champignons,Gemüse
+Pilze,Gemüse
+Ingwer,Gemüse
+Chili,Gemüse
+Kopfsalat,Salat
+Eisbergsalat,Salat
+Nüsslisalat,Salat
+Rucola,Salat
+Lollo,Salat
+Endivien,Salat
+Chicorée,Salat
+Salat,Salat
+Peterli,Kräuter
+Petersilie,Kräuter
+Basilikum,Kräuter
+Schnittlauch,Kräuter
+Koriander,Kräuter
+Dill,Kräuter
+Minze,Kräuter
+Rosmarin,Kräuter
+Thymian,Kräuter
+Oregano,Kräuter
+Salbei,Kräuter
+Milch,Milchprodukte
+Vollmilch,Milchprodukte
+Laktosefreie Milch,Milchprodukte
+Hafermilch,Milchprodukte
+Sojamilch,Milchprodukte
+Mandelmilch,Milchprodukte
+Reismilch,Milchprodukte
+Butter,Milchprodukte
+Margarine,Milchprodukte
+Rahm,Milchprodukte
+Vollrahm,Milchprodukte
+Halbrahm,Milchprodukte
+Saucenrahm,Milchprodukte
+Sauerrahm,Milchprodukte
+Crème fraîche,Milchprodukte
+Kaffeerahm,Milchprodukte
+Joghurt,Milchprodukte
+Naturjoghurt,Milchprodukte
+Griechischer Joghurt,Milchprodukte
+Quark,Milchprodukte
+Magerquark,Milchprodukte
+Hüttenkäse,Milchprodukte
+Buttermilch,Milchprodukte
+Eier,Milchprodukte
+Käse,Käse
+Reibkäse,Käse
+Parmesan,Käse
+Mozzarella,Käse
+Feta,Käse
+Halloumi,Käse
+Gruyère,Käse
+Emmentaler,Käse
+Appenzeller,Käse
+Tilsiter,Käse
+Raclettekäse,Käse
+Fonduemischung,Käse
+Gouda,Käse
+Brie,Käse
+Camembert,Käse
+Frischkäse,Käse
+Mascarpone,Käse
+Ricotta,Käse
+Hackfleisch,Fleisch & Fisch
+Rindshackfleisch,Fleisch & Fisch
+Poulet,Fleisch & Fisch
+Pouletbrust,Fleisch & Fisch
+Pouletschenkel,Fleisch & Fisch
+Rindfleisch,Fleisch & Fisch
+Schweinefleisch,Fleisch & Fisch
+Geschnetzeltes,Fleisch & Fisch
+Plätzli,Fleisch & Fisch
+Steak,Fleisch & Fisch
+Bratwurst,Fleisch & Fisch
+Cervelat,Fleisch & Fisch
+Wienerli,Fleisch & Fisch
+Speck,Fleisch & Fisch
+Speckwürfeli,Fleisch & Fisch
+Schinken,Fleisch & Fisch
+Schinkenwürfeli,Fleisch & Fisch
+Salami,Fleisch & Fisch
+Aufschnitt,Fleisch & Fisch
+Fleischkäse,Fleisch & Fisch
+Leberpain,Fleisch & Fisch
+Lachs,Fleisch & Fisch
+Räucherlachs,Fleisch & Fisch
+Thon,Fleisch & Fisch
+Fischstäbchen,Fleisch & Fisch
+Crevetten,Fleisch & Fisch
+Tofu,Fleisch & Fisch
+Brot,Brot & Backwaren
+Ruchbrot,Brot & Backwaren
+Halbweissbrot,Brot & Backwaren
+Vollkornbrot,Brot & Backwaren
+Toastbrot,Brot & Backwaren
+Zopf,Brot & Backwaren
+Brötli,Brot & Backwaren
+Gipfeli,Brot & Backwaren
+Baguette,Brot & Backwaren
+Fladenbrot,Brot & Backwaren
+Tortillas,Brot & Backwaren
+Knäckebrot,Brot & Backwaren
+Zwieback,Brot & Backwaren
+Paniermehl,Brot & Backwaren
+Blätterteig,Brot & Backwaren
+Kuchenteig,Brot & Backwaren
+Pizzateig,Brot & Backwaren
+Flammkuchenteig,Brot & Backwaren
+Teigwaren,Vorräte
+Spaghetti,Vorräte
+Penne,Vorräte
+Hörnli,Vorräte
+Lasagneblätter,Vorräte
+Nudeln,Vorräte
+Ravioli,Vorräte
+Tortellini,Vorräte
+Gnocchi,Vorräte
+Spätzli,Vorräte
+Reis,Vorräte
+Risottoreis,Vorräte
+Basmatireis,Vorräte
+Couscous,Vorräte
+Bulgur,Vorräte
+Quinoa,Vorräte
+Polenta,Vorräte
+Linsen,Vorräte
+Kichererbsen,Vorräte
+Rote Bohnen,Vorräte
+Weisse Bohnen,Vorräte
+Mehl,Vorräte
+Weissmehl,Vorräte
+Ruchmehl,Vorräte
+Zopfmehl,Vorräte
+Dinkelmehl,Vorräte
+Maizena,Vorräte
+Zucker,Vorräte
+Rohzucker,Vorräte
+Puderzucker,Vorräte
+Vanillezucker,Vorräte
+Gelierzucker,Vorräte
+Honig,Vorräte
+Ahornsirup,Vorräte
+Backpulver,Vorräte
+Hefe,Vorräte
+Trockenhefe,Vorräte
+Natron,Vorräte
+Kakaopulver,Vorräte
+Kochschokolade,Vorräte
+Haferflocken,Vorräte
+Müesli,Vorräte
+Cornflakes,Vorräte
+Nüsse,Vorräte
+Mandeln,Vorräte
+Gemahlene Mandeln,Vorräte
+Haselnüsse,Vorräte
+Gemahlene Haselnüsse,Vorräte
+Baumnüsse,Vorräte
+Pinienkerne,Vorräte
+Sonnenblumenkerne,Vorräte
+Rosinen,Vorräte
+Pelati,Vorräte
+Tomatenpüree,Vorräte
+Passata,Vorräte
+Tomatensauce,Vorräte
+Kokosmilch,Vorräte
+Mais (Dose),Vorräte
+Essiggurken,Vorräte
+Oliven,Vorräte
+Kapern,Vorräte
+Bouillon,Vorräte
+Gemüsebouillon,Vorräte
+Fleischbouillon,Vorräte
+Salz,Gewürze & Saucen
+Pfeffer,Gewürze & Saucen
+Paprika,Gewürze & Saucen
+Curry,Gewürze & Saucen
+Zimt,Gewürze & Saucen
+Muskatnuss,Gewürze & Saucen
+Kreuzkümmel,Gewürze & Saucen
+Chiliflocken,Gewürze & Saucen
+Kräutersalz,Gewürze & Saucen
+Aromat,Gewürze & Saucen
+Olivenöl,Gewürze & Saucen
+Rapsöl,Gewürze & Saucen
+Sonnenblumenöl,Gewürze & Saucen
+Öl,Gewürze & Saucen
+Essig,Gewürze & Saucen
+Apfelessig,Gewürze & Saucen
+Balsamico,Gewürze & Saucen
+Senf,Gewürze & Saucen
+Ketchup,Gewürze & Saucen
+Mayonnaise,Gewürze & Saucen
+Salatsauce,Gewürze & Saucen
+Sojasauce,Gewürze & Saucen
+Pesto,Gewürze & Saucen
+Zitronensaft,Gewürze & Saucen
+Konfitüre,Brotaufstrich
+Nutella,Brotaufstrich
+Erdnussbutter,Brotaufstrich
+Brotaufstrich,Brotaufstrich
+Schokolade,Süsses & Snacks
+Guetzli,Süsses & Snacks
+Chips,Süsses & Snacks
+Salzstangen,Süsses & Snacks
+Popcorn,Süsses & Snacks
+Gummibärchen,Süsses & Snacks
+Glace,Süsses & Snacks
+Wasser,Getränke
+Mineralwasser,Getränke
+Orangensaft,Getränke
+Apfelsaft,Getränke
+Sirup,Getränke
+Eistee,Getränke
+Cola,Getränke
+Bier,Getränke
+Weisswein,Getränke
+Rotwein,Getränke
+Prosecco,Getränke
+Kaffee,Getränke
+Kaffeebohnen,Getränke
+Kaffeekapseln,Getränke
+Tee,Getränke
+Ovomaltine,Getränke
+Trinkschokolade,Getränke
+Tiefkühlgemüse,Tiefkühlprodukte
+Tiefkühlpizza,Tiefkühlprodukte
+Pommes frites,Tiefkühlprodukte
+Rösti,Tiefkühlprodukte
+Spinat (tiefgekühlt),Tiefkühlprodukte
+Beeren (tiefgekühlt),Tiefkühlprodukte
+Babynahrung,Baby
+Windeln,Baby
+Feuchttücher,Baby
+Katzenfutter,Haustier
+Hundefutter,Haustier
+Katzenstreu,Haustier
+WC-Papier,Haushalt
+Haushaltspapier,Haushalt
+Taschentücher,Haushalt
+Servietten,Haushalt
+Abwaschmittel,Haushalt
+Geschirrspültabs,Haushalt
+Klarspüler,Haushalt
+Regeneriersalz,Haushalt
+Waschmittel,Haushalt
+Weichspüler,Haushalt
+Allzweckreiniger,Haushalt
+Putzessig,Haushalt
+Entkalker,Haushalt
+WC-Reiniger,Haushalt
+Badreiniger,Haushalt
+Schwämme,Haushalt
+Abfallsäcke,Haushalt
+Backpapier,Haushalt
+Alufolie,Haushalt
+Frischhaltefolie,Haushalt
+Gefrierbeutel,Haushalt
+Batterien,Haushalt
+Kerzen,Haushalt
+Zündhölzer,Haushalt
+Zahnpasta,Körperpflege
+Zahnbürste,Körperpflege
+Zahnseide,Körperpflege
+Duschmittel,Körperpflege
+Shampoo,Körperpflege
+Spülung,Körperpflege
+Seife,Körperpflege
+Deo,Körperpflege
+Bodylotion,Körperpflege
+Sonnencreme,Körperpflege
+Rasierklingen,Körperpflege
+Wattestäbchen,Körperpflege
+Wattepads,Körperpflege
+Pflaster,Körperpflege

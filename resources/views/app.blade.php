@@ -345,7 +345,7 @@
             <p class="text-stone-600" x-text="{
                 units: $t('Units are suggested after the amount. Rename or delete your own units here, the standard units cannot be changed.'),
                 stores: $t('Shops can be chosen when editing an item, the item shows the code. Add, edit or delete your own shops here; standard shops cannot be changed, but you can hide the ones you do not use.'),
-                products: $t('Products are suggested when adding items. Rename or delete misspelled and unused ones here.'),
+                products: $t('Products are suggested when adding items. Rename or delete your own misspelled and unused ones here; standard products cannot be changed, but your photos are shown with them.'),
             }[route.view]"></p>
             <form x-show="route.view === 'stores'" @submit.prevent="createStore()" class="flex gap-2">
                 <input x-model="newStore.name" class="field min-w-0 flex-1" maxlength="255" required :placeholder="$t('New shop, e.g. Amazon')" :aria-label="$t('Name')">
@@ -376,6 +376,7 @@
                         <ul class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white text-stone-600">
                             <template x-for="entry in shownCatalog.filter((entry) => entry.is_public)" :key="entry.id">
                                 <li class="flex items-center gap-3 px-4 py-3" :class="route.view === 'stores' && storeHidden(entry) && 'text-stone-400'">
+                                    <img x-show="entry.image" :src="imageUrl(entry.image, 'thumb')" @click="openImage(entry.image)" :alt="$t('Show photo')" loading="lazy" decoding="async" class="-my-1 size-10 shrink-0 cursor-zoom-in rounded-md bg-stone-100 object-cover">
                                     <span x-show="entry.code" class="grid h-5 min-w-5 shrink-0 place-items-center rounded bg-stone-100 px-1 text-xs font-semibold" x-text="entry.code"></span>
                                     <span class="min-w-0 flex-1 truncate" x-text="entry.name"></span>
                                     {{-- Standard shops can be hidden from the shop choice (per user) --}}

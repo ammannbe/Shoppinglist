@@ -310,7 +310,7 @@
     "Price": "Preis",
     "Processing": "In Bearbeitung",
     "Products": "Produkte",
-    "Products are suggested when adding items. Rename or delete misspelled and unused ones here.": "Produkte werden beim Hinzufügen vorgeschlagen. Vertippte oder nicht mehr benötigte kannst du hier umbenennen oder löschen.",
+    "Products are suggested when adding items. Rename or delete your own misspelled and unused ones here; standard products cannot be changed, but your photos are shown with them.": "Produkte werden beim Hinzufügen vorgeschlagen. Hier kannst du eigene falsch geschriebene oder unbenutzte umbenennen oder löschen. Die Standardprodukte lassen sich nicht ändern, deine Fotos werden aber bei ihnen angezeigt.",
     "Proxy Authentication Required": "Proxy-Authentifizierung erforderlich",
     "Railgun Error": "Railgun-Fehler",
     "Range Not Satisfiable": "Bereich nicht erfüllbar",

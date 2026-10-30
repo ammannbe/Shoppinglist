@@ -273,10 +273,10 @@ class SyncTest extends TestCase
     public function test_public_products_are_read_only(): void
     {
         $user = User::factory()->create();
-        $public = new Product(['name' => 'Brot']);
-        $public->save();
+        $public = Product::whereNull('owner_id')->where('name', 'Brot')->sole();
 
-        $doc = $this->pull($user, 'products')->assertJsonPath('documents.0.is_public', true)->json('documents.0');
+        $doc = collect($this->pull($user, 'products', ['limit' => 500])->json('documents'))->firstWhere('id', $public->id);
+        $this->assertTrue($doc['is_public']);
 
         $this->push($user, 'products', [[
             'assumedMasterState' => $doc,
