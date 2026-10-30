@@ -172,6 +172,8 @@ class Assistant
             .'Ideas should combine at least two offers that go well together. '
             .'Ideas are complete recipes for '.$servings.' servings with ingredients (amount as number or null, unit like g, kg, '
             .'ml, dl, l, Stk., EL, TL, Prise or null) and short step-by-step instructions as a numbered list. '
+            .'Ingredients have short, generic names without brand, label or quality (e.g. "Kartoffeln", not "Bio-Kartoffeln" or '
+            .'"M-Classic Rindshackfleisch"), even if an offer is used for them. '
             .($units !== [] ? 'Use these units where possible: '.implode(', ', $units).'. ' : '')
             .'"category" is '.($categories !== [] ? 'one of: '.implode(', ', $categories) : 'a short dish category like "Suppen"').'. '
             .'"complexity" is how hard the recipe is. "reason" is one short sentence why it fits. '
@@ -225,7 +227,8 @@ class Assistant
             .'amounts when the units fit (convert g/kg, ml/dl/l); keep separate entries otherwise. Use short, generic names. '
             .'Skip water, salt, pepper and other basics a household always has unless listed with a large amount. '
             .'If an offer can be bought for an entry, set "offer" to the exact offer name (also for a more specific product, '
-            .'e.g. "Kürbis" ↔ "Butternusskürbis", "Kartoffeln" ↔ "Raclette-Kartoffeln") and prefer the offer\'s name for the entry. '
+            .'e.g. "Kürbis" ↔ "Butternusskürbis", "Kartoffeln" ↔ "Bio-Kartoffeln"), but keep the generic name for the entry '
+            .'(e.g. "Kartoffeln", not "Bio-Kartoffeln"; the offer is linked by "offer"). '
             .'If it is in the pantry, set "at_home" true. '
             .'"recipes" lists the recipe names that need it. Write in '.$language.'.',
             [OpenAiClient::text(json_encode(compact('recipes', 'offers', 'pantry'), JSON_UNESCAPED_UNICODE))],
@@ -252,7 +255,7 @@ class Assistant
                     'amount' => $this->roundForShopping($item['amount'] ?? null, $item['unit'] ?? null),
                     'unit' => $item['unit'] ?? null,
                     'store' => $offer['store'] ?? null,
-                    'note' => $offer ? $this->offerNote($offer) : null,
+                    'note' => $offer ? $this->offerNote($offer, $item['name']) : null,
                     'at_home' => (bool) ($item['at_home'] ?? false),
                     'recipes' => array_values($item['recipes'] ?? []),
                 ];
@@ -283,14 +286,17 @@ class Assistant
     }
 
     /**
-     * "Aktion −30 %, CHF 3.95 (statt 5.65)"
+     * "Aktion −30 %, Bio-Kartoffeln, CHF 3.95 (statt 5.65)"; the product only if it is not the item's name.
      *
      * @param  array<string, mixed>  $offer
      */
-    private function offerNote(array $offer): string
+    private function offerNote(array $offer, string $name): string
     {
+        // The item has the generic name ("Kartoffeln"), the note says which product is on offer ("Bio-Kartoffeln").
+        $product = trim(($offer['brand'] ?? '').' '.($offer['name'] ?? ''));
         $parts = array_filter([
             __('Offer').(filled($offer['discount'] ?? null) ? ' '.$offer['discount'] : ''),
+            mb_strtolower($product) !== mb_strtolower(trim($name)) ? $product : null,
             isset($offer['price']) ? 'CHF '.number_format((float) $offer['price'], 2, '.', "'")
                 .(isset($offer['regular_price']) ? ' ('.__('instead of :price', ['price' => number_format((float) $offer['regular_price'], 2, '.', "'")]).')' : '') : null,
         ]);

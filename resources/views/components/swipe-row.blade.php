@@ -19,6 +19,7 @@
                     <g x-show="action.icon === 'share'"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M18 8v6M15 11h6"/></g>
                     <path x-show="action.icon === 'delete'" d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>
                     <path x-show="action.icon === 'leave'" d="M14 4h5v16h-5M10 8l-4 4 4 4M6 12h10"/>
+                    <path x-show="action.icon === 'move'" d="M4 12h11M11 7l5 5-5 5M20 4v16"/>
                 </svg>
             </button>
         </template>

@@ -257,7 +257,9 @@ class PlannerTest extends TestCase
         ])
             ->assertOk()
             ->assertJsonPath('items.0.store', 'M')
-            ->assertJsonPath('items.0.note', 'Aktion −30 %, CHF 9.95 (statt 14.20)')
+            // The item keeps the generic name, the note names the product on offer.
+            ->assertJsonPath('items.0.name', 'Hackfleisch')
+            ->assertJsonPath('items.0.note', 'Aktion −30 %, Rindshackfleisch, CHF 9.95 (statt 14.20)')
             ->assertJsonPath('items.1.at_home', true)
             ->assertJsonPath('items.1.store', null);
 

@@ -39,6 +39,34 @@ export function parseItemInput(input, units = []) {
 }
 
 /**
+ * Values of the first column of a CSV text (comma or semicolon separated, quotes as in
+ * Excel/Numbers exports). Empty values are left out, a header "name" or "Name" too.
+ *
+ * @returns {string[]}
+ */
+export function csvFirstColumn(text) {
+    const values = [];
+    for (const line of String(text).replace(/^\uFEFF/, '').split(/\r?\n/)) {
+        let value = line;
+        const quoted = line.match(/^\s*"((?:[^"]|"")*)"/);
+        if (quoted) value = quoted[1].replace(/""/g, '"');
+        else value = line.split(/[;,]/)[0];
+        value = value.trim().replace(/\s+/g, ' ');
+        if (value) values.push(value);
+    }
+    if (values.length && ['name', 'produkt', 'product'].includes(values[0].toLowerCase())) values.shift();
+
+    return values;
+}
+
+/** A CSV cell: quoted when needed. */
+export function csvValue(value) {
+    const text = String(value ?? '');
+
+    return /[",;\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+/**
  * Comparable form of a product name: case and accents are ignored ("apfel" finds "Äpfel").
  */
 export function normalizeName(name) {

@@ -3,7 +3,7 @@ import { addRxPlugin } from 'rxdb/plugins/core';
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
 import { createApi, HttpError } from './api.js';
 import { createDatabase, removeDatabase, startReplication } from './db/index.js';
-import { byPosition, compareBy, formatAmount, mergedAmount, nextPosition, normalizeName, parseItemInput, sameName, uuid7 } from './helpers.js';
+import { byPosition, compareBy, csvFirstColumn, csvValue, formatAmount, mergedAmount, nextPosition, normalizeName, parseItemInput, sameName, uuid7 } from './helpers.js';
 import { hasPendingLocale, htmlLang, initialLocale, LOCALES, storeLocale, translate } from './i18n.js';
 import { registerServiceWorker } from './pwa.js';
 import { shrinkIcon, shrinkImage } from './image.js';
@@ -12,7 +12,7 @@ import { createPrefsStore } from './prefs.js';
 import { offersPool } from './offers.js';
 import { planner } from './planner.js';
 import { recipeHistory } from './recipe-history.js';
-import { deviceCountry, inCountry, storeIconUrl } from './stores.js';
+import { deviceCountry, inCountry, storeIconUrl, storeUsage } from './stores.js';
 import { suggestField } from './suggest.js';
 import { swipeRow } from './swipe.js';
 import { createUndoStore } from './undo.js';
@@ -113,11 +113,16 @@ Alpine.data('shoppinglist', () => ({
     route: { view: 'lists', id: null },
     newListName: '',
     newItemText: '',
+    // Shop (tag) for new items, chosen before typing; kept until changed.
+    newItemStore: '',
+    newProductName: '',
     showDone: false,
     editing: null,
     imageBusy: false,
     // New entry of a product that is already open on the list: { existing, parsed, merged }
     duplicate: null,
+    // Item being moved to another list (dialog).
+    moving: null,
     catalogSearch: '',
     catalogLimit: CATALOG_PAGE,
     catalogLoading: false,
@@ -206,6 +211,13 @@ Alpine.data('shoppinglist', () => ({
     /** Shops offered in the edit dialog: own ones and the standard shops of the country the user has not hidden. */
     get choosableStores() {
         return this.stores.filter((store) => !store.is_public || (inCountry(store, this.country) && !this.storeHidden(store)));
+    },
+    /** Shops for new items: the choosable ones, most used first. */
+    get quickStores() {
+        const usage = storeUsage(Alpine.store('data').items);
+        const score = (store) => usage.get(normalizeName(this.storeTag(store))) ?? 0;
+
+        return [...this.choosableStores].sort((a, b) => score(b) - score(a) || byName(a, b));
     },
     storeTag(store) {
         return store.code || store.name;
@@ -391,6 +403,7 @@ Alpine.data('shoppinglist', () => ({
     itemActions(item) {
         return [
             { label: this.$t('Edit'), icon: 'edit', run: () => this.edit(item) },
+            ...(this.lists.length > 1 ? [{ label: this.$t('Move to list'), icon: 'move', run: () => this.openMove(item) }] : []),
             { label: this.$t('Delete'), icon: 'delete', danger: true, run: () => this.deleteItem(item) },
         ];
     },
@@ -516,6 +529,7 @@ Alpine.data('shoppinglist', () => ({
             id: uuid7(),
             shopping_list_id: this.route.id,
             ...parsed,
+            stores: this.newItemStore ? [this.newItemStore] : [],
             image: ownProduct(parsed.name)?.image ?? null,
             position: nextPosition(this.itemsOf(this.route.id)),
             creator_email: Alpine.store('sync').user?.email ?? null,
@@ -552,6 +566,56 @@ Alpine.data('shoppinglist', () => ({
         }
 
         return null;
+    },
+
+    // ---- own products: add, export and import (CSV with one column "name")
+
+    async createProduct() {
+        const name = this.newProductName.trim().replace(/\s+/g, ' ');
+        if (!name) return;
+        if (Alpine.store('data').products.some((product) => !Alpine.store('undo').hidden(product.id) && sameName(product.name, name))) {
+            return Alpine.store('notice').show(this.$t('“:name” already exists.', { name }));
+        }
+        await db.products.insert({ id: uuid7(), name });
+        this.newProductName = '';
+    },
+
+    get ownProducts() {
+        return Alpine.store('data').products.filter((product) => !product.is_public && !Alpine.store('undo').hidden(product.id));
+    },
+
+    exportProducts() {
+        const names = this.ownProducts.map((product) => product.name).sort((a, b) => a.localeCompare(b));
+        const csv = ['name', ...names.map(csvValue)].join('\r\n');
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' }));
+        link.download = `${this.$t('products')}-${new Date().toISOString().slice(0, 10)}.csv`;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    },
+
+    /**
+     * Imports product names from a CSV file. "replace" deletes the own products first (with
+     * their photos), "add" only adds the missing ones. Names of standard products are skipped.
+     */
+    async importProducts(event, mode) {
+        const file = event.target.files[0];
+        event.target.value = '';
+        if (!file) return;
+        const names = csvFirstColumn(await file.text()).map((name) => name.slice(0, 255));
+        if (!names.length) return Alpine.store('notice').show(this.$t('The file contains no products.'));
+        const own = this.ownProducts;
+        if (mode === 'replace' && !confirm(this.$t('Delete your :count own products (with their photos) and import :new?', { count: own.length, new: names.length }))) return;
+
+        if (mode === 'replace') await db.products.bulkRemove(own.map((product) => product.id));
+        const known = Alpine.store('data').products
+            .filter((product) => product.is_public || (mode !== 'replace' && !Alpine.store('undo').hidden(product.id)));
+        const added = [];
+        for (const name of names) {
+            if (![...known, ...added].some((product) => sameName(product.name, name))) added.push({ id: uuid7(), name });
+        }
+        if (added.length) await db.products.bulkInsert(added);
+        Alpine.store('notice').show(this.$t(':added of :total products imported (the others already exist).', { added: added.length, total: names.length }));
     },
 
     async createStore() {
@@ -780,6 +844,34 @@ Alpine.data('shoppinglist', () => ({
     closeEdit() {
         this.$refs.editDialog.close();
         this.editing = null;
+    },
+
+    // ---- moving an item to another list
+
+    openMove(item = this.editing) {
+        if (this.editing) this.closeEdit();
+        this.moving = item;
+        this.$nextTick(() => this.$refs.moveDialog.showModal());
+    },
+
+    /**
+     * The server keeps an item in its list, so moving is a copy at the end of the target list
+     * (with a new id) and deleting the original. Works offline like any other change.
+     */
+    async moveItem(listId) {
+        const item = this.moving;
+        this.$refs.moveDialog.close();
+        const fields = ['name', 'amount', 'unit', 'stores', 'note', 'recipes', 'image', 'done', 'creator_email'];
+        await db.items.insert({
+            ...Object.fromEntries(fields.map((field) => [field, item[field] ?? null])),
+            stores: [...(item.stores ?? [])],
+            recipes: (item.recipes ?? []).map(({ name, url }) => ({ name, url: url ?? null })),
+            done: Boolean(item.done),
+            id: uuid7(),
+            shopping_list_id: listId,
+            position: nextPosition(this.itemsOf(listId)),
+        });
+        await (await db.items.findOne(item.id).exec())?.remove();
     },
 
     // ---- sorting (lists overview: per user, items: per list)
