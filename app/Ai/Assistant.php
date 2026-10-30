@@ -146,9 +146,10 @@ class Assistant
      * @param  list<array<string, mixed>>  $pantry
      * @param  list<array{id: int, name: string, foods: list<string>}>  $candidates
      * @param  array{categories?: list<string>, units?: list<string>, complexities?: list<string>}|null  $vocabulary  of the recipe app
+     * @param  list<string>  $exclude  names of dishes already suggested
      * @return array{picks: list<array<string, mixed>>, ideas: list<array<string, mixed>>}
      */
-    public function suggest(array $offers, array $pantry, array $candidates, int $servings, int $count, bool $ideas, ?string $wishes, string $language, ?array $vocabulary = null): array
+    public function suggest(array $offers, array $pantry, array $candidates, int $servings, int $count, bool $ideas, ?string $wishes, string $language, ?array $vocabulary = null, array $exclude = []): array
     {
         $complexities = ($vocabulary['complexities'] ?? []) ?: self::COMPLEXITIES;
         $categories = $vocabulary['categories'] ?? [];
@@ -166,7 +167,9 @@ class Assistant
             .($units !== [] ? 'Use these units where possible: '.implode(', ', $units).'. ' : '')
             .'"category" is '.($categories !== [] ? 'one of: '.implode(', ', $categories) : 'a short dish category like "Suppen"').'. '
             .'"complexity" is how hard the recipe is. "reason" is one short sentence why it fits. '
-            .'"uses_offers" and "uses_pantry" contain the exact names from the input. Vary the dishes. Write in '.$language.'.',
+            .'"uses_offers" and "uses_pantry" contain the exact names from the input. Vary the dishes. '
+            .($exclude !== [] ? 'The user already has these dishes, suggest different ones: '.implode('; ', $exclude).'. ' : '')
+            .'Write in '.$language.'.',
             [OpenAiClient::text(json_encode(compact('offers', 'pantry', 'candidates', 'wishes'), JSON_UNESCAPED_UNICODE))],
             'suggestions',
             $this->object([

@@ -7,7 +7,7 @@ const KEY = 'shoppinglist.prefs';
 const PENDING_KEY = 'shoppinglist.prefs-pending';
 
 // Same as PreferenceController::DEFAULTS.
-const DEFAULTS = { row_actions: 'swipe', list_sort: 'name_asc' };
+const DEFAULTS = { row_actions: 'swipe', list_sort: 'name_asc', hidden_stores: [] };
 
 export function createPrefsStore(api) {
     const stored = JSON.parse(localStorage.getItem(KEY) ?? '{}');

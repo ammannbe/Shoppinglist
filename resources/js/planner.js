@@ -40,6 +40,8 @@ function initialState() {
         wishes: '',
         suggestions: [],
         warning: null,
+        // The warning belongs to "suggest more" (shown below that button).
+        warningMore: false,
         items: [],
         target: '',
         listName: '',
@@ -57,8 +59,12 @@ export function planner({ addItems, lists }) {
         ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}'),
         offerText: '',
         newPantryItem: '',
+        // Progress label and the button it belongs to (shows the spinner and the label).
         busy: null,
+        busyKey: null,
+        // Error and the button it belongs to (shown below it).
         error: null,
+        errorKey: null,
 
         init() {
             const save = () => {
@@ -91,17 +97,25 @@ export function planner({ addItems, lists }) {
         reset() {
             Object.assign(this, initialState());
             this.error = null;
+            this.errorKey = null;
+        },
+
+        /** Label of a button: the progress while its request runs. */
+        label(key, text) {
+            return this.busyKey === key ? this.busy : text;
         },
 
         /**
          * Runs a server request with a progress label and readable errors.
          */
-        async run(label, action) {
+        async run(key, label, action) {
+            this.errorKey = key;
             if (!navigator.onLine) {
                 this.error = this.$t('This needs an internet connection.');
                 return;
             }
             this.busy = label;
+            this.busyKey = key;
             this.error = null;
             try {
                 await action();
@@ -111,6 +125,7 @@ export function planner({ addItems, lists }) {
                     : this.$t('This needs an internet connection.');
             } finally {
                 this.busy = null;
+                this.busyKey = null;
             }
         },
 
@@ -120,7 +135,7 @@ export function planner({ addItems, lists }) {
             const files = [...event.target.files];
             event.target.value = '';
             for (const [index, file] of files.entries()) {
-                await this.run(this.$t('Reading offers :current/:total …', { current: index + 1, total: files.length }), async () => {
+                await this.run('offerFiles', this.$t('Reading offers :current/:total …', { current: index + 1, total: files.length }), async () => {
                     const form = new FormData();
                     form.append('file', await prepareForAi(file), file.name);
                     this.addOffers((await api.post('/planner/offers', form)).offers);
@@ -132,7 +147,7 @@ export function planner({ addItems, lists }) {
         async readOfferText() {
             const text = this.offerText.trim();
             if (!text) return;
-            await this.run(this.$t('Reading offers …'), async () => {
+            await this.run('offerText', this.$t('Reading offers …'), async () => {
                 const parts = splitText(text, TEXT_LIMIT);
                 while (parts.length) {
                     this.addOffers((await api.post('/planner/offers', { text: parts[0] })).offers);
@@ -157,7 +172,7 @@ export function planner({ addItems, lists }) {
             const files = [...event.target.files].slice(0, 6);
             event.target.value = '';
             if (!files.length) return;
-            await this.run(this.$t('Looking at the photos …'), async () => {
+            await this.run('pantry', this.$t('Looking at the photos …'), async () => {
                 const form = new FormData();
                 for (const file of files) form.append('photos[]', await prepareForAi(file), file.name);
                 const { items } = await api.post('/planner/pantry', form);
@@ -186,8 +201,11 @@ export function planner({ addItems, lists }) {
             return this.selectedPantry.map(({ name, amount }) => ({ name, amount }));
         },
 
-        async suggest() {
-            await this.run(this.$t('Looking for recipes …'), async () => {
+        /**
+         * New suggestions; with `more` they are added to the shown ones, which are left out.
+         */
+        async suggest(more = false) {
+            await this.run(more ? 'more' : 'suggest', this.$t('Looking for recipes …'), async () => {
                 const result = await api.post('/planner/suggestions', {
                     offers: this.offerPayload(),
                     pantry: this.pantryPayload(),
@@ -195,12 +213,19 @@ export function planner({ addItems, lists }) {
                     count: Number(this.count) || 5,
                     ideas: this.ideas,
                     wishes: this.wishes.trim() || null,
+                    exclude: more ? {
+                        recipe_ids: this.suggestions.map((suggestion) => suggestion.recipe_id).filter(Boolean),
+                        names: this.suggestions.map((suggestion) => suggestion.name),
+                    } : undefined,
                 });
-                this.suggestions = result.suggestions.map((suggestion) => ({
-                    ...suggestion, selected: true, servings: Number(this.servings) || 4, savedUrl: null,
+                const known = new Set(more ? this.suggestions.map((suggestion) => suggestion.key) : []);
+                const added = result.suggestions.filter((suggestion) => !known.has(suggestion.key)).map((suggestion) => ({
+                    ...suggestion, selected: !more, servings: Number(this.servings) || 4, savedUrl: null,
                 }));
-                this.warning = result.warning;
-                this.items = [];
+                this.suggestions = more ? [...this.suggestions, ...added] : added;
+                this.warning = more && !added.length ? this.$t('No further recipes found.') : result.warning;
+                this.warningMore = more;
+                if (!more) this.items = [];
             });
         },
 
@@ -209,7 +234,7 @@ export function planner({ addItems, lists }) {
         async saveIdea(suggestion) {
             // Open the tab while still in the click, otherwise browsers block it as a pop-up.
             const tab = navigator.onLine ? window.open('', '_blank') : null;
-            await this.run(this.$t('Handing over …'), async () => {
+            await this.run(`idea:${suggestion.key}`, this.$t('Handing over …'), async () => {
                 const { url } = await api.post('/planner/recipes', {
                     name: suggestion.name,
                     servings: suggestion.servings,
@@ -230,7 +255,7 @@ export function planner({ addItems, lists }) {
         // ---- 4. shopping list
 
         async buildList() {
-            await this.run(this.$t('Creating the shopping list …'), async () => {
+            await this.run('list', this.$t('Creating the shopping list …'), async () => {
                 const { items } = await api.post('/planner/list', {
                     offers: this.offerPayload(),
                     pantry: this.pantryPayload(),

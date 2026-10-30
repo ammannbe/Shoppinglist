@@ -190,7 +190,7 @@
                                     <span x-show="amount(item)" class="mr-2 shrink-0 tabular-nums text-stone-500" x-text="amount(item)"></span>
                                     <span class="min-w-0">
                                         <span class="block truncate" x-text="item.name"></span>
-                                        <span x-show="item.note" class="block truncate text-xs text-stone-500" x-text="item.note"></span>
+                                        <span x-show="item.note" class="block whitespace-pre-line break-words text-xs text-stone-500" x-text="item.note"></span>
                                     </span>
                                 </button>
                             </x-swipe-row>
@@ -323,7 +323,7 @@
         <section x-show="['products', 'units', 'stores'].includes(route.view)" class="space-y-4">
             <p class="text-stone-600" x-text="{
                 units: $t('Units are suggested after the amount. Rename or delete your own units here, the standard units cannot be changed.'),
-                stores: $t('Shops can be chosen when editing an item, the item shows the code. Add, edit or delete your own shops here, the standard shops cannot be changed.'),
+                stores: $t('Shops can be chosen when editing an item, the item shows the code. Add, edit or delete your own shops here; standard shops cannot be changed, but you can hide the ones you do not use.'),
                 products: $t('Products are suggested when adding items. Rename or delete misspelled and unused ones here.'),
             }[route.view]"></p>
             <form x-show="route.view === 'stores'" @submit.prevent="createStore()" class="flex gap-2">
@@ -332,7 +332,7 @@
                     :placeholder="newStore.name.trim() ? suggestedCode(newStore.name) : $t('Code')" :aria-label="$t('Code')">
                 <button class="button-secondary" x-text="$t('Add')"></button>
             </form>
-            <input x-model="catalogSearch" type="search" class="field w-full" autocomplete="off"
+            <input x-model="catalogSearch" @input="catalogLimit = 200" type="search" class="field w-full" autocomplete="off"
                 :placeholder="{ units: $t('Search units'), stores: $t('Search shops'), products: $t('Search products') }[route.view]"
                 :aria-label="{ units: $t('Search units'), stores: $t('Search shops'), products: $t('Search products') }[route.view]">
 
@@ -355,17 +355,24 @@
                         <h2 class="mb-2 text-sm font-medium text-stone-600" x-text="$t('Standard')"></h2>
                         <ul class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white text-stone-600">
                             <template x-for="entry in shownCatalog.filter((entry) => entry.is_public)" :key="entry.id">
-                                <li class="flex items-center gap-3 px-4 py-3">
+                                <li class="flex items-center gap-3 px-4 py-3" :class="route.view === 'stores' && storeHidden(entry) && 'text-stone-400'">
                                     <span x-show="entry.code" class="grid h-5 min-w-5 shrink-0 place-items-center rounded bg-stone-100 px-1 text-xs font-semibold" x-text="entry.code"></span>
                                     <span class="min-w-0 flex-1 truncate" x-text="entry.name"></span>
+                                    {{-- Standard shops can be hidden from the shop choice (per user) --}}
+                                    <label x-show="route.view === 'stores'" class="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-stone-600">
+                                        <input type="checkbox" class="size-4 accent-emerald-700" :checked="!storeHidden(entry)" @change="toggleStoreHidden(entry)">
+                                        <span x-text="$t('Show')"></span>
+                                    </label>
                                 </li>
                             </template>
                         </ul>
                     </div>
                 </div>
             </template>
-            <p x-show="catalog.length > shownCatalog.length" class="text-center text-sm text-stone-500"
-                x-text="$t('Showing :shown of :total, search to narrow down.', { shown: shownCatalog.length, total: catalog.length })"></p>
+            <div x-show="catalog.length > shownCatalog.length" class="space-y-2 text-center">
+                <p class="text-sm text-stone-500" x-text="$t('Showing :shown of :total.', { shown: shownCatalog.length, total: catalog.length })"></p>
+                <button type="button" class="button-secondary" @click="showMoreCatalog()" x-text="$t('Show more')"></button>
+            </div>
         </section>
 
         @include('partials.planner')
@@ -472,7 +479,7 @@
                     <label class="block min-w-0 w-1/3">
                         <span class="label" x-text="$t('Shop')"></span>
                         <span class="relative block" @click.outside="close()"
-                            x-data="suggestField({ source: 'store', get: () => editing.store ?? '', set: (value) => editing.store = value, stores: () => stores })">
+                            x-data="suggestField({ source: 'store', get: () => editing.store ?? '', set: (value) => editing.store = value, stores: () => choosableStores })">
                             <input x-model="editing.store" class="field w-full" maxlength="255" autocomplete="off" autocorrect="off"
                                 role="combobox" aria-autocomplete="list" aria-controls="store-suggestions" :aria-expanded="visible"
                                 :aria-activedescendant="active >= 0 ? `store-suggestions-${active}` : null"
@@ -483,7 +490,8 @@
                     </label>
                     <label class="block min-w-0 w-2/3">
                         <span class="label" x-text="$t('Note')"></span>
-                        <input x-model="editing.note" class="field w-full" maxlength="255">
+                        {{-- Grows with the text (field-sizing), line breaks are kept --}}
+                        <textarea x-model="editing.note" rows="1" class="field block max-h-40 w-full resize-none field-sizing-content" maxlength="255"></textarea>
                     </label>
                 </div>
                 {{-- Photo of the product: shown for every item with this name --}}

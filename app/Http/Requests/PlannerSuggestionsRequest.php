@@ -17,6 +17,12 @@ class PlannerSuggestionsRequest extends FormRequest
             'count' => ['required', 'integer', 'min:1', 'max:10'],
             'ideas' => ['required', 'boolean'],
             'wishes' => ['nullable', 'string', 'max:500'],
+            // "Suggest more": recipes already shown, not suggested again.
+            'exclude' => ['sometimes', 'array'],
+            'exclude.recipe_ids' => ['sometimes', 'array', 'max:100'],
+            'exclude.recipe_ids.*' => ['integer'],
+            'exclude.names' => ['sometimes', 'array', 'max:100'],
+            'exclude.names.*' => ['string', 'max:255'],
         ];
     }
 

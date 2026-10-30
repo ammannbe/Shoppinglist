@@ -10,11 +10,8 @@
         <a href="/recipes/connect" data-online class="button-secondary shrink-0 text-sm" x-text="$t('Connect with :name', { name: recipes?.name })"></a>
     </div>
 
-    <p x-show="error" class="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-800" role="alert" x-text="error"></p>
-    <p x-show="busy" class="flex items-center gap-3 rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-900" role="status">
-        <span class="size-4 shrink-0 animate-spin rounded-full border-2 border-emerald-700 border-t-transparent" aria-hidden="true"></span>
-        <span x-text="busy"></span>
-    </p>
+    {{-- Progress and errors are shown at the button that started the request; screen readers get the progress here --}}
+    <p class="sr-only" role="status" x-text="busy ?? ''"></p>
 
     {{-- 1. Offers --}}
     <div class="space-y-3">
@@ -22,8 +19,10 @@
         <p class="text-sm text-stone-500" x-text="$t('Screenshots from the shop app, the flyer as PDF or photos of it. Migros, Coop, Aldi, Lidl and Denner get their shop code automatically.')"></p>
         <label class="button-secondary inline-flex cursor-pointer items-center gap-2" :class="busy && 'pointer-events-none opacity-50'">
             <input type="file" accept="image/*,application/pdf" multiple class="sr-only" :disabled="busy" @change="readOfferFiles($event)">
-            <span x-text="$t('Add screenshots, photos or PDF')"></span>
+            <x-spinner x-show="busyKey === 'offerFiles'" />
+            <span x-text="label('offerFiles', $t('Add screenshots, photos or PDF'))"></span>
         </label>
+        <x-planner-error key="offerFiles" />
         @php
             // How to get the offers of each shop (shop pages are German, the labels quoted here too).
             $offerSources = [
@@ -76,7 +75,11 @@
         </details>
         <form @submit.prevent="readOfferText()" class="space-y-2">
             <textarea x-model="offerText" rows="2" class="field w-full text-sm" :placeholder="$t('… or paste the offers as text')"></textarea>
-            <button x-show="offerText.trim()" class="button-secondary text-sm" :disabled="busy" x-text="$t('Read text')"></button>
+            <button x-show="offerText.trim() || busyKey === 'offerText'" class="button-secondary inline-flex items-center gap-2 text-sm" :disabled="busy">
+                <x-spinner x-show="busyKey === 'offerText'" />
+                <span x-text="label('offerText', $t('Read text'))"></span>
+            </button>
+            <x-planner-error key="offerText" />
         </form>
 
         <ul x-show="offers.length" class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
@@ -101,8 +104,10 @@
         <p class="text-sm text-stone-500" x-text="$t('Photos of the fridge, freezer or pantry: what is already there is used first and left off the list.')"></p>
         <label class="button-secondary inline-flex cursor-pointer items-center gap-2" :class="busy && 'pointer-events-none opacity-50'">
             <input type="file" accept="image/*" multiple class="sr-only" :disabled="busy" @change="readPantry($event)">
-            <span x-text="$t('Add photos')"></span>
+            <x-spinner x-show="busyKey === 'pantry'" />
+            <span x-text="label('pantry', $t('Add photos'))"></span>
         </label>
+        <x-planner-error key="pantry" />
         <div x-show="pantry.length" class="flex flex-wrap gap-2">
             <template x-for="(item, index) in pantry" :key="index">
                 <label class="flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-sm"
@@ -136,8 +141,12 @@
             <input type="checkbox" class="size-4 accent-emerald-700" x-model="ideas">
             <span x-text="$t('Also new recipe ideas of the AI')"></span>
         </label>
-        <button type="button" class="button w-full" :disabled="busy || (!selectedOffers.length && !selectedPantry.length)" @click="suggest()" x-text="$t('Suggest recipes')"></button>
-        <p x-show="warning" class="notice" x-text="warning"></p>
+        <button type="button" class="button flex w-full items-center justify-center gap-2" :disabled="busy || (!selectedOffers.length && !selectedPantry.length)" @click="suggest()">
+            <x-spinner x-show="busyKey === 'suggest'" />
+            <span x-text="label('suggest', $t('Suggest recipes'))"></span>
+        </button>
+        <x-planner-error key="suggest" />
+        <p x-show="warning && !warningMore" class="notice" x-text="warning"></p>
 
         <div class="space-y-3">
             <template x-for="suggestion in suggestions" :key="suggestion.key">
@@ -167,8 +176,12 @@
                                     <template x-if="recipes?.connected">
                                         <p class="mt-2">
                                             <a x-show="suggestion.savedUrl" :href="suggestion.savedUrl" target="_blank" rel="noopener" class="font-medium underline" x-text="$t('Check and import in :name', { name: recipes.name })"></a>
-                                            <button x-show="!suggestion.savedUrl" type="button" class="font-medium underline" :disabled="busy" @click="saveIdea(suggestion)" x-text="$t('Import into :name', { name: recipes.name })"></button>
+                                            <button x-show="!suggestion.savedUrl" type="button" class="inline-flex items-center gap-2 font-medium underline disabled:opacity-50" :disabled="busy" @click="saveIdea(suggestion)">
+                                                <x-spinner x-show="busyKey === `idea:${suggestion.key}`" />
+                                                <span x-text="label(`idea:${suggestion.key}`, $t('Import into :name', { name: recipes.name }))"></span>
+                                            </button>
                                         </p>
+                                        <p x-show="error && errorKey === `idea:${suggestion.key}`" class="mt-2 rounded-lg bg-red-50 px-3 py-2 text-red-800" role="alert" x-text="error"></p>
                                     </template>
                                 </details>
                             </template>
@@ -181,12 +194,22 @@
                 </div>
             </template>
         </div>
+        <button type="button" x-show="suggestions.length" class="button-secondary flex w-full items-center justify-center gap-2" :disabled="busy" @click="suggest(true)">
+            <x-spinner x-show="busyKey === 'more'" />
+            <span x-text="label('more', $t('Suggest more recipes'))"></span>
+        </button>
+        <x-planner-error key="more" />
+        <p x-show="warning && warningMore" class="notice" x-text="warning"></p>
     </div>
 
     {{-- 4. Shopping list --}}
     <div x-show="suggestions.length" class="space-y-3">
         <h2 class="font-semibold" x-text="'4. ' + $t('Shopping list')"></h2>
-        <button type="button" class="button w-full" :disabled="busy || !selectedSuggestions.length" @click="buildList()" x-text="$t('Create shopping list')"></button>
+        <button type="button" class="button flex w-full items-center justify-center gap-2" :disabled="busy || !selectedSuggestions.length" @click="buildList()">
+            <x-spinner x-show="busyKey === 'list'" />
+            <span x-text="label('list', $t('Create shopping list'))"></span>
+        </button>
+        <x-planner-error key="list" />
 
         <template x-if="items.length">
             <div class="space-y-3">

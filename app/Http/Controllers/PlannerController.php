@@ -11,6 +11,7 @@ use App\Recipes\RecipesException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 /**
  * Week planner: offers and pantry are read by the AI, recipes come from the connected
@@ -50,10 +51,12 @@ class PlannerController extends Controller
 
         return $this->answer(function () use ($data, $offers, $pantry, $user) {
             [$candidates, $urls, $warning] = $this->candidates($user, $offers, $pantry);
+            $excludedIds = $data['exclude']['recipe_ids'] ?? [];
+            $candidates = array_values(array_filter($candidates, fn (array $candidate) => ! in_array($candidate['id'], $excludedIds, true)));
             $result = $this->assistant->suggest(
                 $offers, $pantry, $candidates, (int) $data['servings'], (int) $data['count'],
                 (bool) $data['ideas'] || $candidates === [], $data['wishes'] ?? null, $this->language(),
-                $this->vocabulary($user),
+                $this->vocabulary($user), $data['exclude']['names'] ?? [],
             );
             $names = array_column($candidates, 'name', 'id');
 
@@ -68,11 +71,12 @@ class PlannerController extends Controller
                     'uses_offers' => $pick['uses_offers'],
                     'uses_pantry' => $pick['uses_pantry'],
                 ], $result['picks']),
-                ...array_map(fn (array $idea, int $i) => [
-                    'key' => 'idea-'.$i,
+                // Unique keys: "suggest more" appends to the shown suggestions.
+                ...array_map(fn (array $idea) => [
+                    'key' => 'idea-'.Str::uuid7(),
                     'source' => 'ai',
                     ...$idea,
-                ], $result['ideas'], array_keys($result['ideas'])),
+                ], $result['ideas']),
             ];
 
             return ['suggestions' => $suggestions, 'warning' => $warning];

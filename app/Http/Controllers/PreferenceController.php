@@ -16,6 +16,8 @@ class PreferenceController extends Controller
         'row_actions' => 'swipe',
         // Order of the lists overview.
         'list_sort' => 'name_asc',
+        // Codes of the standard shops hidden in the shop choice and the filter.
+        'hidden_stores' => [],
     ];
 
     public const SORTS = ['manual', 'name_asc', 'name_desc', 'newest', 'oldest'];
@@ -25,6 +27,8 @@ class PreferenceController extends Controller
         $validated = $request->validate([
             'row_actions' => ['sometimes', Rule::in(['swipe', 'longpress'])],
             'list_sort' => ['sometimes', Rule::in(self::SORTS)],
+            'hidden_stores' => ['sometimes', 'array', 'max:50'],
+            'hidden_stores.*' => ['string', 'max:10'],
         ]);
 
         $user = $request->user();

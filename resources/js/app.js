@@ -93,8 +93,8 @@ Alpine.data('swipeRow', swipeRow);
 Alpine.data('suggestField', suggestField);
 Alpine.data('planner', planner);
 
-// The products/units/shops view renders at most this many rows, the search narrows it down.
-const CATALOG_SHOWN = 200;
+// The products/units/shops view renders this many rows at a time ("Show more" adds as many).
+const CATALOG_PAGE = 200;
 
 const byName = (a, b) => a.name.localeCompare(b.name, Alpine.store('i18n').locale.replace('_', '-'));
 const byId = (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
@@ -112,6 +112,7 @@ Alpine.data('shoppinglist', () => ({
     // New entry of a product that is already open on the list: { existing, parsed, merged }
     duplicate: null,
     catalogSearch: '',
+    catalogLimit: CATALOG_PAGE,
     renaming: null,
     renamingDoc: null,
     newStore: { name: '', code: '' },
@@ -137,6 +138,7 @@ Alpine.data('shoppinglist', () => ({
             this.menu = null;
             this.duplicate = null;
             this.catalogSearch = '';
+            this.catalogLimit = CATALOG_PAGE;
         };
         window.addEventListener('hashchange', parse);
         parse();
@@ -188,6 +190,21 @@ Alpine.data('shoppinglist', () => ({
         return [...(stores.some((store) => store.is_public) ? [] : DEFAULT_STORES), ...stores]
             .sort((a, b) => Number(b.is_public) - Number(a.is_public) || byName(a, b));
     },
+    /** Shops offered in the edit dialog: without the standard shops the user has hidden. */
+    get choosableStores() {
+        const hidden = Alpine.store('prefs').hidden_stores ?? [];
+
+        return this.stores.filter((store) => !store.is_public || !hidden.includes(store.code));
+    },
+    storeHidden(store) {
+        return (Alpine.store('prefs').hidden_stores ?? []).includes(store.code);
+    },
+    toggleStoreHidden(store) {
+        const hidden = Alpine.store('prefs').hidden_stores ?? [];
+        Alpine.store('prefs').set('hidden_stores', hidden.includes(store.code)
+            ? hidden.filter((code) => code !== store.code)
+            : [...hidden, store.code]);
+    },
     storeByCode(code) {
         return code ? this.stores.find((store) => sameName(store.code, code)) ?? null : null;
     },
@@ -215,8 +232,11 @@ Alpine.data('shoppinglist', () => ({
             .filter((entry) => !search || normalizeName(entry.name).includes(search) || normalizeName(entry.code).startsWith(search))
             .sort((a, b) => Number(a.is_public) - Number(b.is_public) || byName(a, b));
     },
+    showMoreCatalog() {
+        this.catalogLimit += CATALOG_PAGE;
+    },
     get shownCatalog() {
-        return this.catalog.slice(0, CATALOG_SHOWN);
+        return this.catalog.slice(0, this.catalogLimit);
     },
     /**
      * Week planner with AI: configured on the server, needs a verified account.
