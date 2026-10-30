@@ -20,12 +20,12 @@ class StoreResource extends CatalogResource
 
     protected function attributes(array $new): array
     {
-        $code = Str::upper(trim((string) ($new['code'] ?? '')));
+        // Optional and kept as typed; without a code the items show the name.
+        $code = trim((string) ($new['code'] ?? ''));
 
         return [
             ...parent::attributes($new),
-            // Without a code the start of the name, like the client does.
-            'code' => Str::limit($code !== '' ? $code : Str::upper(Str::substr(trim($new['name']), 0, 3)), 10, ''),
+            'code' => $code !== '' ? Str::limit($code, 10, '') : null,
         ];
     }
 }

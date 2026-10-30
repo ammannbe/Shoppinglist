@@ -188,6 +188,41 @@ class PlannerTest extends TestCase
         });
     }
 
+    public function test_more_suggestions_leave_out_the_shown_recipes(): void
+    {
+        Http::fake([
+            'recipes.test/api/foods' => Http::response(['data' => [['id' => 1, 'name' => 'Hackfleisch']]]),
+            'recipes.test/api/vocabulary' => Http::response(['data' => ['categories' => [], 'units' => [], 'complexities' => []]]),
+            'recipes.test/api/recipes/search' => Http::response(['data' => [
+                ['id' => 5, 'name' => 'Lasagne', 'url' => 'https://recipes.test/recipes/5', 'food_ids' => [1]],
+                ['id' => 6, 'name' => 'Chili', 'url' => 'https://recipes.test/recipes/6', 'food_ids' => [1]],
+            ]]),
+            'openai.test/*' => Http::sequence()
+                ->push($this->ai(['matches' => [['product' => 'Rindshackfleisch', 'food_id' => 1]]]))
+                ->push($this->ai(['picks' => [['recipe_id' => 5, 'reason' => 'shown before', 'uses_offers' => [], 'uses_pantry' => []]], 'ideas' => [
+                    ['name' => 'Burger', 'reason' => 'x', 'servings' => 2, 'ingredients' => [], 'instructions' => '1.', 'uses_offers' => [], 'uses_pantry' => []],
+                    ['name' => 'Tacos', 'reason' => 'x', 'servings' => 2, 'ingredients' => [], 'instructions' => '1.', 'uses_offers' => [], 'uses_pantry' => []],
+                ]])),
+        ]);
+
+        $suggestions = $this->actingAs($this->connected())->postJson('/planner/suggestions', [
+            'offers' => [['name' => 'Rindshackfleisch']], 'pantry' => [], 'servings' => 2, 'count' => 3, 'ideas' => true,
+            'exclude' => ['recipe_ids' => [5], 'names' => ['Lasagne', 'Omelette']],
+        ])->assertOk()->json('suggestions');
+
+        // A shown recipe is neither offered to the AI nor accepted as a pick.
+        $this->assertSame(['Burger', 'Tacos'], array_column($suggestions, 'name'));
+        $this->assertNotSame($suggestions[0]['key'], $suggestions[1]['key']);
+        Http::assertSent(function (Request $request) {
+            if (! str_contains($request->url(), 'openai.test') || ! str_contains($request['instructions'] ?? '', 'combine several offers')) {
+                return false;
+            }
+
+            return array_column(json_decode($request['input'][0]['content'][0]['text'], true)['candidates'], 'id') === [6]
+                && str_contains($request['instructions'], 'suggest different ones: Lasagne; Omelette');
+        });
+    }
+
     public function test_suggestions_without_recipe_app_are_ideas_only(): void
     {
         Http::fake(['openai.test/*' => Http::response($this->ai(['picks' => [], 'ideas' => []]))]);

@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['name', 'amount', 'unit', 'store', 'note', 'image', 'done', 'position'])]
+#[Fillable(['name', 'amount', 'unit', 'stores', 'note', 'recipes', 'image', 'done', 'position'])]
 class Item extends Model
 {
     use HasFactory, Syncable;
@@ -19,6 +19,8 @@ class Item extends Model
             'amount' => 'float',
             'done' => 'boolean',
             'position' => 'float',
+            'stores' => 'array',
+            'recipes' => 'array',
         ];
     }
 

@@ -124,7 +124,7 @@ class ImportLegacyDataTest extends TestCase
         $this->assertSame('2020-10-01 12:00:00.000', $item->syncTimestamp());
 
         $this->assertNull(Product::firstWhere('name', 'Brot')->owner_id);
-        $this->assertSame($ben->id, Product::firstWhere('name', 'Tofu')->owner_id);
+        $this->assertSame($ben->id, Product::whereNotNull('owner_id')->firstWhere('name', 'Tofu')->owner_id);
         $this->assertSame('kg', Unit::sole()->name);
     }
 

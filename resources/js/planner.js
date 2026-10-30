@@ -1,6 +1,8 @@
 import Alpine from 'alpinejs';
-import { createApi, HttpError } from './api.js';
+import { createApi } from './api.js';
 import { prepareForAi } from './image.js';
+import { offerReader } from './offers.js';
+import { requests } from './requests.js';
 
 // Week planner (#/planner): offers (screenshots, PDFs, text) and pantry photos are read by the
 // AI on the server, recipes come from the connected recipe app and/or the AI, the result is
@@ -9,27 +11,6 @@ import { prepareForAi } from './image.js';
 
 const STORAGE_KEY = 'shoppinglist.planner';
 const api = createApi();
-// The server accepts up to 20,000 characters per text; a copied offers page can be longer.
-const TEXT_LIMIT = 18000;
-
-// Splits the text into parts of at most `limit` characters, at line breaks where possible.
-function splitText(text, limit) {
-    const parts = [];
-    let part = '';
-    for (const line of text.split('\n')) {
-        for (let start = 0; start < Math.max(line.length, 1); start += limit) {
-            const piece = line.slice(start, start + limit);
-            if (part && part.length + piece.length + 1 > limit) {
-                parts.push(part);
-                part = '';
-            }
-            part = part ? `${part}\n${piece}` : piece;
-        }
-    }
-    if (part.trim()) parts.push(part);
-    return parts;
-}
-
 function initialState() {
     return {
         offers: [],
@@ -40,6 +21,8 @@ function initialState() {
         wishes: '',
         suggestions: [],
         warning: null,
+        // The warning belongs to "suggest more" (shown below that button).
+        warningMore: false,
         items: [],
         target: '',
         listName: '',
@@ -51,14 +34,34 @@ function initialState() {
  * @param {(target: string, name: string, items: object[]) => Promise<string>} options.addItems adds the items, returns the list id
  * @param {() => object[]} options.lists lists to add to
  */
+/**
+ * Offers grouped by shop tag, in order of the tag; offers without shop last.
+ *
+ * @returns {{ store: string, offers: object[] }[]}
+ */
+function groupByStore(offers) {
+    const groups = new Map();
+    for (const offer of offers) {
+        const store = offer.store ?? '';
+        if (!groups.has(store)) groups.set(store, []);
+        groups.get(store).push(offer);
+    }
+
+    return [...groups.entries()]
+        .sort(([a], [b]) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b)))
+        .map(([store, list]) => ({ store, offers: list }));
+}
+
 export function planner({ addItems, lists }) {
     return {
         ...initialState(),
         ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}'),
         offerText: '',
         newPantryItem: '',
-        busy: null,
-        error: null,
+        // Saved offers (pool) not taken yet, grouped by shop to take them per shop.
+        savedOffers: null,
+        ...requests(),
+        ...offerReader(),
 
         init() {
             const save = () => {
@@ -66,6 +69,16 @@ export function planner({ addItems, lists }) {
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
             };
             Object.keys(initialState()).forEach((key) => this.$watch(key, save));
+
+            // Saved offers are shown right away when the planner is opened (and the account known).
+            const load = () => {
+                if (location.hash.startsWith('#/planner') && Alpine.store('sync').user?.verified && navigator.onLine && !this.busy) {
+                    this.loadSavedOffers();
+                }
+            };
+            window.addEventListener('hashchange', load);
+            // A microtask, so only the user is tracked by the effect.
+            Alpine.effect(() => Alpine.store('sync').user && queueMicrotask(load));
         },
 
         get recipes() {
@@ -91,65 +104,74 @@ export function planner({ addItems, lists }) {
         reset() {
             Object.assign(this, initialState());
             this.error = null;
+            this.errorKey = null;
         },
 
-        /**
-         * Runs a server request with a progress label and readable errors.
-         */
-        async run(label, action) {
-            if (!navigator.onLine) {
-                this.error = this.$t('This needs an internet connection.');
-                return;
-            }
-            this.busy = label;
-            this.error = null;
-            try {
-                await action();
-            } catch (error) {
-                this.error = error instanceof HttpError
-                    ? (error.status === 429 ? this.$t('Too many requests. Please try again later.') : error.body?.message ?? error.message)
-                    : this.$t('This needs an internet connection.');
-            } finally {
-                this.busy = null;
-            }
-        },
 
         // ---- 1. offers
 
-        async readOfferFiles(event) {
-            const files = [...event.target.files];
-            event.target.value = '';
-            for (const [index, file] of files.entries()) {
-                await this.run(this.$t('Reading offers :current/:total …', { current: index + 1, total: files.length }), async () => {
-                    const form = new FormData();
-                    form.append('file', await prepareForAi(file), file.name);
-                    this.addOffers((await api.post('/planner/offers', form)).offers);
-                });
-                if (this.error) break;
-            }
+
+        addOffers(offers) {
+            const known = new Set(this.offers.map((offer) => offer.id).filter(Boolean));
+            this.offers = [...this.offers, ...offers.filter((offer) => !known.has(offer.id)).map((offer) => ({ ...offer, selected: true }))];
         },
 
-        async readOfferText() {
-            const text = this.offerText.trim();
-            if (!text) return;
-            await this.run(this.$t('Reading offers …'), async () => {
-                const parts = splitText(text, TEXT_LIMIT);
-                while (parts.length) {
-                    this.addOffers((await api.post('/planner/offers', { text: parts[0] })).offers);
-                    parts.shift();
-                    // Keep only the unread parts, so a retry after an error does not read twice.
-                    this.offerText = parts.join('\n');
-                }
+        removeOfferItem(offer) {
+            this.offers = this.offers.filter((each) => each !== offer);
+        },
+
+        /** Offers of the planner by shop (no shop last). */
+        get offerGroups() {
+            return groupByStore(this.offers);
+        },
+
+        /** Selects or clears all offers of a shop. */
+        selectGroup(group, selected) {
+            group.offers.forEach((offer) => { offer.selected = selected; });
+        },
+
+        /** Offers of the pool (#/offers) that are not taken yet: own and shared, not expired. */
+        async loadSavedOffers() {
+            await this.run('saved', this.$t('Loading offers …'), async () => {
+                this.savedOffers = (await api.get('/offers')).offers;
             });
         },
 
-        addOffers(offers) {
-            this.offers = [...this.offers, ...offers.map((offer) => ({ ...offer, selected: true }))];
+        /** Saved offers not taken into the planner yet. */
+        get availableOffers() {
+            const taken = new Set(this.offers.map((offer) => offer.id).filter(Boolean));
+
+            return (this.savedOffers ?? []).filter((offer) => !taken.has(offer.id));
         },
 
-        removeOffer(index) {
-            this.offers.splice(index, 1);
+        /** Removes the offers of one shop group, or all. */
+        removeOffers(offers = this.offers) {
+            const removed = new Set(offers);
+            this.offers = this.offers.filter((offer) => !removed.has(offer));
         },
+
+        clearPantry() {
+            this.pantry = [];
+        },
+
+        /** "until 4.11." for a group: the latest end date of its offers. */
+        groupValidity(offers) {
+            const last = offers.map((offer) => offer.valid_until).filter(Boolean).sort().at(-1);
+            if (!last) return null;
+            const date = new Date(`${last}T12:00:00`).toLocaleDateString(Alpine.store('i18n').locale.replace('_', '-'), { day: 'numeric', month: 'numeric' });
+
+            return this.$t('until :date', { date });
+        },
+
+        get savedGroups() {
+            return groupByStore(this.availableOffers);
+        },
+
+        /** Takes saved offers (one shop or all) into the planner. */
+        takeSaved(offers) {
+            this.addOffers(offers);
+        },
+
 
         // ---- 2. pantry
 
@@ -157,7 +179,7 @@ export function planner({ addItems, lists }) {
             const files = [...event.target.files].slice(0, 6);
             event.target.value = '';
             if (!files.length) return;
-            await this.run(this.$t('Looking at the photos …'), async () => {
+            await this.run('pantry', this.$t('Looking at the photos …'), async () => {
                 const form = new FormData();
                 for (const file of files) form.append('photos[]', await prepareForAi(file), file.name);
                 const { items } = await api.post('/planner/pantry', form);
@@ -186,8 +208,11 @@ export function planner({ addItems, lists }) {
             return this.selectedPantry.map(({ name, amount }) => ({ name, amount }));
         },
 
-        async suggest() {
-            await this.run(this.$t('Looking for recipes …'), async () => {
+        /**
+         * New suggestions; with `more` they are added to the shown ones, which are left out.
+         */
+        async suggest(more = false) {
+            await this.run(more ? 'more' : 'suggest', this.$t('Looking for recipes …'), async () => {
                 const result = await api.post('/planner/suggestions', {
                     offers: this.offerPayload(),
                     pantry: this.pantryPayload(),
@@ -195,12 +220,19 @@ export function planner({ addItems, lists }) {
                     count: Number(this.count) || 5,
                     ideas: this.ideas,
                     wishes: this.wishes.trim() || null,
+                    exclude: more ? {
+                        recipe_ids: this.suggestions.map((suggestion) => suggestion.recipe_id).filter(Boolean),
+                        names: this.suggestions.map((suggestion) => suggestion.name),
+                    } : undefined,
                 });
-                this.suggestions = result.suggestions.map((suggestion) => ({
-                    ...suggestion, selected: true, servings: Number(this.servings) || 4, savedUrl: null,
+                const known = new Set(more ? this.suggestions.map((suggestion) => suggestion.key) : []);
+                const added = result.suggestions.filter((suggestion) => !known.has(suggestion.key)).map((suggestion) => ({
+                    ...suggestion, selected: !more, servings: Number(this.servings) || 4, savedUrl: null,
                 }));
-                this.warning = result.warning;
-                this.items = [];
+                this.suggestions = more ? [...this.suggestions, ...added] : added;
+                this.warning = more && !added.length ? this.$t('No further recipes found.') : result.warning;
+                this.warningMore = more;
+                if (!more) this.items = [];
             });
         },
 
@@ -209,7 +241,7 @@ export function planner({ addItems, lists }) {
         async saveIdea(suggestion) {
             // Open the tab while still in the click, otherwise browsers block it as a pop-up.
             const tab = navigator.onLine ? window.open('', '_blank') : null;
-            await this.run(this.$t('Handing over …'), async () => {
+            await this.run(`idea:${suggestion.key}`, this.$t('Handing over …'), async () => {
                 const { url } = await api.post('/planner/recipes', {
                     name: suggestion.name,
                     servings: suggestion.servings,
@@ -230,7 +262,7 @@ export function planner({ addItems, lists }) {
         // ---- 4. shopping list
 
         async buildList() {
-            await this.run(this.$t('Creating the shopping list …'), async () => {
+            await this.run('list', this.$t('Creating the shopping list …'), async () => {
                 const { items } = await api.post('/planner/list', {
                     offers: this.offerPayload(),
                     pantry: this.pantryPayload(),
@@ -248,7 +280,13 @@ export function planner({ addItems, lists }) {
         },
 
         async addToList() {
-            const items = this.selectedItems.map(({ name, amount, unit, store, note }) => ({ name, amount, unit, store, note }));
+            // Recipes as names from the list step, linked if the suggestion has a URL (own recipes).
+            const urls = new Map(this.suggestions.map((suggestion) => [suggestion.name.toLowerCase(), suggestion.url ?? null]));
+            const items = this.selectedItems.map(({ name, amount, unit, store, note, recipes }) => ({
+                name, amount, unit, note,
+                stores: store ? [store] : [],
+                recipes: (recipes ?? []).map((recipe) => ({ name: recipe, url: urls.get(recipe.toLowerCase()) ?? null })),
+            }));
             if (!items.length) return;
             const listId = await addItems(this.target, this.listName.trim() || this.$t('Shopping list'), items);
             this.reset();

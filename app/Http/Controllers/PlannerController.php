@@ -11,6 +11,7 @@ use App\Recipes\RecipesException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 /**
  * Week planner: offers and pantry are read by the AI, recipes come from the connected
@@ -26,9 +27,17 @@ class PlannerController extends Controller
         $validated = $request->validate([
             'file' => ['nullable', 'required_without:text', 'file', 'mimetypes:image/jpeg,image/png,image/webp,image/heic,application/pdf', 'max:20480'],
             'text' => ['nullable', 'required_without:file', 'string', 'max:20000'],
+            // Share the offers with all users (default for clients that do not send it).
+            'share' => ['sometimes', 'boolean'],
         ]);
+        $user = $request->user();
+        $shared = $request->boolean('share', true);
 
-        return $this->answer(fn () => ['offers' => $this->assistant->readOffers($request->file('file'), $validated['text'] ?? null, $this->language())]);
+        // The offers are saved in the pool (#/offers), the planner gets them with their ids.
+        return $this->answer(fn () => ['offers' => array_map(
+            fn (array $offer) => OfferController::save($user, [...$offer, 'shared' => $shared])->toClient($user),
+            $this->assistant->readOffers($request->file('file'), $validated['text'] ?? null, $this->language()),
+        )]);
     }
 
     public function pantry(Request $request): JsonResponse
@@ -50,10 +59,12 @@ class PlannerController extends Controller
 
         return $this->answer(function () use ($data, $offers, $pantry, $user) {
             [$candidates, $urls, $warning] = $this->candidates($user, $offers, $pantry);
+            $excludedIds = $data['exclude']['recipe_ids'] ?? [];
+            $candidates = array_values(array_filter($candidates, fn (array $candidate) => ! in_array($candidate['id'], $excludedIds, true)));
             $result = $this->assistant->suggest(
                 $offers, $pantry, $candidates, (int) $data['servings'], (int) $data['count'],
                 (bool) $data['ideas'] || $candidates === [], $data['wishes'] ?? null, $this->language(),
-                $this->vocabulary($user),
+                $this->vocabulary($user), $data['exclude']['names'] ?? [],
             );
             $names = array_column($candidates, 'name', 'id');
 
@@ -68,11 +79,12 @@ class PlannerController extends Controller
                     'uses_offers' => $pick['uses_offers'],
                     'uses_pantry' => $pick['uses_pantry'],
                 ], $result['picks']),
-                ...array_map(fn (array $idea, int $i) => [
-                    'key' => 'idea-'.$i,
+                // Unique keys: "suggest more" appends to the shown suggestions.
+                ...array_map(fn (array $idea) => [
+                    'key' => 'idea-'.Str::uuid7(),
                     'source' => 'ai',
                     ...$idea,
-                ], $result['ideas'], array_keys($result['ideas'])),
+                ], $result['ideas']),
             ];
 
             return ['suggestions' => $suggestions, 'warning' => $warning];

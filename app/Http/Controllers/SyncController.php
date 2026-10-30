@@ -54,7 +54,13 @@ class SyncController extends Controller
             '*.newDocumentState.shopping_list_id' => ['nullable', 'uuid'],
             '*.newDocumentState.amount' => ['nullable', 'numeric', 'min:0', 'max:9999999'],
             '*.newDocumentState.unit' => ['nullable', 'string', 'max:255'],
+            // Clients from before the shops list (one code).
             '*.newDocumentState.store' => ['nullable', 'string', 'max:10'],
+            '*.newDocumentState.stores' => ['nullable', 'array', 'max:20'],
+            '*.newDocumentState.stores.*' => ['string', 'max:255'],
+            '*.newDocumentState.recipes' => ['nullable', 'array', 'max:20'],
+            '*.newDocumentState.recipes.*.name' => ['required', 'string', 'max:255'],
+            '*.newDocumentState.recipes.*.url' => ['nullable', 'url:https,http', 'max:2048'],
             '*.newDocumentState.code' => ['nullable', 'string', 'max:10'],
             '*.newDocumentState.note' => ['nullable', 'string', 'max:255'],
             '*.newDocumentState.done' => ['nullable', 'boolean'],

@@ -49,7 +49,8 @@ class ImageTest extends TestCase
 
         Storage::assertExists(["images/{$image}", "images/{$image}-thumb"]);
         $this->assertSame($user->id, Product::find($id)->owner_id);
-        $this->actingAs($user)->getJson('/sync/products/pull')->assertJsonPath('documents.0.image', $image);
+        $docs = $this->actingAs($user)->getJson('/sync/products/pull?limit=500')->json('documents');
+        $this->assertSame($image, collect($docs)->firstWhere('id', $id)['image']);
         $this->actingAs($user)->get("/images/{$image}")->assertOk()->assertHeader('Cache-Control', 'immutable, max-age=31536000, private');
         $this->actingAs($user)->get("/images/{$image}/thumb")->assertOk();
         $this->actingAs($user)->get("/images/{$image}/large")->assertNotFound();

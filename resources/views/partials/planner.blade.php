@@ -2,107 +2,101 @@
     Week planner (#/planner, resources/js/planner.js): offers and pantry read by the AI,
     recipe suggestions (recipe app and AI ideas), shopping list. Needs a connection.
 --}}
-<section x-show="route.view === 'planner'" class="space-y-6"
+<section x-show="route.view === 'planner'" class="space-y-4"
     x-data="planner({ addItems: (target, name, items) => addPlannedItems(target, name, items), lists: () => lists })">
-    <p class="text-stone-600" x-text="$t('Read the offers of the week, check what you have at home and get recipe ideas with a shopping list.')"></p>
     <div x-show="recipes && !recipes.connected" class="notice flex flex-wrap items-center justify-between gap-3">
-        <span x-text="$t('Not connected with :name yet: connect to get your own recipes suggested and to create new recipes there right away.', { name: recipes?.name })"></span>
-        <a href="/recipes/connect" data-online class="button-secondary shrink-0 text-sm" x-text="$t('Connect with :name', { name: recipes?.name })"></a>
+        <span x-text="$t('Connect :name to get your own recipes suggested and to save new ones there.', { name: recipes?.name })"></span>
+        <a href="/recipes/connect" data-online class="button-secondary shrink-0 text-sm" x-text="$t('Connect')"></a>
     </div>
 
-    <p x-show="error" class="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-800" role="alert" x-text="error"></p>
-    <p x-show="busy" class="flex items-center gap-3 rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-900" role="status">
-        <span class="size-4 shrink-0 animate-spin rounded-full border-2 border-emerald-700 border-t-transparent" aria-hidden="true"></span>
-        <span x-text="busy"></span>
-    </p>
+    {{-- Progress and errors are shown at the button that started the request; screen readers get the progress here --}}
+    <p class="sr-only" role="status" x-text="busy ?? ''"></p>
 
-    {{-- 1. Offers --}}
-    <div class="space-y-3">
-        <h2 class="font-semibold" x-text="'1. ' + $t('Offers')"></h2>
-        <p class="text-sm text-stone-500" x-text="$t('Screenshots from the shop app, the flyer as PDF or photos of it. Migros, Coop, Aldi, Lidl and Denner get their shop code automatically.')"></p>
-        <label class="button-secondary inline-flex cursor-pointer items-center gap-2" :class="busy && 'pointer-events-none opacity-50'">
-            <input type="file" accept="image/*,application/pdf" multiple class="sr-only" :disabled="busy" @change="readOfferFiles($event)">
-            <span x-text="$t('Add screenshots, photos or PDF')"></span>
-        </label>
-        @php
-            // How to get the offers of each shop (shop pages are German, the labels quoted here too).
-            $offerSources = [
-                ['Migros', 'https://www.migros.ch/de/offers/home', [
-                    'Open the offers page.',
-                    'Select all text (Ctrl+A, on the Mac Cmd+A) and copy it.',
-                    'Paste it into the text field below and tap “Read text”.',
-                ]],
-                ['Coop', 'https://www.coop.ch/de/aktionen/aktuelle-aktionen/c/m_1011', [
-                    'Open the offers page and choose your store.',
-                    'Click “Aktionsmagazin auswählen”.',
-                    'Menu → “Speichern”, choose “Alle” pages.',
-                    'Add the PDF above.',
-                ]],
-                ['Aldi', 'https://www.aldi-suisse.ch/de/broschuere', [
-                    'Open the flyer and click “Durchblättern”.',
-                    'Download it with “PDF herunterladen”.',
-                    'Add the PDF above.',
-                ]],
-                ['Lidl', 'https://www.lidl.ch/de/unternehmen/werbeprospekte-als-pdf', [
-                    'Open the flyer, then “Menü” → “PDF Download”.',
-                    'Add the PDF above.',
-                ]],
-                ['Denner', 'https://www.denner.ch/de/aktionen/aktuelle-aktionen', [
-                    'Open the offers page.',
-                    'For more offers, click “Weitere Produkte anzeigen” at the end of the page (repeatedly if needed).',
-                    'Select all text (Ctrl+A, on the Mac Cmd+A) and copy it.',
-                    'Paste it into the text field below and tap “Read text”.',
-                ]],
-            ];
-        @endphp
-        <details class="group/details overflow-hidden rounded-lg border border-stone-200 bg-white text-sm">
-            <summary class="flex cursor-pointer list-none items-center justify-between px-4 py-3 hover:bg-stone-50">
-                <span x-text="$t('How to get the offers of each shop')"></span>
-                <span class="transition-transform group-open/details:rotate-90" aria-hidden="true">›</span>
+    {{-- 1. Offers: saved ones of the pool are offered per shop, new ones can be read --}}
+    <x-planner-step number="1" title="$t('Offers')">
+        <x-slot:actions>
+            <a href="#/offers" class="shrink-0 text-sm text-stone-500 underline" x-text="$t('Manage')"></a>
+        </x-slot:actions>
+
+        <p x-show="busyKey === 'saved'" class="flex items-center gap-2 text-sm text-stone-500">
+            <x-spinner />
+            <span x-text="$t('Loading offers …')"></span>
+        </p>
+        <x-planner-error key="saved" />
+
+        {{-- Saved offers not taken yet, per shop --}}
+        <div x-show="savedGroups.length" class="overflow-hidden rounded-lg border border-orange-200 bg-orange-50/50">
+            <div class="flex items-center justify-between gap-2 px-3 py-2">
+                <span class="text-sm font-medium text-stone-700" x-text="$t('Available offers')"></span>
+                <button type="button" x-show="savedGroups.length > 1" class="text-sm font-medium underline" @click="takeSaved(availableOffers)" x-text="$t('Take all')"></button>
+            </div>
+            <ul class="divide-y divide-orange-100 border-t border-orange-100">
+                <template x-for="group in savedGroups" :key="group.store">
+                    <li class="flex items-center gap-3 px-3 py-2">
+                        <span class="min-w-0 flex-1">
+                            <span class="block truncate font-medium" x-text="group.store ? storeLabel(group.store) : $t('Other shops')"></span>
+                            <span class="block truncate text-xs text-stone-500"
+                                x-text="[$t(group.offers.length === 1 ? ':count offer' : ':count offers', { count: group.offers.length }), groupValidity(group.offers)].filter(Boolean).join(' · ')"></span>
+                        </span>
+                        <button type="button" class="button-secondary shrink-0 px-3 py-1.5 text-sm" @click="takeSaved(group.offers)" x-text="$t('Take')"></button>
+                    </li>
+                </template>
+            </ul>
+        </div>
+
+        {{-- Taken offers per shop: collapsible, (de)select or remove a shop at once --}}
+        <div x-show="offers.length" class="space-y-2">
+            <template x-for="group in offerGroups" :key="group.store">
+                <details class="group/shop overflow-hidden rounded-lg border border-stone-200" x-init="$el.open = group.offers.length <= 8">
+                    <summary class="flex cursor-pointer list-none items-center gap-3 bg-stone-50 px-3 py-2">
+                        <input type="checkbox" class="size-5 shrink-0 accent-emerald-700" @click.stop
+                            :checked="group.offers.every((offer) => offer.selected)"
+                            :indeterminate="group.offers.some((offer) => offer.selected) && !group.offers.every((offer) => offer.selected)"
+                            @change="selectGroup(group, $event.target.checked)" :aria-label="$t('Select all')">
+                        <span class="min-w-0 flex-1 truncate font-medium" x-text="group.store ? storeLabel(group.store) : $t('Other shops')"></span>
+                        <span class="shrink-0 text-sm tabular-nums text-stone-500" x-text="`${group.offers.filter((offer) => offer.selected).length}/${group.offers.length}`"></span>
+                        <button type="button" class="icon-button text-stone-400" @click.prevent.stop="removeOffers(group.offers)" :aria-label="$t('Remove')" :title="$t('Remove')">✕</button>
+                        <span class="text-stone-400 transition-transform group-open/shop:rotate-90" aria-hidden="true">›</span>
+                    </summary>
+                    <ul class="divide-y divide-stone-100 border-t border-stone-200">
+                        <template x-for="(offer, index) in group.offers" :key="offer.id ?? `${group.store}-${index}`">
+                            <li class="flex items-center gap-3 px-3 py-2" :class="offer.selected || 'text-stone-400'">
+                                <input type="checkbox" class="size-5 shrink-0 accent-emerald-700" x-model="offer.selected" :aria-label="offer.name">
+                                <span class="min-w-0 flex-1">
+                                    <span class="block truncate" x-text="offer.name"></span>
+                                    <span class="block truncate text-xs text-stone-500" x-text="[offer.brand, offer.discount, offer.price != null ? 'CHF ' + Number(offer.price).toFixed(2) : null].filter(Boolean).join(' · ')"></span>
+                                </span>
+                                <button type="button" class="icon-button text-stone-400" @click="removeOfferItem(offer)" :aria-label="$t('Remove')">✕</button>
+                            </li>
+                        </template>
+                    </ul>
+                </details>
+            </template>
+            <div class="flex items-center justify-between text-sm text-stone-500">
+                <span x-text="$t(':selected of :total offers selected', { selected: selectedOffers.length, total: offers.length })"></span>
+                <button type="button" class="underline" @click="removeOffers()" x-text="$t('Remove all')"></button>
+            </div>
+        </div>
+
+        {{-- Reading new offers is the exception: collapsed unless there is nothing else --}}
+        <details class="group/read rounded-lg border border-dashed border-stone-300"
+            x-effect="if (savedOffers !== null && !offers.length && !savedGroups.length) $el.open = true">
+            <summary class="flex cursor-pointer list-none items-center justify-between px-3 py-2 text-sm font-medium text-stone-600">
+                <span x-text="$t('Read new offers')"></span>
+                <span class="transition-transform group-open/read:rotate-90" aria-hidden="true">›</span>
             </summary>
-            <div class="space-y-4 border-t border-stone-200 px-4 py-3">
-                @foreach ($offerSources as [$shop, $url, $steps])
-                    <div>
-                        <a href="{{ $url }}" target="_blank" rel="noopener" class="font-medium underline">{{ $shop }}</a>
-                        <ol class="mt-1 list-decimal space-y-0.5 pl-5 text-stone-600">
-                            @foreach ($steps as $step)
-                                <li x-text="$t(@js($step))"></li>
-                            @endforeach
-                        </ol>
-                    </div>
-                @endforeach
-                <p class="text-stone-500" x-text="$t('Copying works best on a computer. Long texts are read in several parts.')"></p>
+            <div class="border-t border-dashed border-stone-300 p-3">
+                <x-offer-reader />
             </div>
         </details>
-        <form @submit.prevent="readOfferText()" class="space-y-2">
-            <textarea x-model="offerText" rows="2" class="field w-full text-sm" :placeholder="$t('… or paste the offers as text')"></textarea>
-            <button x-show="offerText.trim()" class="button-secondary text-sm" :disabled="busy" x-text="$t('Read text')"></button>
-        </form>
-
-        <ul x-show="offers.length" class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
-            <template x-for="(offer, index) in offers" :key="index">
-                <li class="flex items-center gap-3 px-3 py-2">
-                    <input type="checkbox" class="size-5 shrink-0 accent-emerald-700" x-model="offer.selected" :aria-label="offer.name">
-                    <span x-show="offer.store" class="grid h-5 min-w-5 shrink-0 place-items-center rounded bg-orange-100 px-1 text-xs font-semibold text-orange-800" :title="storeLabel(offer.store)" x-text="offer.store"></span>
-                    <span class="min-w-0 flex-1">
-                        <span class="block truncate" x-text="offer.name"></span>
-                        <span class="block truncate text-xs text-stone-500" x-text="[offer.brand, offer.discount, offer.price != null ? 'CHF ' + Number(offer.price).toFixed(2) : null].filter(Boolean).join(' · ')"></span>
-                    </span>
-                    <button type="button" class="icon-button text-stone-400" @click="removeOffer(index)" :aria-label="$t('Remove')">✕</button>
-                </li>
-            </template>
-        </ul>
-        <p x-show="offers.length" class="text-sm text-stone-500" x-text="$t(':selected of :total offers selected', { selected: selectedOffers.length, total: offers.length })"></p>
-    </div>
+    </x-planner-step>
 
     {{-- 2. Pantry --}}
-    <div class="space-y-3">
-        <h2 class="font-semibold" x-text="'2. ' + $t('At home (optional)')"></h2>
-        <p class="text-sm text-stone-500" x-text="$t('Photos of the fridge, freezer or pantry: what is already there is used first and left off the list.')"></p>
-        <label class="button-secondary inline-flex cursor-pointer items-center gap-2" :class="busy && 'pointer-events-none opacity-50'">
-            <input type="file" accept="image/*" multiple class="sr-only" :disabled="busy" @change="readPantry($event)">
-            <span x-text="$t('Add photos')"></span>
-        </label>
+    <x-planner-step number="2" title="$t('At home (optional)')">
+        <x-slot:actions>
+            <button type="button" x-show="pantry.length" class="shrink-0 text-sm text-stone-500 underline" @click="clearPantry()" x-text="$t('Remove all')"></button>
+        </x-slot:actions>
+        <p class="-mt-2 text-sm text-stone-500" x-text="$t('Used first and left off the list.')"></p>
         <div x-show="pantry.length" class="flex flex-wrap gap-2">
             <template x-for="(item, index) in pantry" :key="index">
                 <label class="flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-sm"
@@ -112,15 +106,22 @@
                 </label>
             </template>
         </div>
-        <form @submit.prevent="addPantryItem()" class="flex gap-2">
-            <input x-model="newPantryItem" class="field min-w-0 flex-1 text-sm" :placeholder="$t('Add by hand, e.g. rice')">
-            <button class="button-secondary text-sm" x-text="$t('Add')"></button>
-        </form>
-    </div>
+        <div class="flex flex-wrap gap-2">
+            <form @submit.prevent="addPantryItem()" class="flex min-w-0 flex-1 basis-60 gap-2">
+                <input x-model="newPantryItem" class="field min-w-0 flex-1" :placeholder="$t('e.g. rice')" :aria-label="$t('Add by hand')">
+                <button class="button-secondary" x-text="$t('Add')"></button>
+            </form>
+            <label class="button-secondary inline-flex cursor-pointer items-center gap-2" :class="busy && 'pointer-events-none opacity-50'" :title="$t('Photos of the fridge, freezer or pantry')">
+                <input type="file" accept="image/*" multiple class="sr-only" :disabled="busy" @change="readPantry($event)">
+                <x-spinner x-show="busyKey === 'pantry'" />
+                <span x-text="label('pantry', $t('Read from photos'))"></span>
+            </label>
+        </div>
+        <x-planner-error key="pantry" />
+    </x-planner-step>
 
     {{-- 3. Recipes --}}
-    <div class="space-y-3">
-        <h2 class="font-semibold" x-text="'3. ' + $t('Recipes')"></h2>
+    <x-planner-step number="3" title="$t('Recipes')">
         <div class="grid grid-cols-2 gap-3">
             <label class="block">
                 <span class="label" x-text="$t('Servings')"></span>
@@ -136,8 +137,12 @@
             <input type="checkbox" class="size-4 accent-emerald-700" x-model="ideas">
             <span x-text="$t('Also new recipe ideas of the AI')"></span>
         </label>
-        <button type="button" class="button w-full" :disabled="busy || (!selectedOffers.length && !selectedPantry.length)" @click="suggest()" x-text="$t('Suggest recipes')"></button>
-        <p x-show="warning" class="notice" x-text="warning"></p>
+        <button type="button" class="button flex w-full items-center justify-center gap-2" :disabled="busy || (!selectedOffers.length && !selectedPantry.length)" @click="suggest()">
+            <x-spinner x-show="busyKey === 'suggest'" />
+            <span x-text="label('suggest', $t('Suggest recipes'))"></span>
+        </button>
+        <x-planner-error key="suggest" />
+        <p x-show="warning && !warningMore" class="notice" x-text="warning"></p>
 
         <div class="space-y-3">
             <template x-for="suggestion in suggestions" :key="suggestion.key">
@@ -167,8 +172,12 @@
                                     <template x-if="recipes?.connected">
                                         <p class="mt-2">
                                             <a x-show="suggestion.savedUrl" :href="suggestion.savedUrl" target="_blank" rel="noopener" class="font-medium underline" x-text="$t('Check and import in :name', { name: recipes.name })"></a>
-                                            <button x-show="!suggestion.savedUrl" type="button" class="font-medium underline" :disabled="busy" @click="saveIdea(suggestion)" x-text="$t('Import into :name', { name: recipes.name })"></button>
+                                            <button x-show="!suggestion.savedUrl" type="button" class="inline-flex items-center gap-2 font-medium underline disabled:opacity-50" :disabled="busy" @click="saveIdea(suggestion)">
+                                                <x-spinner x-show="busyKey === `idea:${suggestion.key}`" />
+                                                <span x-text="label(`idea:${suggestion.key}`, $t('Import into :name', { name: recipes.name }))"></span>
+                                            </button>
                                         </p>
+                                        <p x-show="error && errorKey === `idea:${suggestion.key}`" class="mt-2 rounded-lg bg-red-50 px-3 py-2 text-red-800" role="alert" x-text="error"></p>
                                     </template>
                                 </details>
                             </template>
@@ -181,12 +190,21 @@
                 </div>
             </template>
         </div>
-    </div>
+        <button type="button" x-show="suggestions.length" class="button-secondary flex w-full items-center justify-center gap-2" :disabled="busy" @click="suggest(true)">
+            <x-spinner x-show="busyKey === 'more'" />
+            <span x-text="label('more', $t('Suggest more recipes'))"></span>
+        </button>
+        <x-planner-error key="more" />
+        <p x-show="warning && warningMore" class="notice" x-text="warning"></p>
+    </x-planner-step>
 
     {{-- 4. Shopping list --}}
-    <div x-show="suggestions.length" class="space-y-3">
-        <h2 class="font-semibold" x-text="'4. ' + $t('Shopping list')"></h2>
-        <button type="button" class="button w-full" :disabled="busy || !selectedSuggestions.length" @click="buildList()" x-text="$t('Create shopping list')"></button>
+    <x-planner-step number="4" title="$t('Shopping list')" x-show="suggestions.length">
+        <button type="button" class="button flex w-full items-center justify-center gap-2" :disabled="busy || !selectedSuggestions.length" @click="buildList()">
+            <x-spinner x-show="busyKey === 'list'" />
+            <span x-text="label('list', $t('Create shopping list'))"></span>
+        </button>
+        <x-planner-error key="list" />
 
         <template x-if="items.length">
             <div class="space-y-3">
@@ -217,7 +235,7 @@
                     x-text="$t('Add :count items', { count: selectedItems.length })"></button>
             </div>
         </template>
-    </div>
+    </x-planner-step>
 
     <button type="button" x-show="offers.length || pantry.length || suggestions.length" class="text-sm text-stone-500 underline"
         @click="confirm($t('Start over?')) && reset()" x-text="$t('Start over')"></button>
