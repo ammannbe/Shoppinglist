@@ -88,5 +88,5 @@ Shoppinglist: offline-first PWA for shared shopping lists. One Laravel app serve
 ## Rules
 
 - Alpine proxies (e.g. arrays from `x-model` state) must be copied to plain values before `insert`/`incrementalPatch`: RxDB clones documents for the BroadcastChannel (DataCloneError).
-- Every synced field must exist in the RxDB schema (`resources/js/db/schemas.js`), the resource document and the push validation (`SyncController`). Schema changes in RxDB need a schema version bump and migration strategy.
+- Every synced field must exist in the RxDB schema (`resources/js/db/schemas.js`), the resource document and the push validation (`SyncController`). Schema changes in RxDB need a schema version bump and migration strategy. Migration strategies keep values already present (`{ field: default, ...doc }`). If the server already fills the new field when the client updates, also bump the collection in `REPLICATION_RUNS` (`resources/js/db/index.js`): the old app version keeps syncing until the update is accepted, pulls the field without knowing it and moves its checkpoint past it; the new run pulls the collection again.
 - Keep the app shell (`resources/views/app.blade.php`) free of user data, it is cached by the service worker.

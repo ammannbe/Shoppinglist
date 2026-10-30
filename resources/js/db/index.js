@@ -9,6 +9,13 @@ addRxPlugin(RxDBMigrationSchemaPlugin);
 
 export const SYNCED_COLLECTIONS = ['lists', 'items', 'products', 'units', 'stores'];
 
+// Replication run per collection (default 1). After a deploy the old app version keeps syncing
+// until the update is accepted: it pulls server fields it does not know yet and its checkpoint
+// moves past them. When a schema version adds fields the server already fills, increase the
+// collection's number here as well, so every client pulls the collection once more.
+// stores 2: icon and countries (schema version 2).
+const REPLICATION_RUNS = { stores: 2 };
+
 /**
  * Local database. Everything the UI shows is read from here, the
  * replication syncs it with the server whenever a connection is available.
@@ -56,7 +63,7 @@ export function startReplication(db, api, { retryTime = 5000 } = {}) {
 
     const states = SYNCED_COLLECTIONS.map((collection) => replicateRxCollection({
         collection: db[collection],
-        replicationIdentifier: `shoppinglist-${collection}-v1`,
+        replicationIdentifier: `shoppinglist-${collection}-v${REPLICATION_RUNS[collection] ?? 1}`,
         live: true,
         retryTime,
         waitForLeadership: true,

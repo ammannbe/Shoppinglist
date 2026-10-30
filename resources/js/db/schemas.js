@@ -119,7 +119,7 @@ export const migrations = {
         4: ({ store, ...doc }) => ({ ...doc, stores: store ? [store] : [], recipes: [] }),
     },
     // Codes became optional.
-    stores: { 1: (doc) => doc, 2: (doc) => ({ ...doc, icon: null, countries: [] }) },
+    stores: { 1: (doc) => doc, 2: (doc) => ({ icon: null, countries: [], ...doc }) },
     products: { 1: (doc) => ({ ...doc, image: null }) },
     // Units were pull only, all of them public.
     units: { 1: (doc) => ({ ...doc, is_public: true, version: 1 }) },
