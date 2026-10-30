@@ -1,6 +1,8 @@
 import Alpine from 'alpinejs';
-import { createApi, HttpError } from './api.js';
+import { createApi } from './api.js';
 import { prepareForAi } from './image.js';
+import { offerReader } from './offers.js';
+import { requests } from './requests.js';
 
 // Week planner (#/planner): offers (screenshots, PDFs, text) and pantry photos are read by the
 // AI on the server, recipes come from the connected recipe app and/or the AI, the result is
@@ -9,27 +11,6 @@ import { prepareForAi } from './image.js';
 
 const STORAGE_KEY = 'shoppinglist.planner';
 const api = createApi();
-// The server accepts up to 20,000 characters per text; a copied offers page can be longer.
-const TEXT_LIMIT = 18000;
-
-// Splits the text into parts of at most `limit` characters, at line breaks where possible.
-function splitText(text, limit) {
-    const parts = [];
-    let part = '';
-    for (const line of text.split('\n')) {
-        for (let start = 0; start < Math.max(line.length, 1); start += limit) {
-            const piece = line.slice(start, start + limit);
-            if (part && part.length + piece.length + 1 > limit) {
-                parts.push(part);
-                part = '';
-            }
-            part = part ? `${part}\n${piece}` : piece;
-        }
-    }
-    if (part.trim()) parts.push(part);
-    return parts;
-}
-
 function initialState() {
     return {
         offers: [],
@@ -59,12 +40,9 @@ export function planner({ addItems, lists }) {
         ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}'),
         offerText: '',
         newPantryItem: '',
-        // Progress label and the button it belongs to (shows the spinner and the label).
-        busy: null,
-        busyKey: null,
-        // Error and the button it belongs to (shown below it).
-        error: null,
-        errorKey: null,
+        offersNotice: null,
+        ...requests(),
+        ...offerReader(),
 
         init() {
             const save = () => {
@@ -100,66 +78,22 @@ export function planner({ addItems, lists }) {
             this.errorKey = null;
         },
 
-        /** Label of a button: the progress while its request runs. */
-        label(key, text) {
-            return this.busyKey === key ? this.busy : text;
-        },
-
-        /**
-         * Runs a server request with a progress label and readable errors.
-         */
-        async run(key, label, action) {
-            this.errorKey = key;
-            if (!navigator.onLine) {
-                this.error = this.$t('This needs an internet connection.');
-                return;
-            }
-            this.busy = label;
-            this.busyKey = key;
-            this.error = null;
-            try {
-                await action();
-            } catch (error) {
-                this.error = error instanceof HttpError
-                    ? (error.status === 429 ? this.$t('Too many requests. Please try again later.') : error.body?.message ?? error.message)
-                    : this.$t('This needs an internet connection.');
-            } finally {
-                this.busy = null;
-                this.busyKey = null;
-            }
-        },
 
         // ---- 1. offers
 
-        async readOfferFiles(event) {
-            const files = [...event.target.files];
-            event.target.value = '';
-            for (const [index, file] of files.entries()) {
-                await this.run('offerFiles', this.$t('Reading offers :current/:total …', { current: index + 1, total: files.length }), async () => {
-                    const form = new FormData();
-                    form.append('file', await prepareForAi(file), file.name);
-                    this.addOffers((await api.post('/planner/offers', form)).offers);
-                });
-                if (this.error) break;
-            }
-        },
-
-        async readOfferText() {
-            const text = this.offerText.trim();
-            if (!text) return;
-            await this.run('offerText', this.$t('Reading offers …'), async () => {
-                const parts = splitText(text, TEXT_LIMIT);
-                while (parts.length) {
-                    this.addOffers((await api.post('/planner/offers', { text: parts[0] })).offers);
-                    parts.shift();
-                    // Keep only the unread parts, so a retry after an error does not read twice.
-                    this.offerText = parts.join('\n');
-                }
-            });
-        },
 
         addOffers(offers) {
-            this.offers = [...this.offers, ...offers.map((offer) => ({ ...offer, selected: true }))];
+            const known = new Set(this.offers.map((offer) => offer.id).filter(Boolean));
+            this.offers = [...this.offers, ...offers.filter((offer) => !known.has(offer.id)).map((offer) => ({ ...offer, selected: true }))];
+        },
+
+        /** Offers of the pool (#/offers): own and shared ones that have not expired. */
+        async takeSavedOffers() {
+            await this.run('saved', this.$t('Loading offers …'), async () => {
+                const before = this.offers.length;
+                this.addOffers((await api.get('/offers')).offers);
+                this.offersNotice = this.offers.length === before ? this.$t('No further saved offers.') : null;
+            });
         },
 
         removeOffer(index) {

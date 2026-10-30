@@ -22,7 +22,7 @@ class Assistant
     public function __construct(private OpenAiClient $client) {}
 
     /**
-     * @return list<array{name: string, brand: ?string, price: ?float, regular_price: ?float, discount: ?string, valid_until: ?string, store: ?string}>
+     * @return list<array{name: string, brand: ?string, price: ?float, regular_price: ?float, discount: ?string, valid_from: ?string, valid_until: ?string, store: ?string}>
      */
     public function readOffers(?UploadedFile $file, ?string $text, string $language): array
     {
@@ -40,7 +40,7 @@ class Assistant
             .'one entry per product; skip products without a visible promotion and cut-off cards. Use a short, generic product name a shopper '
             .'would write on a list (e.g. "Rindshackfleisch" instead of a long marketing title) and put the brand or product line '
             .'separately. Prices in CHF as numbers. "discount" is the offer as written, e.g. "−30 %" or "2 für 1". '
-            .'"valid_until" as YYYY-MM-DD if visible. "shop" is the retailer of the offer if recognisable from logos, '
+            .'"valid_from" and "valid_until" as YYYY-MM-DD if visible (the current year is '.now()->year.'). "shop" is the retailer of the offer if recognisable from logos, '
             .'brands (e.g. M-Classic, Migros Bio, Sélection → Migros; Naturaplan, Prix Garantie → Coop) or the app design; '
             .'one flyer or screenshot usually belongs to one retailer, so use the same shop for all its offers unless clearly different. '
             .'Ignore non-offer content. Write names in '.$language.'.',
@@ -52,6 +52,7 @@ class Assistant
                 'price' => $this->nullable('number'),
                 'regular_price' => $this->nullable('number'),
                 'discount' => $this->nullable('string'),
+                'valid_from' => $this->nullable('string'),
                 'valid_until' => $this->nullable('string'),
                 'shop' => ['type' => ['string', 'null'], 'enum' => [...array_keys(self::SHOPS), null]],
             ]))]),
@@ -65,6 +66,7 @@ class Assistant
                 'price' => $offer['price'] ?? null,
                 'regular_price' => $offer['regular_price'] ?? null,
                 'discount' => $offer['discount'] ?? null,
+                'valid_from' => $offer['valid_from'] ?? null,
                 'valid_until' => $offer['valid_until'] ?? null,
                 'store' => self::SHOPS[$offer['shop'] ?? ''] ?? null,
             ])

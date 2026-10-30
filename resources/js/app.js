@@ -9,6 +9,7 @@ import { registerServiceWorker } from './pwa.js';
 import { shrinkImage } from './image.js';
 import { createLightboxStore } from './lightbox.js';
 import { createPrefsStore } from './prefs.js';
+import { offersPool } from './offers.js';
 import { planner } from './planner.js';
 import { suggestField } from './suggest.js';
 import { swipeRow } from './swipe.js';
@@ -94,6 +95,7 @@ async function setLocale(locale) {
 Alpine.data('swipeRow', swipeRow);
 Alpine.data('suggestField', suggestField);
 Alpine.data('planner', planner);
+Alpine.data('offersPool', offersPool);
 
 // The products/units/shops view renders this many rows at a time ("Show more" adds as many).
 const CATALOG_PAGE = 200;
@@ -339,6 +341,7 @@ Alpine.data('shoppinglist', () => ({
 
     get backLink() {
         if (['products', 'units', 'stores', 'install'].includes(this.route.view)) return '#/settings';
+        if (this.route.view === 'offers') return '#/planner';
 
         return this.route.view === 'settings' ? this.settingsBack : '#/';
     },

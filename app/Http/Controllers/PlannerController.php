@@ -27,9 +27,17 @@ class PlannerController extends Controller
         $validated = $request->validate([
             'file' => ['nullable', 'required_without:text', 'file', 'mimetypes:image/jpeg,image/png,image/webp,image/heic,application/pdf', 'max:20480'],
             'text' => ['nullable', 'required_without:file', 'string', 'max:20000'],
+            // Share the offers with all users (default for clients that do not send it).
+            'share' => ['sometimes', 'boolean'],
         ]);
+        $user = $request->user();
+        $shared = $request->boolean('share', true);
 
-        return $this->answer(fn () => ['offers' => $this->assistant->readOffers($request->file('file'), $validated['text'] ?? null, $this->language())]);
+        // The offers are saved in the pool (#/offers), the planner gets them with their ids.
+        return $this->answer(fn () => ['offers' => array_map(
+            fn (array $offer) => OfferController::save($user, [...$offer, 'shared' => $shared])->toClient($user),
+            $this->assistant->readOffers($request->file('file'), $validated['text'] ?? null, $this->language()),
+        )]);
     }
 
     public function pantry(Request $request): JsonResponse

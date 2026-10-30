@@ -40,6 +40,7 @@ export function createApi({ baseUrl = '', fetch: fetchImpl = globalThis.fetch.bi
         // A FormData body is sent as multipart (file uploads).
         post: (path, body) => request('POST', path, body ?? {}),
         put: (path, body) => request('PUT', path, body ?? {}),
+        patch: (path, body) => request('PATCH', path, body ?? {}),
         delete: (path) => request('DELETE', path),
     };
 }

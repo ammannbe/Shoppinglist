@@ -4,6 +4,7 @@ use App\Ai\OpenAiClient;
 use App\Http\Controllers\ImageController;
 use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\MemberController;
+use App\Http\Controllers\OfferController;
 use App\Http\Controllers\PlannerController;
 use App\Http\Controllers\PreferenceController;
 use App\Http\Controllers\RecipesConnectionController;
@@ -62,6 +63,11 @@ Route::middleware('auth')->group(function () {
             Route::post('list', [PlannerController::class, 'list'])->name('list');
             Route::post('recipes', [PlannerController::class, 'saveRecipe'])->name('recipes');
         });
+
+        Route::get('offers', [OfferController::class, 'index'])->name('offers.index');
+        Route::post('offers', [OfferController::class, 'store'])->name('offers.store');
+        Route::patch('offers/{offer}', [OfferController::class, 'update'])->name('offers.update');
+        Route::delete('offers/{offer}', [OfferController::class, 'destroy'])->name('offers.destroy');
 
         Route::post('lists/{list}/members', [MemberController::class, 'store'])->name('members.store');
         Route::delete('lists/{list}/members/{email}', [MemberController::class, 'destroy'])->name('members.destroy');

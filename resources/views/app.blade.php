@@ -27,6 +27,7 @@
                 <span x-show="route.view === 'settings'" class="block truncate" x-text="$t('Settings')"></span>
                 <span x-show="route.view === 'install'" class="block truncate" x-text="$t('Install app')"></span>
                 <span x-show="route.view === 'planner'" class="block truncate" x-text="$t('Week planner')"></span>
+                <span x-show="route.view === 'offers'" class="block truncate" x-text="$t('Offers')"></span>
                 <span x-show="route.view === 'products'" class="block truncate" x-text="$t('Products')"></span>
                 <span x-show="route.view === 'units'" class="block truncate" x-text="$t('Units')"></span>
                 <span x-show="route.view === 'stores'" class="block truncate" x-text="$t('Shops')"></span>
@@ -397,6 +398,7 @@
         </section>
 
         @include('partials.planner')
+        @include('partials.offers')
 
         {{-- A server page (login, account, …) was opened without a connection: the service worker served the app shell. --}}
         <section x-show="route.view === 'offline'" class="space-y-4 py-8 text-center">
