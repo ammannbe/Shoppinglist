@@ -30,7 +30,7 @@ export default defineConfig({
                 globDirectory: 'public',
                 // Every precached file must exist on the server, one 404 aborts the whole installation.
                 globPatterns: [
-                    'build/**/*.{js,css,woff,woff2}',
+                    'build/**/*.{js,css,woff,woff2,svg,png,webp}',
                     'favicon.ico',
                     'favicon-96x96.png',
                     'apple-touch-icon.png',

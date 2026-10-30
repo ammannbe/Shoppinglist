@@ -5,11 +5,13 @@ use App\Http\Controllers\ImageController;
 use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\MemberController;
 use App\Http\Controllers\OfferController;
+use App\Http\Controllers\PlannedRecipeController;
 use App\Http\Controllers\PlannerController;
 use App\Http\Controllers\PreferenceController;
 use App\Http\Controllers\RecipesConnectionController;
 use App\Http\Controllers\SyncController;
 use App\Recipes\RecipesClient;
+use App\Support\ShopRegions;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -25,6 +27,8 @@ Route::middleware('auth')->group(function () {
         'verified' => $request->user()->hasVerifiedEmail(),
         'locale' => $request->user()->locale,
         'preferences' => [...PreferenceController::DEFAULTS, ...($request->user()->preferences ?? [])],
+        // Shops with regional offers and their regions (for the settings and the offers).
+        'regions' => ShopRegions::ALL,
         // Week planner (AI) and the connected recipe app, null when not configured.
         'assistant' => OpenAiClient::enabled(),
         'recipes' => RecipesClient::enabled() ? [
@@ -63,6 +67,10 @@ Route::middleware('auth')->group(function () {
             Route::post('list', [PlannerController::class, 'list'])->name('list');
             Route::post('recipes', [PlannerController::class, 'saveRecipe'])->name('recipes');
         });
+
+        Route::get('planned-recipes', [PlannedRecipeController::class, 'index'])->name('planned-recipes.index');
+        Route::delete('planned-recipes', [PlannedRecipeController::class, 'destroyAll'])->name('planned-recipes.destroy-all');
+        Route::delete('planned-recipes/{plannedRecipe}', [PlannedRecipeController::class, 'destroy'])->name('planned-recipes.destroy');
 
         Route::get('offers', [OfferController::class, 'index'])->name('offers.index');
         Route::post('offers', [OfferController::class, 'store'])->name('offers.store');

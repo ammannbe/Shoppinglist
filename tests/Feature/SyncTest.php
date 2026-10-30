@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Console\Commands\SyncStandardStores;
 use App\Models\Item;
 use App\Models\Product;
 use App\Models\ShoppingList;
@@ -319,10 +320,10 @@ class SyncTest extends TestCase
         $other = User::factory()->create();
 
         // The standard shops come from the migration.
-        $docs = $this->pull($user, 'stores')->assertJsonCount(5, 'documents')->json('documents');
+        $standard = count(SyncStandardStores::shops());
+        $docs = $this->pull($user, 'stores', ['limit' => 500])->assertJsonCount($standard, 'documents')->json('documents');
         $migros = collect($docs)->firstWhere('code', 'M');
-        $this->assertSame('Migros', $migros['name']);
-        $this->assertTrue($migros['is_public']);
+        $this->assertSame(['Migros', true, 'migros', ['CH']], [$migros['name'], $migros['is_public'], $migros['icon'], $migros['countries']]);
 
         $this->push($user, 'stores', [['assumedMasterState' => $migros, 'newDocumentState' => [...$migros, 'code' => 'MI']]])
             ->assertJsonPath('0.code', 'M');
@@ -334,15 +335,33 @@ class SyncTest extends TestCase
         $this->assertSame(['Amazon', 'amz', $user->id], [Store::find($ownId)->name, Store::find($ownId)->code, Store::find($ownId)->owner_id]);
 
         // Own shops are private.
-        $this->push($other, 'stores', [['newDocumentState' => ['id' => (string) Str::uuid(), 'name' => 'Volg']]])->assertExactJson([]);
+        $this->push($other, 'stores', [['newDocumentState' => ['id' => (string) Str::uuid(), 'name' => 'Dorfladen']]])->assertExactJson([]);
 
-        $doc = collect($this->pull($user, 'stores')->assertJsonCount(6, 'documents')->json('documents'))->firstWhere('id', $ownId);
+        $doc = collect($this->pull($user, 'stores', ['limit' => 500])->assertJsonCount($standard + 1, 'documents')->json('documents'))->firstWhere('id', $ownId);
         $this->push($user, 'stores', [['assumedMasterState' => $doc, 'newDocumentState' => [...$doc, 'name' => 'Amazon.de', 'code' => 'AZ', 'version' => 2]]])
             ->assertExactJson([]);
         $this->assertSame(['Amazon.de', 'AZ'], [Store::find($ownId)->name, Store::find($ownId)->code]);
 
         $this->push($user, 'stores', [['newDocumentState' => ['id' => $ownId, 'name' => 'x', 'code' => str_repeat('X', 11)]]])
             ->assertUnprocessable();
+    }
+
+    public function test_own_shops_can_have_a_small_image_as_icon(): void
+    {
+        $user = User::factory()->create();
+        $id = (string) Str::uuid();
+        $icon = 'data:image/webp;base64,'.base64_encode('webp');
+        $this->push($user, 'stores', [['newDocumentState' => ['id' => $id, 'name' => 'Dorfladen', 'icon' => $icon, 'countries' => ['DE']]]])
+            ->assertExactJson([]);
+        $this->assertSame([$icon, null], [Store::find($id)->icon, Store::find($id)->countries]);
+
+        $doc = collect($this->pull($user, 'stores', ['limit' => 500])->json('documents'))->firstWhere('id', $id);
+        foreach (['data:image/svg+xml;base64,PHN2Zz4=', 'https://example.com/logo.png', 'migros'] as $version => $invalid) {
+            $this->push($user, 'stores', [['assumedMasterState' => [...$doc, 'version' => $version + 1], 'newDocumentState' => [...$doc, 'icon' => $invalid, 'version' => $version + 2]]])
+                ->assertExactJson([]);
+            $this->assertNull(Store::find($id)->icon);
+        }
+        $this->push($user, 'stores', [['newDocumentState' => [...$doc, 'icon' => 'data:image/png;base64,'.str_repeat('A', 20_000)]]])->assertUnprocessable();
     }
 
     public function test_shops_recipes_and_note_of_items_are_synced(): void
@@ -374,7 +393,7 @@ class SyncTest extends TestCase
     {
         $user = User::factory()->create();
         $id = (string) Str::uuid();
-        $this->push($user, 'stores', [['newDocumentState' => ['id' => $id, 'name' => 'Volg', 'code' => null]]])->assertExactJson([]);
+        $this->push($user, 'stores', [['newDocumentState' => ['id' => $id, 'name' => 'Dorfladen', 'code' => null]]])->assertExactJson([]);
         $this->assertNull(Store::find($id)->code);
 
         $doc = collect($this->pull($user, 'stores')->json('documents'))->firstWhere('id', $id);

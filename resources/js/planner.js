@@ -31,7 +31,8 @@ function initialState() {
 
 /**
  * @param {object} options
- * @param {(target: string, name: string, items: object[]) => Promise<string>} options.addItems adds the items, returns the list id
+ * @param {(target: string, name: string, items: object[], merge: boolean) => Promise<string>} options.addItems adds the items, returns the list id
+ * @param {(target: string, items: object[]) => number} options.merges number of items that could be merged into open ones
  * @param {() => object[]} options.lists lists to add to
  */
 /**
@@ -52,7 +53,7 @@ function groupByStore(offers) {
         .map(([store, list]) => ({ store, offers: list }));
 }
 
-export function planner({ addItems, lists }) {
+export function planner({ addItems, merges, lists }) {
     return {
         ...initialState(),
         ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}'),
@@ -60,6 +61,8 @@ export function planner({ addItems, lists }) {
         newPantryItem: '',
         // Saved offers (pool) not taken yet, grouped by shop to take them per shop.
         savedOffers: null,
+        // Ingredients already open on the target list, asked before adding (null: not asked).
+        mergeCount: null,
         ...requests(),
         ...offerReader(),
 
@@ -69,6 +72,9 @@ export function planner({ addItems, lists }) {
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
             };
             Object.keys(initialState()).forEach((key) => this.$watch(key, save));
+            this.$watch('target', () => { this.mergeCount = null; });
+            // A recipe of the history (#/recipes) planned again.
+            window.addEventListener('plan-recipe', (event) => this.planRecipe(event.detail));
 
             // Saved offers are shown right away when the planner is opened (and the account known).
             const load = () => {
@@ -229,7 +235,10 @@ export function planner({ addItems, lists }) {
                 const added = result.suggestions.filter((suggestion) => !known.has(suggestion.key)).map((suggestion) => ({
                     ...suggestion, selected: !more, servings: Number(this.servings) || 4, savedUrl: null,
                 }));
-                this.suggestions = more ? [...this.suggestions, ...added] : added;
+                // New suggestions on top; the earlier ones stay below, unselected, until removed.
+                const keys = new Set(added.map((suggestion) => suggestion.key));
+                this.suggestions = more ? [...this.suggestions, ...added]
+                    : [...added, ...this.suggestions.filter((suggestion) => !keys.has(suggestion.key)).map((suggestion) => ({ ...suggestion, selected: false }))];
                 this.warning = more && !added.length ? this.$t('No further recipes found.') : result.warning;
                 this.warningMore = more;
                 if (!more) this.items = [];
@@ -243,6 +252,7 @@ export function planner({ addItems, lists }) {
             const tab = navigator.onLine ? window.open('', '_blank') : null;
             await this.run(`idea:${suggestion.key}`, this.$t('Handing over …'), async () => {
                 const { url } = await api.post('/planner/recipes', {
+                    key: suggestion.key,
                     name: suggestion.name,
                     servings: suggestion.servings,
                     category: suggestion.category ?? null,
@@ -259,6 +269,25 @@ export function planner({ addItems, lists }) {
             }
         },
 
+        /** Removes all shown recipes (they stay in the history, #/recipes). */
+        clearSuggestions() {
+            if (!confirm(this.$t('Remove all recipes? They stay in the history.'))) return;
+            this.suggestions = [];
+            this.items = [];
+            this.warning = null;
+            this.mergeCount = null;
+        },
+
+        /** Recipe of the history: shown on top and selected (again). */
+        planRecipe(recipe) {
+            const { id, draft_url: draftUrl, used_at: usedAt, created_at: createdAt, updated_at: updatedAt, ...suggestion } = recipe;
+            const others = this.suggestions.filter((each) => each.key !== recipe.key);
+            this.suggestions = [{
+                uses_offers: [], uses_pantry: [], ...suggestion, servings: recipe.servings || Number(this.servings) || 4, selected: true, savedUrl: draftUrl ?? null,
+            }, ...others];
+            this.items = [];
+        },
+
         // ---- 4. shopping list
 
         async buildList() {
@@ -267,6 +296,7 @@ export function planner({ addItems, lists }) {
                     offers: this.offerPayload(),
                     pantry: this.pantryPayload(),
                     recipes: this.selectedSuggestions.map((suggestion) => ({
+                        key: suggestion.key,
                         source: suggestion.source,
                         recipe_id: suggestion.recipe_id ?? null,
                         name: suggestion.name,
@@ -279,7 +309,11 @@ export function planner({ addItems, lists }) {
             });
         },
 
-        async addToList() {
+        /**
+         * Adds the selected items; asks first if some are already open on an existing list
+         * (`merge` is the answer).
+         */
+        async addToList(merge = null) {
             // Recipes as names from the list step, linked if the suggestion has a URL (own recipes).
             const urls = new Map(this.suggestions.map((suggestion) => [suggestion.name.toLowerCase(), suggestion.url ?? null]));
             const items = this.selectedItems.map(({ name, amount, unit, store, note, recipes }) => ({
@@ -288,7 +322,15 @@ export function planner({ addItems, lists }) {
                 recipes: (recipes ?? []).map((recipe) => ({ name: recipe, url: urls.get(recipe.toLowerCase()) ?? null })),
             }));
             if (!items.length) return;
-            const listId = await addItems(this.target, this.listName.trim() || this.$t('Shopping list'), items);
+            if (merge === null && this.target) {
+                const count = merges(this.target, items);
+                if (count) {
+                    this.mergeCount = count;
+                    return;
+                }
+            }
+            this.mergeCount = null;
+            const listId = await addItems(this.target, this.listName.trim() || this.$t('Shopping list'), items, Boolean(merge));
             this.reset();
             location.hash = `#/list/${listId}`;
         },

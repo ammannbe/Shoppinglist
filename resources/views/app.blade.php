@@ -28,6 +28,7 @@
                 <span x-show="route.view === 'install'" class="block truncate" x-text="$t('Install app')"></span>
                 <span x-show="route.view === 'planner'" class="block truncate" x-text="$t('Week planner')"></span>
                 <span x-show="route.view === 'offers'" class="block truncate" x-text="$t('Offers')"></span>
+                <span x-show="route.view === 'recipes'" class="block truncate" x-text="$t('Recipe history')"></span>
                 <span x-show="route.view === 'products'" class="block truncate" x-text="$t('Products')"></span>
                 <span x-show="route.view === 'units'" class="block truncate" x-text="$t('Units')"></span>
                 <span x-show="route.view === 'stores'" class="block truncate" x-text="$t('Shops')"></span>
@@ -186,9 +187,12 @@
                             :class="storeFilter.length ? 'border-stone-300 bg-white' : 'border-emerald-700 bg-emerald-700 text-white'"
                             @click="clearStoreFilter()" x-text="$t('All shops')"></button>
                         <template x-for="tag in listStoreTags" :key="tag">
-                            <button type="button" class="max-w-40 truncate rounded-full border px-3 py-1 text-sm" :aria-pressed="storeFilter.includes(tag)"
+                            <button type="button" class="flex max-w-40 items-center gap-1.5 rounded-full border px-3 py-1 text-sm" :aria-pressed="storeFilter.includes(tag)"
                                 :class="storeFilter.includes(tag) ? 'border-orange-600 bg-orange-600 text-white' : 'border-stone-300 bg-white'"
-                                :title="storeLabel(tag)" @click="toggleStoreFilter(tag)" x-text="storeLabel(tag)"></button>
+                                :title="storeLabel(tag)" @click="toggleStoreFilter(tag)">
+                                <img x-show="storeIcon(tag)" :src="storeIcon(tag)" alt="" class="-ml-1.5 h-5 w-auto max-w-16 shrink-0 rounded bg-white object-contain">
+                                <span class="truncate" x-text="storeLabel(tag)"></span>
+                            </button>
                         </template>
                     </div>
                     <p x-show="shownOpenItems.length < openItems.length" class="mb-2 text-sm text-stone-500"
@@ -202,7 +206,7 @@
                                     <span class="check" aria-hidden="true"></span>
                                     <img x-show="item.image" :src="imageUrl(item.image, 'thumb')" @click.stop="openImage(item.image)" :alt="$t('Show photo')" loading="lazy" decoding="async" class="mr-3 size-10 shrink-0 cursor-zoom-in rounded-md bg-stone-100 object-cover">
                                     <template x-for="tag in item.stores" :key="tag">
-                                        <span class="mr-1.5 grid h-5 min-w-5 max-w-24 shrink-0 place-items-center truncate rounded bg-orange-100 px-1 text-xs font-semibold text-orange-800" :title="storeLabel(tag)" x-text="tag"></span>
+                                        <x-store-badge tag="tag" />
                                     </template>
                                     <span x-show="item.stores.length" class="mr-0.5" aria-hidden="true"></span>
                                     <span x-show="amount(item)" class="mr-2 shrink-0 tabular-nums text-stone-500" x-text="amount(item)"></span>
@@ -232,7 +236,7 @@
                                         </span>
                                         <img x-show="item.image" :src="imageUrl(item.image, 'thumb')" @click.stop="openImage(item.image)" :alt="$t('Show photo')" loading="lazy" decoding="async" class="mr-3 opacity-50 size-10 shrink-0 cursor-zoom-in rounded-md bg-stone-100 object-cover">
                                         <template x-for="tag in item.stores" :key="tag">
-                                            <span class="mr-1.5 grid h-5 min-w-5 max-w-24 shrink-0 place-items-center truncate rounded bg-stone-100 px-1 text-xs font-semibold" :title="storeLabel(tag)" x-text="tag"></span>
+                                            <x-store-badge tag="tag" muted />
                                         </template>
                                         <span x-show="amount(item)" class="mr-2 shrink-0 tabular-nums line-through" x-text="amount(item)"></span>
                                         <span class="truncate line-through" x-text="item.name"></span>
@@ -255,6 +259,29 @@
                     </template>
                 </select>
             </div>
+
+            {{-- Country of the standard shops offered in the shop choice --}}
+            <div>
+                <h2 class="mb-2 text-sm font-medium text-stone-600" x-text="$t('Country of the shops')"></h2>
+                <select class="field w-full" @change="$store.prefs.set('country', $event.target.value)">
+                    <template x-for="option in [{ value: 'CH', label: $t('Switzerland') }, { value: 'DE', label: $t('Germany') }, { value: 'AT', label: $t('Austria') }]" :key="option.value">
+                        <option :value="option.value" x-text="option.label" :selected="option.value === country"></option>
+                    </template>
+                </select>
+            </div>
+
+            {{-- Region of shops with regional offers (Migros cooperatives): offers of other regions are hidden --}}
+            <template x-for="(regions, tag) in country === 'CH' ? shopRegions : {}" :key="tag">
+                <div>
+                    <h2 class="mb-2 text-sm font-medium text-stone-600" x-text="$t('Offers of :shop', { shop: storeLabel(tag) })"></h2>
+                    <select class="field w-full" @change="setShopRegion(tag, $event.target.value)">
+                        <option value="" x-text="$t('All regions')" :selected="!$store.prefs.regions?.[tag]"></option>
+                        <template x-for="(name, key) in regions" :key="key">
+                            <option :value="key" x-text="name" :selected="$store.prefs.regions?.[tag] === key"></option>
+                        </template>
+                    </select>
+                </div>
+            </template>
 
             <fieldset>
                 <legend class="mb-2 text-sm font-medium text-stone-600" x-text="$t('Actions on touch devices')"></legend>
@@ -345,7 +372,7 @@
         <section x-show="['products', 'units', 'stores'].includes(route.view)" class="space-y-4">
             <p class="text-stone-600" x-text="{
                 units: $t('Units are suggested after the amount. Rename or delete your own units here, the standard units cannot be changed.'),
-                stores: $t('Shops can be chosen when editing an item, the item shows the code. Add, edit or delete your own shops here; standard shops cannot be changed, but you can hide the ones you do not use.'),
+                stores: $t('Shops can be chosen when editing an item, the item shows the icon or the code. Add, edit or delete your own shops here (with an own image if you like); standard shops cannot be changed, but you can hide the ones you do not use.'),
                 products: $t('Products are suggested when adding items. Rename or delete your own misspelled and unused ones here; standard products cannot be changed, but your photos are shown with them.'),
             }[route.view]"></p>
             <form x-show="route.view === 'stores'" @submit.prevent="createStore()" class="flex gap-2">
@@ -365,7 +392,8 @@
                         <template x-for="entry in shownCatalog.filter((entry) => !entry.is_public)" :key="entry.id">
                             <x-swipe-row actions="catalogActions(entry)">
                                 <span class="flex min-w-0 flex-1 items-center gap-3 py-2 pl-4 pointer-coarse:pr-4">
-<span x-show="entry.code" class="grid h-5 min-w-5 shrink-0 place-items-center rounded bg-orange-100 px-1 text-xs font-semibold text-orange-800" x-text="entry.code"></span>
+                                    <img x-show="route.view === 'stores' && storeIconUrl(entry)" :src="storeIconUrl(entry)" alt="" class="h-6 w-auto max-w-20 shrink-0 rounded bg-white object-contain">
+                                    <span x-show="entry.code" class="grid h-5 min-w-5 shrink-0 place-items-center rounded bg-orange-100 px-1 text-xs font-semibold text-orange-800" x-text="entry.code"></span>
                                     <img x-show="entry.image" :src="imageUrl(entry.image, 'thumb')" @click.stop="openImage(entry.image)" :alt="$t('Show photo')" loading="lazy" decoding="async" class="size-10 shrink-0 cursor-zoom-in rounded-md bg-stone-100 object-cover">
                                     <span class="min-w-0 flex-1 truncate py-1" x-text="entry.name"></span>
                                 </span>
@@ -378,7 +406,7 @@
                             <template x-for="entry in shownCatalog.filter((entry) => entry.is_public)" :key="entry.id">
                                 <li class="flex items-center gap-3 px-4 py-3" :class="route.view === 'stores' && storeHidden(entry) && 'text-stone-400'">
                                     <img x-show="entry.image" :src="imageUrl(entry.image, 'thumb')" @click="openImage(entry.image)" :alt="$t('Show photo')" loading="lazy" decoding="async" class="-my-1 size-10 shrink-0 cursor-zoom-in rounded-md bg-stone-100 object-cover">
-                                    <span x-show="entry.code" class="grid h-5 min-w-5 shrink-0 place-items-center rounded bg-stone-100 px-1 text-xs font-semibold" x-text="entry.code"></span>
+                                    <img x-show="route.view === 'stores' && storeIconUrl(entry)" :src="storeIconUrl(entry)" alt="" class="h-6 w-auto max-w-20 shrink-0 rounded bg-white object-contain">
                                     <span class="min-w-0 flex-1 truncate" x-text="entry.name"></span>
                                     {{-- Standard shops can be hidden from the shop choice (per user) --}}
                                     <label x-show="route.view === 'stores'" class="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-stone-600">
@@ -393,12 +421,16 @@
             </template>
             <div x-show="catalog.length > shownCatalog.length" class="space-y-2 text-center">
                 <p class="text-sm text-stone-500" x-text="$t('Showing :shown of :total.', { shown: shownCatalog.length, total: catalog.length })"></p>
-                <button type="button" class="button-secondary" @click="showMoreCatalog()" x-text="$t('Show more')"></button>
+                <button type="button" class="button-secondary inline-flex items-center gap-2" @click="showMoreCatalog()" :disabled="catalogLoading" :aria-busy="catalogLoading">
+                    <x-spinner x-show="catalogLoading" />
+                    <span x-text="$t('Show more')"></span>
+                </button>
             </div>
         </section>
 
         @include('partials.planner')
         @include('partials.offers')
+        @include('partials.recipe-history')
 
         {{-- A server page (login, account, …) was opened without a connection: the service worker served the app shell. --}}
         <section x-show="route.view === 'offline'" class="space-y-4 py-8 text-center">
@@ -503,6 +535,7 @@
                     <div x-show="editing.stores.length" class="mb-2 flex flex-wrap gap-1.5">
                         <template x-for="tag in editing.stores" :key="tag">
                             <span class="flex max-w-full items-center gap-1 rounded-full bg-orange-100 py-0.5 pr-1 pl-2.5 text-sm text-orange-900">
+                                <img x-show="storeIcon(tag)" :src="storeIcon(tag)" alt="" class="-ml-1.5 h-5 w-auto max-w-16 shrink-0 rounded bg-white object-contain">
                                 <span class="truncate" x-text="storeLabel(tag)"></span>
                                 <button type="button" class="grid size-6 shrink-0 place-items-center rounded-full hover:bg-orange-200" @click="removeEditingStore(tag)"
                                     :aria-label="$t('Remove :name', { name: storeLabel(tag) })">✕</button>
@@ -611,6 +644,15 @@
                     <span class="label" x-text="$t('Code')"></span>
                     <input x-model="renamingDoc.code" class="field w-full" maxlength="10" :placeholder="$t('Optional, otherwise the name is shown')">
                 </label>
+                {{-- Own image shown on the items instead of the code --}}
+                <div x-show="renamingDoc.collection === 'stores'" class="flex items-center gap-3">
+                    <img x-show="renamingDoc.icon" :src="renamingDoc.icon" alt="" class="size-10 shrink-0 rounded bg-white object-contain">
+                    <label class="button-secondary cursor-pointer">
+                        <span x-text="renamingDoc.icon ? $t('Change image') : $t('Add image')"></span>
+                        <input type="file" accept="image/*" class="sr-only" @change="pickStoreIcon($event)">
+                    </label>
+                    <button type="button" x-show="renamingDoc.icon" class="text-sm text-stone-600 underline" @click="renamingDoc.icon = null" x-text="$t('Remove image')"></button>
+                </div>
                 <div class="flex flex-wrap justify-end gap-2 pt-2">
                     <button type="button" class="button-secondary" @click="$refs.renameDialog.close()" x-text="$t('Cancel')"></button>
                     <button class="button" x-text="$t('Save')"></button>

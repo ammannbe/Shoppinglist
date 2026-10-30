@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\ShopRegions;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -9,7 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 
-#[Fillable(['store', 'name', 'brand', 'price', 'regular_price', 'discount', 'valid_from', 'valid_until', 'shared'])]
+#[Fillable(['store', 'region', 'name', 'brand', 'price', 'regular_price', 'discount', 'valid_from', 'valid_until', 'shared'])]
 class Offer extends Model
 {
     use HasUuids;
@@ -34,11 +35,15 @@ class Offer extends Model
     }
 
     /**
-     * Own and shared offers that have not expired.
+     * Own and shared offers that have not expired; shared ones of other regions than the user's
+     * (preferences.regions) are left out.
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
-        return $query->where(fn (Builder $q) => $q->where('user_id', $user->id)->orWhere('shared', true))
+        $hidden = ShopRegions::hidden((array) ($user->preferences['regions'] ?? []));
+
+        return $query->where(fn (Builder $q) => $q->where('user_id', $user->id)->orWhere(fn (Builder $q) => $q->where('shared', true)
+            ->when($hidden, fn (Builder $q) => $q->where(fn (Builder $q) => $q->whereNull('region')->orWhereNotIn('region', $hidden)))))
             ->where(fn (Builder $q) => $q->whereNull('valid_until')->orWhereDate('valid_until', '>=', today()))
             ->where(fn (Builder $q) => $q->whereNotNull('valid_until')->orWhere('created_at', '>=', now()->subDays(self::UNDATED_DAYS)));
     }
@@ -68,6 +73,7 @@ class Offer extends Model
         return [
             'id' => $this->id,
             'store' => $this->store,
+            'region' => $this->region,
             'name' => $this->name,
             'brand' => $this->brand,
             'price' => $this->price,

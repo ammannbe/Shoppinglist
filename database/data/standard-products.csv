@@ -129,6 +129,7 @@ Camembert,Käse
 Frischkäse,Käse
 Mascarpone,Käse
 Ricotta,Käse
+Sbrinz,Käse
 Hackfleisch,Fleisch & Fisch
 Rindshackfleisch,Fleisch & Fisch
 Poulet,Fleisch & Fisch
@@ -156,6 +157,8 @@ Thon,Fleisch & Fisch
 Fischstäbchen,Fleisch & Fisch
 Crevetten,Fleisch & Fisch
 Tofu,Fleisch & Fisch
+Schnitzel,Fleisch & Fisch
+Brätkügeli,Fleisch & Fisch
 Brot,Brot & Backwaren
 Ruchbrot,Brot & Backwaren
 Halbweissbrot,Brot & Backwaren
@@ -238,6 +241,11 @@ Kapern,Vorräte
 Bouillon,Vorräte
 Gemüsebouillon,Vorräte
 Fleischbouillon,Vorräte
+Apfelmus,Vorräte
+Griess,Vorräte
+Instant-Nudeln,Vorräte
+Mandelblättchen,Vorräte
+Sardinen,Vorräte
 Salz,Gewürze & Saucen
 Pfeffer,Gewürze & Saucen
 Paprika,Gewürze & Saucen
@@ -262,6 +270,7 @@ Salatsauce,Gewürze & Saucen
 Sojasauce,Gewürze & Saucen
 Pesto,Gewürze & Saucen
 Zitronensaft,Gewürze & Saucen
+Guacamole,Gewürze & Saucen
 Konfitüre,Brotaufstrich
 Nutella,Brotaufstrich
 Erdnussbutter,Brotaufstrich
@@ -290,6 +299,10 @@ Kaffeekapseln,Getränke
 Tee,Getränke
 Ovomaltine,Getränke
 Trinkschokolade,Getränke
+Gin,Getränke
+Vodka,Getränke
+Tonic Water,Getränke
+Energy Drink,Getränke
 Tiefkühlgemüse,Tiefkühlprodukte
 Tiefkühlpizza,Tiefkühlprodukte
 Pommes frites,Tiefkühlprodukte
@@ -326,6 +339,10 @@ Gefrierbeutel,Haushalt
 Batterien,Haushalt
 Kerzen,Haushalt
 Zündhölzer,Haushalt
+Spülmaschinensalz,Haushalt
+Ofenreiniger,Haushalt
+Kompostsäckli,Haushalt
+WC-Steine,Haushalt
 Zahnpasta,Körperpflege
 Zahnbürste,Körperpflege
 Zahnseide,Körperpflege
@@ -340,3 +357,5 @@ Rasierklingen,Körperpflege
 Wattestäbchen,Körperpflege
 Wattepads,Körperpflege
 Pflaster,Körperpflege
+Mundwasser,Körperpflege
+Badeschaum,Körperpflege

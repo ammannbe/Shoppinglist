@@ -38,6 +38,11 @@
         </div>
     </template>
 
+    <p x-show="regionHint.length" x-cloak class="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <span x-text="$t('Offers of all regions are shown for :shops.', { shops: regionHint.join(', ') })"></span>
+        <a href="#/settings" class="underline" x-text="$t('Choose your region')"></a>
+    </p>
+
     <p x-show="loaded && !shown.length" class="py-6 text-center text-stone-500" x-text="offers.length ? $t('No offers found.') : $t('No offers yet.')"></p>
 
     {{-- Per shop, collapsible; own offers of a shop can be deleted at once --}}
@@ -97,6 +102,18 @@
                         <input x-model="form.brand" class="field w-full" maxlength="255">
                     </label>
                 </div>
+                {{-- Shops with regional offers: new offers default to the user's region --}}
+                <template x-if="regionsOf(form.store).length">
+                    <label class="block" x-init="if (!form.id && !form.region) form.region = chosenRegion(form.store) ?? ''">
+                        <span class="label" x-text="$t('Region')"></span>
+                        <select x-model="form.region" class="field w-full">
+                            <option value="" x-text="$t('All regions')"></option>
+                            <template x-for="[key, name] in regionsOf(form.store)" :key="key">
+                                <option :value="key" x-text="name" :selected="form.region === key"></option>
+                            </template>
+                        </select>
+                    </label>
+                </template>
                 <div class="flex gap-3">
                     <label class="block min-w-0 w-1/3">
                         <span class="label" x-text="$t('Discount')"></span>

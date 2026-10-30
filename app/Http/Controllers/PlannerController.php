@@ -6,6 +6,7 @@ use App\Ai\AiException;
 use App\Ai\Assistant;
 use App\Http\Requests\PlannerListRequest;
 use App\Http\Requests\PlannerSuggestionsRequest;
+use App\Models\PlannedRecipe;
 use App\Recipes\RecipesClient;
 use App\Recipes\RecipesException;
 use Illuminate\Http\Client\ConnectionException;
@@ -32,10 +33,17 @@ class PlannerController extends Controller
         ]);
         $user = $request->user();
         $shared = $request->boolean('share', true);
+        // Offers of a regional shop without a region in the material are the user's region's
+        // (shop pages show the offers of the region chosen there).
+        $regions = (array) ($user->preferences['regions'] ?? []);
 
         // The offers are saved in the pool (#/offers), the planner gets them with their ids.
         return $this->answer(fn () => ['offers' => array_map(
-            fn (array $offer) => OfferController::save($user, [...$offer, 'shared' => $shared])->toClient($user),
+            fn (array $offer) => OfferController::save($user, [
+                ...$offer,
+                'region' => $offer['region'] ?? $regions[$offer['store'] ?? ''] ?? null,
+                'shared' => $shared,
+            ])->toClient($user),
             $this->assistant->readOffers($request->file('file'), $validated['text'] ?? null, $this->language()),
         )]);
     }
@@ -87,6 +95,9 @@ class PlannerController extends Controller
                 ], $result['ideas']),
             ];
 
+            // History (#/recipes): plan or cook them later, import AI ideas afterwards.
+            PlannedRecipe::remember($user, array_map(fn (array $suggestion) => ['servings' => (int) $data['servings'], ...$suggestion], $suggestions));
+
             return ['suggestions' => $suggestions, 'warning' => $warning];
         });
     }
@@ -119,7 +130,11 @@ class PlannerController extends Controller
                 }
             }
 
-            return ['items' => $this->assistant->shoppingList($recipes, $data['offers'] ?? [], $data['pantry'] ?? [], $this->language())];
+            $items = $this->assistant->shoppingList($recipes, $data['offers'] ?? [], $data['pantry'] ?? [], $this->language());
+            PlannedRecipe::where('user_id', $user->id)->whereIn('key', array_filter(array_column($data['recipes'], 'key')))
+                ->update(['used_at' => now()]);
+
+            return ['items' => $items];
         });
     }
 
@@ -130,6 +145,8 @@ class PlannerController extends Controller
     public function saveRecipe(Request $request): JsonResponse
     {
         $data = $request->validate([
+            // History entry of the idea (gets the import link).
+            'key' => ['nullable', 'string', 'max:100'],
             'name' => ['required', 'string', 'max:100'],
             'servings' => ['required', 'integer', 'min:1', 'max:100'],
             'category' => ['nullable', 'string', 'max:50'],
@@ -157,7 +174,12 @@ class PlannerController extends Controller
             return response()->json(['message' => __('The recipe could not be handed over to :name.', ['name' => config('services.recipes.name')])], 502);
         }
 
-        return response()->json(['url' => $result['data']['url'] ?? null]);
+        $url = $result['data']['url'] ?? null;
+        if (filled($data['key'] ?? null) && $url !== null) {
+            PlannedRecipe::where('user_id', $request->user()->id)->where('key', $data['key'])->update(['draft_url' => $url]);
+        }
+
+        return response()->json(['url' => $url]);
     }
 
     /**

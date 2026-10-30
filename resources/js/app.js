@@ -6,11 +6,13 @@ import { createDatabase, removeDatabase, startReplication } from './db/index.js'
 import { byPosition, compareBy, formatAmount, mergedAmount, nextPosition, normalizeName, parseItemInput, sameName, uuid7 } from './helpers.js';
 import { hasPendingLocale, htmlLang, initialLocale, LOCALES, storeLocale, translate } from './i18n.js';
 import { registerServiceWorker } from './pwa.js';
-import { shrinkImage } from './image.js';
+import { shrinkIcon, shrinkImage } from './image.js';
 import { createLightboxStore } from './lightbox.js';
 import { createPrefsStore } from './prefs.js';
 import { offersPool } from './offers.js';
 import { planner } from './planner.js';
+import { recipeHistory } from './recipe-history.js';
+import { deviceCountry, inCountry, storeIconUrl } from './stores.js';
 import { suggestField } from './suggest.js';
 import { swipeRow } from './swipe.js';
 import { createUndoStore } from './undo.js';
@@ -19,8 +21,8 @@ import { createInstallStore } from './install.js';
 const RESYNC_INTERVAL = 30_000;
 const DEFAULT_UNITS = ['Stk.', 'g', 'kg', 'ml', 'dl', 'l', 'Pck.', 'Bund', 'Fl.'];
 // Standard shops for guests and the first start, the public ones arrive with the sync.
-const DEFAULT_STORES = [['Migros', 'M'], ['Coop', 'C'], ['Aldi', 'A'], ['Lidl', 'L'], ['Denner', 'D']]
-    .map(([name, code]) => ({ id: `default:${code}`, name, code, is_public: true }));
+const DEFAULT_STORES = [['Migros', 'M', ['CH']], ['Coop', 'C', ['CH']], ['Aldi', 'A', []], ['Lidl', 'L', []], ['Denner', 'D', ['CH']]]
+    .map(([name, code, countries]) => ({ id: `default:${code}`, name, code, icon: name.toLowerCase(), countries, is_public: true }));
 const OWNER_KEY = 'shoppinglist.owner';
 // Shop filter per list (device only): { listId: [tags] }.
 const STORE_FILTER_KEY = 'shoppinglist.store-filter';
@@ -96,6 +98,7 @@ Alpine.data('swipeRow', swipeRow);
 Alpine.data('suggestField', suggestField);
 Alpine.data('planner', planner);
 Alpine.data('offersPool', offersPool);
+Alpine.data('recipeHistory', recipeHistory);
 
 // The products/units/shops view renders this many rows at a time ("Show more" adds as many).
 const CATALOG_PAGE = 200;
@@ -117,6 +120,7 @@ Alpine.data('shoppinglist', () => ({
     duplicate: null,
     catalogSearch: '',
     catalogLimit: CATALOG_PAGE,
+    catalogLoading: false,
     renaming: null,
     renamingDoc: null,
     newStore: { name: '', code: '' },
@@ -195,11 +199,13 @@ Alpine.data('shoppinglist', () => ({
         return [...(stores.some((store) => store.is_public) ? [] : DEFAULT_STORES), ...stores]
             .sort((a, b) => Number(b.is_public) - Number(a.is_public) || byName(a, b));
     },
-    /** Shops offered in the edit dialog: without the standard shops the user has hidden. */
+    /** Country of the shop choice: the user's setting, otherwise the device's. */
+    get country() {
+        return Alpine.store('prefs').country || deviceCountry();
+    },
+    /** Shops offered in the edit dialog: own ones and the standard shops of the country the user has not hidden. */
     get choosableStores() {
-        const hidden = Alpine.store('prefs').hidden_stores ?? [];
-
-        return this.stores.filter((store) => !store.is_public || !hidden.includes(store.code));
+        return this.stores.filter((store) => !store.is_public || (inCountry(store, this.country) && !this.storeHidden(store)));
     },
     storeTag(store) {
         return store.code || store.name;
@@ -211,18 +217,33 @@ Alpine.data('shoppinglist', () => ({
         return this.stores.find((store) => store.code && sameName(store.code, tag))
             ?? this.stores.find((store) => sameName(store.name, tag)) ?? null;
     },
+    // Hidden standard shops are kept by tag (older settings: the code, which is the tag).
     storeHidden(store) {
-        return (Alpine.store('prefs').hidden_stores ?? []).includes(store.code);
+        return (Alpine.store('prefs').hidden_stores ?? []).includes(this.storeTag(store));
     },
     toggleStoreHidden(store) {
         const hidden = Alpine.store('prefs').hidden_stores ?? [];
-        Alpine.store('prefs').set('hidden_stores', hidden.includes(store.code)
-            ? hidden.filter((code) => code !== store.code)
-            : [...hidden, store.code]);
+        const tag = this.storeTag(store);
+        Alpine.store('prefs').set('hidden_stores', hidden.includes(tag) ? hidden.filter((each) => each !== tag) : [...hidden, tag]);
+    },
+    /** Icon URL of a shop tag on an item, null if the shop has none (the badge shows the tag). */
+    storeIcon(tag) {
+        return storeIconUrl(this.storeByTag(tag));
+    },
+    storeIconUrl(store) {
+        return storeIconUrl(store);
     },
     /** Full name of a shop tag (tooltip of the badge), the tag itself if unknown. */
     storeLabel(tag) {
         return this.storeByTag(tag)?.name ?? tag ?? '';
+    },
+    /** Shops with regional offers (tag => region key => name, from /me) for the settings. */
+    get shopRegions() {
+        return Alpine.store('sync').user?.regions ?? {};
+    },
+    /** The user's region of a shop (empty: offers of all regions). */
+    setShopRegion(tag, region) {
+        Alpine.store('prefs').set('regions', { ...Alpine.store('prefs').regions, [tag]: region || null });
     },
 
     /**
@@ -234,7 +255,8 @@ Alpine.data('shoppinglist', () => ({
         if (!['products', 'units', 'stores'].includes(collection)) return [];
         const search = normalizeName(this.catalogSearch);
         let entries = collection === 'stores'
-            ? this.stores
+            // Standard shops of other countries are not listed (country in the settings).
+            ? this.stores.filter((store) => !store.is_public || inCountry(store, this.country))
             : Alpine.store('data')[collection].filter((entry) => !Alpine.store('undo').hidden(entry.id));
         if (collection === 'products') entries = withOwnImages(entries);
         if (collection === 'units' && !entries.some((entry) => entry.is_public)) {
@@ -245,8 +267,16 @@ Alpine.data('shoppinglist', () => ({
             .filter((entry) => !search || normalizeName(entry.name).includes(search) || normalizeName(entry.code).startsWith(search))
             .sort((a, b) => Number(a.is_public) - Number(b.is_public) || byName(a, b));
     },
+    /**
+     * Renders the next rows; the spinner is painted first, rendering 200 rows blocks for a moment.
+     */
     showMoreCatalog() {
-        this.catalogLimit += CATALOG_PAGE;
+        if (this.catalogLoading) return;
+        this.catalogLoading = true;
+        requestAnimationFrame(() => setTimeout(() => {
+            this.catalogLimit += CATALOG_PAGE;
+            this.$nextTick(() => { this.catalogLoading = false; });
+        }));
     },
     get shownCatalog() {
         return this.catalog.slice(0, this.catalogLimit);
@@ -275,7 +305,27 @@ Alpine.data('shoppinglist', () => ({
      *
      * @returns {Promise<string>} list id
      */
-    async addPlannedItems(target, name, items) {
+    /**
+     * Open items of a list the planned items could be merged into (same product and unit), by planned item index.
+     *
+     * @returns {Map<number, object>}
+     */
+    plannedMerges(listId, items) {
+        const open = listId ? this.itemsOf(listId).filter((item) => !item.done) : [];
+        const merges = new Map();
+        items.forEach((item, index) => {
+            const existing = open.find((each) => sameName(each.name, item.name) && mergedAmount(each, item) !== null);
+            if (existing) merges.set(index, existing);
+        });
+
+        return merges;
+    },
+
+    /**
+     * Adds the planned items to a list (new one without target). With `merge`, items already open
+     * on the list with the same unit get the amount added and the recipes and shops of both.
+     */
+    async addPlannedItems(target, name, items, merge = false) {
         let listId = target;
         if (!listId) {
             listId = uuid7();
@@ -283,8 +333,23 @@ Alpine.data('shoppinglist', () => ({
                 id: listId, name, owner_email: Alpine.store('sync').user?.email ?? null, is_owner: true, members: [], position: nextPosition(this.lists),
             });
         }
+        const merges = merge ? this.plannedMerges(target, items) : new Map();
         let position = nextPosition(this.itemsOf(listId)) ?? 0;
-        for (const item of items) {
+        for (const [index, item] of items.entries()) {
+            const recipes = (item.recipes ?? []).map(({ name, url }) => ({ name, url: url ?? null }));
+            const existing = merges.get(index);
+            if (existing) {
+                const known = existing.recipes ?? [];
+                const note = [existing.note, item.note].filter(Boolean);
+                await (await db.items.findOne(existing.id).exec())?.incrementalPatch({
+                    amount: item.amount == null && existing.amount == null ? null : mergedAmount(existing, item),
+                    unit: existing.unit ?? item.unit ?? null,
+                    stores: [...new Set([...(existing.stores ?? []), ...(item.stores ?? [])])],
+                    recipes: [...known.map(({ name, url }) => ({ name, url: url ?? null })), ...recipes.filter((recipe) => !known.some((each) => sameName(each.name, recipe.name)))],
+                    note: [...new Set(note)].join('\n').slice(0, 255) || null,
+                });
+                continue;
+            }
             await db.items.insert({
                 id: uuid7(),
                 shopping_list_id: listId,
@@ -293,7 +358,7 @@ Alpine.data('shoppinglist', () => ({
                 unit: item.unit ?? null,
                 stores: [...(item.stores ?? [])],
                 note: item.note ?? null,
-                recipes: (item.recipes ?? []).map(({ name, url }) => ({ name, url: url ?? null })),
+                recipes,
                 image: ownProduct(item.name)?.image ?? null,
                 position: position++,
                 creator_email: Alpine.store('sync').user?.email ?? null,
@@ -341,7 +406,7 @@ Alpine.data('shoppinglist', () => ({
 
     get backLink() {
         if (['products', 'units', 'stores', 'install'].includes(this.route.view)) return '#/settings';
-        if (this.route.view === 'offers') return '#/planner';
+        if (['offers', 'recipes'].includes(this.route.view)) return '#/planner';
 
         return this.route.view === 'settings' ? this.settingsBack : '#/';
     },
@@ -391,7 +456,7 @@ Alpine.data('shoppinglist', () => ({
      * Rename dialog for lists (overview), products, units and shops (with code).
      */
     openRename(doc, collection) {
-        this.renamingDoc = { collection, id: doc.id, name: doc.name, code: doc.code ?? null };
+        this.renamingDoc = { collection, id: doc.id, name: doc.name, code: doc.code ?? null, icon: doc.icon ?? null };
         this.$nextTick(() => this.$refs.renameDialog.showModal());
     },
 
@@ -501,7 +566,7 @@ Alpine.data('shoppinglist', () => ({
     /**
      * Changes name and code of an own shop; the items with its old tag get the new one.
      */
-    async saveStore({ id, name, code }) {
+    async saveStore({ id, name, code, icon = null }) {
         name = name.trim();
         code = (code ?? '').trim() || null;
         const error = this.storeError(id, name, code);
@@ -512,7 +577,7 @@ Alpine.data('shoppinglist', () => ({
         const doc = await db.stores.findOne(id).exec();
         if (!doc) return true;
         const old = this.storeTag(doc);
-        await doc.incrementalPatch({ name, code });
+        await doc.incrementalPatch({ name, code, icon });
         const tag = code || name;
         if (old !== tag) {
             const items = Alpine.store('data').items.filter((item) => item.stores?.includes(old));
@@ -537,6 +602,18 @@ Alpine.data('shoppinglist', () => ({
         await db.stores.insert({ id: uuid7(), name: text.slice(0, 255), code: null });
 
         return text.slice(0, 255);
+    },
+
+    /** Own image as icon of a shop (rename dialog), kept small inside the shop document. */
+    async pickStoreIcon(event) {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file || !this.renamingDoc) return;
+        try {
+            this.renamingDoc.icon = await shrinkIcon(file);
+        } catch {
+            Alpine.store('notice').show(this.$t('The image could not be read.'));
+        }
     },
 
     /** Shops picked in the edit dialog (chips). */

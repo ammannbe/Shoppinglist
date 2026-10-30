@@ -15,6 +15,7 @@ class PlannerListRequest extends FormRequest
             ...PlannerSuggestionsRequest::offersAndPantry(),
             'recipes' => ['required', 'array', 'min:1', 'max:15'],
             'recipes.*.source' => ['required', 'in:recipes,ai'],
+            'recipes.*.key' => ['nullable', 'string', 'max:100'],
             'recipes.*.recipe_id' => ['required_if:recipes.*.source,recipes', 'nullable', 'integer'],
             'recipes.*.name' => ['required', 'string', 'max:255'],
             'recipes.*.servings' => ['required', 'numeric', 'min:0.5', 'max:100'],

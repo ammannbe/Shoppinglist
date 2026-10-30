@@ -264,6 +264,57 @@ class PlannerTest extends TestCase
         Http::assertSent(fn (Request $request) => str_contains($request->url(), '/api/recipes/5?servings=4'));
     }
 
+    public function test_suggested_recipes_are_kept_in_the_history(): void
+    {
+        Http::fake([
+            'recipes.test/api/foods' => Http::response(['data' => [['id' => 1, 'name' => 'Hackfleisch']]]),
+            'recipes.test/api/vocabulary' => Http::response(['data' => []]),
+            'recipes.test/api/recipes/search' => Http::response(['data' => [
+                ['id' => 5, 'name' => 'Lasagne', 'url' => 'https://recipes.test/recipes/5', 'food_ids' => [1], 'matched_food_ids' => [1]],
+            ]]),
+            'recipes.test/api/recipes/5*' => Http::response(['data' => ['name' => 'Lasagne', 'ingredients' => []]]),
+            'recipes.test/api/recipe-drafts' => Http::response(['data' => ['id' => 'abc', 'url' => 'https://recipes.test/import?draft=abc']], 201),
+            'openai.test/*' => Http::sequence()
+                ->push($this->ai(['matches' => [['product' => 'Rindshackfleisch', 'food_id' => 1]]]))
+                ->push($this->ai([
+                    'picks' => [['recipe_id' => 5, 'reason' => 'Aktion', 'uses_offers' => ['Rindshackfleisch'], 'uses_pantry' => []]],
+                    'ideas' => [['name' => 'Omelette', 'reason' => 'Eier', 'servings' => 2, 'ingredients' => [['amount' => 4, 'unit' => 'Stk.', 'name' => 'Eier']], 'instructions' => '1. Braten', 'uses_offers' => [], 'uses_pantry' => []]],
+                ]))
+                ->push($this->ai(['items' => [['name' => 'Hackfleisch', 'amount' => 500, 'unit' => 'g', 'offer' => null, 'at_home' => false, 'recipes' => ['Lasagne']]]])),
+        ]);
+        $user = $this->connected();
+        $other = User::factory()->create();
+
+        $suggestions = $this->actingAs($user)->postJson('/planner/suggestions', [
+            'offers' => [['name' => 'Rindshackfleisch', 'store' => 'M']], 'pantry' => [], 'servings' => 4, 'count' => 2, 'ideas' => true,
+        ])->assertOk()->json('suggestions');
+
+        $history = $this->actingAs($user)->getJson('/planned-recipes')->assertOk()->assertJsonCount(2, 'recipes')->json('recipes');
+        $idea = collect($history)->firstWhere('source', 'ai');
+        $this->assertSame(['Omelette', 2, '1. Braten', $suggestions[1]['key']], [$idea['name'], $idea['servings'], $idea['instructions'], $idea['key']]);
+        $this->assertSame(4, collect($history)->firstWhere('source', 'recipes')['servings']);
+
+        $this->actingAs($user)->postJson('/planner/list', ['offers' => [], 'pantry' => [], 'recipes' => [
+            ['key' => $suggestions[0]['key'], 'source' => 'recipes', 'recipe_id' => 5, 'name' => 'Lasagne', 'servings' => 4],
+        ]])->assertOk();
+        $this->actingAs($user)->postJson('/planner/recipes', [
+            'key' => $idea['key'], 'name' => 'Omelette', 'servings' => 2, 'instructions' => '1. Braten', 'ingredients' => [['amount' => 4, 'unit' => 'Stk.', 'name' => 'Eier']],
+        ])->assertOk();
+
+        $history = collect($this->actingAs($user)->getJson('/planned-recipes')->json('recipes'));
+        $this->assertNotNull($history->firstWhere('source', 'recipes')['used_at']);
+        $this->assertSame('https://recipes.test/import?draft=abc', $history->firstWhere('source', 'ai')['draft_url']);
+
+        // Private: others neither see nor remove them.
+        $this->actingAs($other)->getJson('/planned-recipes')->assertJsonCount(0, 'recipes');
+        $this->actingAs($other)->deleteJson('/planned-recipes/'.$idea['id'])->assertForbidden();
+
+        $this->actingAs($user)->deleteJson('/planned-recipes/'.$idea['id'])->assertNoContent();
+        $this->actingAs($user)->getJson('/planned-recipes')->assertJsonCount(1, 'recipes');
+        $this->actingAs($user)->deleteJson('/planned-recipes')->assertNoContent();
+        $this->actingAs($user)->getJson('/planned-recipes')->assertJsonCount(0, 'recipes');
+    }
+
     public function test_amounts_are_rounded_to_what_one_buys(): void
     {
         $assistant = app(Assistant::class);

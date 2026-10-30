@@ -2,6 +2,7 @@
 
 namespace App\Ai;
 
+use App\Support\ShopRegions;
 use Illuminate\Http\UploadedFile;
 
 /**
@@ -22,7 +23,7 @@ class Assistant
     public function __construct(private OpenAiClient $client) {}
 
     /**
-     * @return list<array{name: string, brand: ?string, price: ?float, regular_price: ?float, discount: ?string, valid_from: ?string, valid_until: ?string, store: ?string}>
+     * @return list<array{name: string, brand: ?string, price: ?float, regular_price: ?float, discount: ?string, valid_from: ?string, valid_until: ?string, store: ?string, region: ?string}>
      */
     public function readOffers(?UploadedFile $file, ?string $text, string $language): array
     {
@@ -43,6 +44,9 @@ class Assistant
             .'"valid_from" and "valid_until" as YYYY-MM-DD if visible (the current year is '.now()->year.'). "shop" is the retailer of the offer if recognisable from logos, '
             .'brands (e.g. M-Classic, Migros Bio, Sélection → Migros; Naturaplan, Prix Garantie → Coop) or the app design; '
             .'one flyer or screenshot usually belongs to one retailer, so use the same shop for all its offers unless clearly different. '
+            .'"region" is the regional company the offers apply to, only if the material names it (e.g. "Migros Aare", '
+            .'"Genossenschaft Migros Zürich", "aare.migros.ch"), otherwise null; offers valid in all of Switzerland have none. Regions: '
+            .json_encode(ShopRegions::ALL, JSON_UNESCAPED_UNICODE).'. '
             .'Ignore non-offer content. Write names in '.$language.'.',
             $content,
             'offers',
@@ -55,6 +59,7 @@ class Assistant
                 'valid_from' => $this->nullable('string'),
                 'valid_until' => $this->nullable('string'),
                 'shop' => ['type' => ['string', 'null'], 'enum' => [...array_keys(self::SHOPS), null]],
+                'region' => ['type' => ['string', 'null'], 'enum' => [...ShopRegions::keys(), null]],
             ]))]),
         );
 
@@ -68,7 +73,8 @@ class Assistant
                 'discount' => $offer['discount'] ?? null,
                 'valid_from' => $offer['valid_from'] ?? null,
                 'valid_until' => $offer['valid_until'] ?? null,
-                'store' => self::SHOPS[$offer['shop'] ?? ''] ?? null,
+                'store' => $store = self::SHOPS[$offer['shop'] ?? ''] ?? null,
+                'region' => ShopRegions::valid($store, $offer['region'] ?? null),
             ])
             ->values()
             ->all();

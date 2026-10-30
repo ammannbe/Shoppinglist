@@ -86,7 +86,7 @@ export const units = {
 };
 
 export const stores = {
-    version: 1,
+    version: 2,
     primaryKey: 'id',
     type: 'object',
     properties: {
@@ -94,6 +94,10 @@ export const stores = {
         name: { type: 'string', maxLength: 255 },
         // Optional short code shown on the items instead of the name (items.stores keep it).
         code: { type: ['string', 'null'], maxLength: 10 },
+        // Standard shops: icon file name (resources/images/shops), own shops: small image as data URL.
+        icon: { type: ['string', 'null'] },
+        // Countries of a standard shop for the shop choice, empty: everywhere.
+        countries: { type: 'array', items: { type: 'string' }, default: [] },
         is_public: { type: 'boolean', default: false },
         ...syncFields,
     },
@@ -115,7 +119,7 @@ export const migrations = {
         4: ({ store, ...doc }) => ({ ...doc, stores: store ? [store] : [], recipes: [] }),
     },
     // Codes became optional.
-    stores: { 1: (doc) => doc },
+    stores: { 1: (doc) => doc, 2: (doc) => ({ ...doc, icon: null, countries: [] }) },
     products: { 1: (doc) => ({ ...doc, image: null }) },
     // Units were pull only, all of them public.
     units: { 1: (doc) => ({ ...doc, is_public: true, version: 1 }) },

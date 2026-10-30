@@ -62,6 +62,8 @@ class SyncController extends Controller
             '*.newDocumentState.recipes.*.name' => ['required', 'string', 'max:255'],
             '*.newDocumentState.recipes.*.url' => ['nullable', 'url:https,http', 'max:2048'],
             '*.newDocumentState.code' => ['nullable', 'string', 'max:10'],
+            // Own images only (StoreResource keeps nothing else, e.g. the file name of a standard shop).
+            '*.newDocumentState.icon' => ['nullable', 'string', 'max:'.StoreResource::ICON_MAX],
             '*.newDocumentState.note' => ['nullable', 'string', 'max:255'],
             '*.newDocumentState.done' => ['nullable', 'boolean'],
             '*.newDocumentState.position' => ['nullable', 'numeric'],

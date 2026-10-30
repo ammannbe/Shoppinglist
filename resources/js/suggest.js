@@ -1,5 +1,6 @@
 import Alpine from 'alpinejs';
 import { normalizeName, splitItemInput, suggestNames, usageOf } from './helpers.js';
+import { storeIconUrl, storeUsage } from './stores.js';
 
 /**
  * Suggestions below a text field, searched in the local products, units and shops.
@@ -64,14 +65,12 @@ export function suggestField({ source, get, set, units = () => [], stores = () =
         },
 
         /**
-         * Shops by name or code: exact, then start, then anywhere in the name; then by usage.
+         * Shops by name or code: exact, then start, then anywhere in the name; then the most
+         * used ones (recent items weigh more), then by name.
          */
         storeOptions(query) {
             const needle = normalizeName(query);
-            const usage = new Map();
-            for (const item of Alpine.store('data').items) {
-                for (const tag of item.stores ?? []) usage.set(normalizeName(tag), (usage.get(normalizeName(tag)) ?? 0) + 1);
-            }
+            const usage = storeUsage(Alpine.store('data').items);
             const matches = stores().map((store) => {
                 const name = normalizeName(store.name);
                 const code = normalizeName(store.code);
@@ -79,12 +78,12 @@ export function suggestField({ source, get, set, units = () => [], stores = () =
                     : name.startsWith(needle) || (code && code.startsWith(needle)) ? 1
                         : name.includes(needle) ? 2 : -1;
 
-                return { store, rank, count: usage.get(code || name) ?? 0 };
+                return { store, rank, score: usage.get(code || name) ?? 0 };
             }).filter((match) => match.rank >= 0);
             return matches
-                .sort((a, b) => a.rank - b.rank || b.count - a.count)
-                .slice(0, 8)
-                .map(({ store }) => ({ kind: 'store', name: store.name, code: store.code, onList: false }));
+                .sort((a, b) => a.rank - b.rank || b.score - a.score)
+                .slice(0, needle ? 8 : 12)
+                .map(({ store }) => ({ kind: 'store', name: store.name, code: store.code, icon: storeIconUrl(store), onList: false }));
         },
 
         get visible() {

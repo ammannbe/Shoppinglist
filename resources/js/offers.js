@@ -83,6 +83,7 @@ function offerPayload(form) {
 
     return {
         store: text(form.store),
+        region: text(form.region),
         name: text(form.name),
         brand: text(form.brand),
         price: number(form.price),
@@ -94,7 +95,7 @@ function offerPayload(form) {
     };
 }
 
-const emptyForm = () => ({ id: null, store: '', name: '', brand: '', price: '', regular_price: '', discount: '', valid_from: '', valid_until: '', shared: true });
+const emptyForm = () => ({ id: null, store: '', region: '', name: '', brand: '', price: '', regular_price: '', discount: '', valid_from: '', valid_until: '', shared: true });
 
 /**
  * #/offers: the offers pool, filtered by shop and search.
@@ -123,6 +124,30 @@ export function offersPool({ storeLabel }) {
 
         storeLabel(tag) {
             return tag ? storeLabel(tag) : this.$t('Other shops');
+        },
+
+        // ---- regions (Migros cooperatives): the server leaves out other regions than the user's
+
+        /** Regions of a shop tag as [key, name] (none: its offers apply everywhere). */
+        regionsOf(tag) {
+            return Object.entries(Alpine.store('sync').user?.regions?.[tag] ?? {});
+        },
+
+        /** The user's region of a shop, null: all regions shown. */
+        chosenRegion(tag) {
+            return Alpine.store('prefs').regions?.[tag] ?? null;
+        },
+
+        /** Short name of a region, e.g. "Migros Aare". */
+        regionName(key) {
+            const name = Object.values(Alpine.store('sync').user?.regions ?? {}).map((regions) => regions[key]).find(Boolean);
+
+            return name?.replace(/\s*\(.*\)$/, '') ?? key;
+        },
+
+        /** Shops with offers of several regions shown because the user has not picked one. */
+        get regionHint() {
+            return this.stores.filter((tag) => this.regionsOf(tag).length && !this.chosenRegion(tag)).map((tag) => this.storeLabel(tag));
         },
 
         async load() {
@@ -172,14 +197,18 @@ export function offersPool({ storeLabel }) {
         },
 
         details(offer) {
-            return [offer.brand, offer.discount, offer.price != null ? `CHF ${Number(offer.price).toFixed(2)}` : null, this.validity(offer)]
+            const region = offer.region && !this.chosenRegion(offer.store) ? this.regionName(offer.region) : null;
+
+            return [region, offer.brand, offer.discount, offer.price != null ? `CHF ${Number(offer.price).toFixed(2)}` : null, this.validity(offer)]
                 .filter(Boolean).join(' · ');
         },
 
         // ---- own offers: add, edit (incl. sharing), delete
 
         openForm(offer = null) {
-            this.form = offer ? { ...emptyForm(), ...offer, price: offer.price ?? '', regular_price: offer.regular_price ?? '' } : { ...emptyForm(), shared: this.shareOffers };
+            this.form = offer
+                ? { ...emptyForm(), ...offer, region: offer.region ?? '', price: offer.price ?? '', regular_price: offer.regular_price ?? '' }
+                : { ...emptyForm(), shared: this.shareOffers };
             this.error = null;
             this.$nextTick(() => this.$refs.offerDialog.showModal());
         },
