@@ -58,7 +58,6 @@ export function planner({ addItems, lists }) {
         ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}'),
         offerText: '',
         newPantryItem: '',
-        offersNotice: null,
         // Saved offers (pool) not taken yet, grouped by shop to take them per shop.
         savedOffers: null,
         ...requests(),
@@ -70,6 +69,16 @@ export function planner({ addItems, lists }) {
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
             };
             Object.keys(initialState()).forEach((key) => this.$watch(key, save));
+
+            // Saved offers are shown right away when the planner is opened (and the account known).
+            const load = () => {
+                if (location.hash.startsWith('#/planner') && Alpine.store('sync').user?.verified && navigator.onLine && !this.busy) {
+                    this.loadSavedOffers();
+                }
+            };
+            window.addEventListener('hashchange', load);
+            // A microtask, so only the user is tracked by the effect.
+            Alpine.effect(() => Alpine.store('sync').user && queueMicrotask(load));
         },
 
         get recipes() {
@@ -124,22 +133,43 @@ export function planner({ addItems, lists }) {
         /** Offers of the pool (#/offers) that are not taken yet: own and shared, not expired. */
         async loadSavedOffers() {
             await this.run('saved', this.$t('Loading offers …'), async () => {
-                const taken = new Set(this.offers.map((offer) => offer.id).filter(Boolean));
-                this.savedOffers = (await api.get('/offers')).offers.filter((offer) => !taken.has(offer.id));
-                this.offersNotice = this.savedOffers.length ? null : this.$t('No further saved offers.');
+                this.savedOffers = (await api.get('/offers')).offers;
             });
         },
 
+        /** Saved offers not taken into the planner yet. */
+        get availableOffers() {
+            const taken = new Set(this.offers.map((offer) => offer.id).filter(Boolean));
+
+            return (this.savedOffers ?? []).filter((offer) => !taken.has(offer.id));
+        },
+
+        /** Removes the offers of one shop group, or all. */
+        removeOffers(offers = this.offers) {
+            const removed = new Set(offers);
+            this.offers = this.offers.filter((offer) => !removed.has(offer));
+        },
+
+        clearPantry() {
+            this.pantry = [];
+        },
+
+        /** "until 4.11." for a group: the latest end date of its offers. */
+        groupValidity(offers) {
+            const last = offers.map((offer) => offer.valid_until).filter(Boolean).sort().at(-1);
+            if (!last) return null;
+            const date = new Date(`${last}T12:00:00`).toLocaleDateString(Alpine.store('i18n').locale.replace('_', '-'), { day: 'numeric', month: 'numeric' });
+
+            return this.$t('until :date', { date });
+        },
+
         get savedGroups() {
-            return groupByStore(this.savedOffers ?? []);
+            return groupByStore(this.availableOffers);
         },
 
         /** Takes saved offers (one shop or all) into the planner. */
         takeSaved(offers) {
             this.addOffers(offers);
-            const taken = new Set(offers.map((offer) => offer.id));
-            this.savedOffers = this.savedOffers.filter((offer) => !taken.has(offer.id));
-            if (!this.savedOffers.length) this.savedOffers = null;
         },
 
 

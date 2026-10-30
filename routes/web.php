@@ -67,6 +67,7 @@ Route::middleware('auth')->group(function () {
         Route::get('offers', [OfferController::class, 'index'])->name('offers.index');
         Route::post('offers', [OfferController::class, 'store'])->name('offers.store');
         Route::patch('offers/{offer}', [OfferController::class, 'update'])->name('offers.update');
+        Route::delete('offers', [OfferController::class, 'destroyStore'])->name('offers.destroy-store');
         Route::delete('offers/{offer}', [OfferController::class, 'destroy'])->name('offers.destroy');
 
         Route::post('lists/{list}/members', [MemberController::class, 'store'])->name('members.store');

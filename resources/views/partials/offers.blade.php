@@ -2,28 +2,28 @@
     Offers pool (#/offers, resources/js/offers.js): own offers and the ones other users shared,
     read by the AI or entered by hand. The week planner takes them. Needs a connection.
 --}}
-<section x-show="route.view === 'offers'" class="space-y-5" x-data="offersPool({ storeLabel: (tag) => storeLabel(tag) })">
-    <p class="text-stone-600" x-text="$t('Offers of the shops for the week planner. Shared offers are visible to all users; expired ones are removed automatically.')"></p>
+<section x-show="route.view === 'offers'" class="space-y-4" x-data="offersPool({ storeLabel: (tag) => storeLabel(tag) })">
     <p class="sr-only" role="status" x-text="busy ?? ''"></p>
 
-    <div class="flex flex-wrap gap-2">
-        <button type="button" class="button" @click="openForm()" x-text="$t('Add offer')"></button>
-        <button type="button" class="button-secondary inline-flex items-center gap-2" :disabled="busy" @click="load()">
+    <div class="flex items-center gap-2">
+        <p class="min-w-0 flex-1 text-sm text-stone-500" x-text="$t('For the week planner. Expired offers are removed automatically.')"></p>
+        <button type="button" class="icon-button" :disabled="busy" @click="load()" :aria-label="$t('Reload')" :title="$t('Reload')">
             <x-spinner x-show="busyKey === 'load'" />
-            <span x-text="label('load', $t('Reload'))"></span>
+            <svg x-show="busyKey !== 'load'" viewBox="0 0 24 24" class="size-5"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
     </div>
     <x-planner-error key="load" />
 
-    <details class="rounded-lg border border-stone-200 bg-white p-4 [&_details]:bg-stone-50">
-        <summary class="cursor-pointer font-medium" x-text="$t('Read offers with the AI')"></summary>
-        <div class="mt-3 space-y-3">
-            <x-offer-reader />
-        </div>
-    </details>
+    <div class="grid grid-cols-2 gap-2">
+        <button type="button" class="button" @click="openForm()" x-text="$t('Add offer')"></button>
+        <button type="button" class="button-secondary" :aria-expanded="reading" @click="reading = !reading" x-text="$t('Read offers')"></button>
+    </div>
+    <div x-show="reading" x-cloak class="rounded-xl border border-stone-200 bg-white p-4">
+        <x-offer-reader />
+    </div>
 
-    <template x-if="loaded">
-        <div class="space-y-4">
+    <template x-if="loaded && offers.length">
+        <div class="space-y-3">
             <input x-model="search" type="search" class="field w-full" autocomplete="off" :placeholder="$t('Search offers')" :aria-label="$t('Search offers')">
             <div x-show="stores.length > 1" class="flex flex-wrap gap-1.5" role="group" :aria-label="$t('Filter by shop')">
                 <button type="button" class="rounded-full border px-3 py-1 text-sm" :aria-pressed="!storeFilter.length"
@@ -35,30 +35,43 @@
                         @click="toggleStore(store)" x-text="storeLabel(store)"></button>
                 </template>
             </div>
-
-            <p x-show="!shown.length" class="py-6 text-center text-stone-500" x-text="offers.length ? $t('No offers found.') : $t('No offers yet.')"></p>
-
-            <template x-for="group in groups" :key="group.store">
-                <div>
-                    <h2 class="mb-2 text-sm font-medium text-stone-600" x-text="`${storeLabel(group.store)} (${group.offers.length})`"></h2>
-                    <ul class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
-                        <template x-for="offer in group.offers" :key="offer.id">
-                            <li class="flex items-center gap-3 px-4 py-2">
-                                <div class="min-w-0 flex-1">
-                                    <span class="block truncate" x-text="offer.name"></span>
-                                    <span class="block truncate text-xs text-stone-500" x-text="details(offer)"></span>
-                                </div>
-                                <span x-show="offer.own && !offer.shared" class="shrink-0 rounded-full bg-stone-100 px-2 py-0.5 text-xs text-stone-600" x-text="$t('Private')"></span>
-                                <button type="button" x-show="offer.own" class="icon-button" @click="openForm(offer)" :aria-label="$t('Edit')">
-                                    <svg viewBox="0 0 24 24" class="size-5"><path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
-                                </button>
-                            </li>
-                        </template>
-                    </ul>
-                </div>
-            </template>
         </div>
     </template>
+
+    <p x-show="loaded && !shown.length" class="py-6 text-center text-stone-500" x-text="offers.length ? $t('No offers found.') : $t('No offers yet.')"></p>
+
+    {{-- Per shop, collapsible; own offers of a shop can be deleted at once --}}
+    <template x-for="group in groups" :key="group.store">
+        <details class="group/shop overflow-hidden rounded-xl border border-stone-200 bg-white" x-init="$el.open = groups.length === 1 || group.offers.length <= 8">
+            <summary class="flex cursor-pointer list-none items-center gap-3 px-4 py-3">
+                <span class="min-w-0 flex-1">
+                    <span class="block truncate font-medium" x-text="storeLabel(group.store)"></span>
+                    <span class="block truncate text-xs text-stone-500" x-text="$t(group.offers.length === 1 ? ':count offer' : ':count offers', { count: group.offers.length })"></span>
+                </span>
+                <button type="button" x-show="group.offers.some((offer) => offer.own)" class="inline-flex shrink-0 items-center gap-1.5 text-sm text-stone-500 underline"
+                    :disabled="busy" @click.prevent.stop="removeStore(group)">
+                    <x-spinner x-show="busyKey === `store:${group.store}`" />
+                    <span x-text="$t('Delete own')"></span>
+                </button>
+                <span class="text-stone-400 transition-transform group-open/shop:rotate-90" aria-hidden="true">›</span>
+            </summary>
+            <ul class="divide-y divide-stone-100 border-t border-stone-200">
+                <template x-for="offer in group.offers" :key="offer.id">
+                    <li class="flex items-center gap-3 px-4 py-2">
+                        <div class="min-w-0 flex-1">
+                            <span class="block truncate" x-text="offer.name"></span>
+                            <span class="block truncate text-xs text-stone-500" x-text="details(offer)"></span>
+                        </div>
+                        <span x-show="offer.own && !offer.shared" class="shrink-0 rounded-full bg-stone-100 px-2 py-0.5 text-xs text-stone-600" x-text="$t('Private')"></span>
+                        <button type="button" x-show="offer.own" class="icon-button" @click="openForm(offer)" :aria-label="$t('Edit')">
+                            <svg viewBox="0 0 24 24" class="size-5"><path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+                        </button>
+                    </li>
+                </template>
+            </ul>
+        </details>
+    </template>
+    <p x-show="error && errorKey?.startsWith('store:')" class="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-800" role="alert" x-text="error"></p>
 
     {{-- Add or edit an own offer --}}
     <dialog x-ref="offerDialog" class="dialog" @close="form = null">

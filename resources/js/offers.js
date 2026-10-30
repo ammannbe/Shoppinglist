@@ -111,6 +111,8 @@ export function offersPool({ storeLabel }) {
         search: '',
         storeFilter: [],
         form: null,
+        // The AI reader is shown on demand.
+        reading: false,
 
         init() {
             // Load whenever the view is opened (others may have shared new offers).
@@ -190,6 +192,17 @@ export function offersPool({ storeLabel }) {
                     : await api.post('/offers', offerPayload(this.form));
                 this.addOffers([offer]);
                 this.$refs.offerDialog.close();
+            });
+        },
+
+        /** Deletes the own offers of a shop group (others' shared offers stay). */
+        async removeStore(group) {
+            const own = group.offers.filter((offer) => offer.own);
+            if (!own.length || !confirm(this.$t('Delete your :count offers of :shop?', { count: own.length, shop: this.storeLabel(group.store) }))) return;
+            await this.run(`store:${group.store}`, this.$t('Deleting …'), async () => {
+                await api.delete('/offers', { store: group.store || null });
+                const removed = new Set(own.map((offer) => offer.id));
+                this.offers = this.offers.filter((offer) => !removed.has(offer.id));
             });
         },
 

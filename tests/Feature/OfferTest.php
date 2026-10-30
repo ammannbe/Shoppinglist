@@ -61,6 +61,19 @@ class OfferTest extends TestCase
         $this->assertSame(0, Offer::count());
     }
 
+    public function test_own_offers_of_a_shop_can_be_deleted_at_once(): void
+    {
+        $user = User::factory()->create();
+        $other = User::factory()->create();
+        foreach ([[$user, 'A'], [$user, 'A'], [$user, 'M'], [$user, null], [$other, 'A']] as [$owner, $store]) {
+            $this->actingAs($owner)->postJson('/offers', ['name' => 'Offer '.uniqid(), 'store' => $store])->assertCreated();
+        }
+
+        $this->actingAs($user)->deleteJson('/offers', ['store' => 'A'])->assertOk()->assertJsonPath('deleted', 2);
+        $this->actingAs($user)->deleteJson('/offers', ['store' => null])->assertOk()->assertJsonPath('deleted', 1);
+        $this->assertEqualsCanonicalizing(['M', 'A'], Offer::pluck('store')->all());
+    }
+
     public function test_expired_offers_are_hidden_and_pruned(): void
     {
         $user = User::factory()->create();

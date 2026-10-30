@@ -2,87 +2,101 @@
     Week planner (#/planner, resources/js/planner.js): offers and pantry read by the AI,
     recipe suggestions (recipe app and AI ideas), shopping list. Needs a connection.
 --}}
-<section x-show="route.view === 'planner'" class="space-y-6"
+<section x-show="route.view === 'planner'" class="space-y-4"
     x-data="planner({ addItems: (target, name, items) => addPlannedItems(target, name, items), lists: () => lists })">
-    <p class="text-stone-600" x-text="$t('Read the offers of the week, check what you have at home and get recipe ideas with a shopping list.')"></p>
     <div x-show="recipes && !recipes.connected" class="notice flex flex-wrap items-center justify-between gap-3">
-        <span x-text="$t('Not connected with :name yet: connect to get your own recipes suggested and to create new recipes there right away.', { name: recipes?.name })"></span>
-        <a href="/recipes/connect" data-online class="button-secondary shrink-0 text-sm" x-text="$t('Connect with :name', { name: recipes?.name })"></a>
+        <span x-text="$t('Connect :name to get your own recipes suggested and to save new ones there.', { name: recipes?.name })"></span>
+        <a href="/recipes/connect" data-online class="button-secondary shrink-0 text-sm" x-text="$t('Connect')"></a>
     </div>
 
     {{-- Progress and errors are shown at the button that started the request; screen readers get the progress here --}}
     <p class="sr-only" role="status" x-text="busy ?? ''"></p>
 
-    {{-- 1. Offers --}}
-    <div class="space-y-3">
-        <h2 class="font-semibold" x-text="'1. ' + $t('Offers')"></h2>
-        <div class="flex flex-wrap items-center gap-2">
-            <button type="button" class="button-secondary inline-flex items-center gap-2" :disabled="busy" @click="loadSavedOffers()">
-                <x-spinner x-show="busyKey === 'saved'" />
-                <span x-text="label('saved', $t('Take saved offers'))"></span>
-            </button>
-            <a href="#/offers" class="text-sm underline" x-text="$t('Manage offers')"></a>
-        </div>
+    {{-- 1. Offers: saved ones of the pool are offered per shop, new ones can be read --}}
+    <x-planner-step number="1" title="$t('Offers')">
+        <x-slot:actions>
+            <a href="#/offers" class="shrink-0 text-sm text-stone-500 underline" x-text="$t('Manage')"></a>
+        </x-slot:actions>
+
+        <p x-show="busyKey === 'saved'" class="flex items-center gap-2 text-sm text-stone-500">
+            <x-spinner />
+            <span x-text="$t('Loading offers …')"></span>
+        </p>
         <x-planner-error key="saved" />
-        <p x-show="offersNotice" class="text-sm text-stone-500" x-text="offersNotice"></p>
-        {{-- Saved offers by shop: take one shop or all --}}
-        <div x-show="savedOffers?.length" class="space-y-2 rounded-lg border border-stone-200 bg-white p-3">
-            <div class="flex items-center justify-between gap-2">
-                <span class="text-sm font-medium" x-text="$t('Saved offers')"></span>
-                <span class="flex gap-3 text-sm">
-                    <button type="button" class="font-medium underline" @click="takeSaved(savedOffers)" x-text="$t('Take all')"></button>
-                    <button type="button" class="text-stone-500 underline" @click="savedOffers = null" x-text="$t('Close')"></button>
-                </span>
+
+        {{-- Saved offers not taken yet, per shop --}}
+        <div x-show="savedGroups.length" class="overflow-hidden rounded-lg border border-orange-200 bg-orange-50/50">
+            <div class="flex items-center justify-between gap-2 px-3 py-2">
+                <span class="text-sm font-medium text-stone-700" x-text="$t('Available offers')"></span>
+                <button type="button" x-show="savedGroups.length > 1" class="text-sm font-medium underline" @click="takeSaved(availableOffers)" x-text="$t('Take all')"></button>
             </div>
-            <template x-for="group in savedGroups" :key="group.store">
-                <div class="flex items-center gap-3 border-t border-stone-100 pt-2">
-                    <span class="min-w-0 flex-1">
-                        <span class="block truncate font-medium" x-text="group.store ? storeLabel(group.store) : $t('Other shops')"></span>
-                        <span class="block truncate text-xs text-stone-500" x-text="group.offers.map((offer) => offer.name).join(', ')"></span>
-                    </span>
-                    <button type="button" class="button-secondary shrink-0 text-sm" @click="takeSaved(group.offers)"
-                        x-text="$t('Take :count', { count: group.offers.length })"></button>
-                </div>
-            </template>
+            <ul class="divide-y divide-orange-100 border-t border-orange-100">
+                <template x-for="group in savedGroups" :key="group.store">
+                    <li class="flex items-center gap-3 px-3 py-2">
+                        <span class="min-w-0 flex-1">
+                            <span class="block truncate font-medium" x-text="group.store ? storeLabel(group.store) : $t('Other shops')"></span>
+                            <span class="block truncate text-xs text-stone-500"
+                                x-text="[$t(group.offers.length === 1 ? ':count offer' : ':count offers', { count: group.offers.length }), groupValidity(group.offers)].filter(Boolean).join(' · ')"></span>
+                        </span>
+                        <button type="button" class="button-secondary shrink-0 px-3 py-1.5 text-sm" @click="takeSaved(group.offers)" x-text="$t('Take')"></button>
+                    </li>
+                </template>
+            </ul>
         </div>
-        <x-offer-reader />
-        {{-- Offers by shop, each shop can be (de)selected at once --}}
-        <template x-for="group in offerGroups" :key="group.store">
-            <div>
-                <label class="mb-1 flex cursor-pointer items-center gap-2 text-sm font-medium text-stone-600">
-                    <input type="checkbox" class="size-4 accent-emerald-700"
-                        :checked="group.offers.every((offer) => offer.selected)"
-                        :indeterminate="group.offers.some((offer) => offer.selected) && !group.offers.every((offer) => offer.selected)"
-                        @change="selectGroup(group, $event.target.checked)">
-                    <span x-text="`${group.store ? storeLabel(group.store) : $t('Other shops')} (${group.offers.filter((offer) => offer.selected).length}/${group.offers.length})`"></span>
-                </label>
-                <ul class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
-                    <template x-for="(offer, index) in group.offers" :key="offer.id ?? `${group.store}-${index}`">
-                        <li class="flex items-center gap-3 px-3 py-2">
-                            <input type="checkbox" class="size-5 shrink-0 accent-emerald-700" x-model="offer.selected" :aria-label="offer.name">
-                            <span class="min-w-0 flex-1">
-                                <span class="block truncate" x-text="offer.name"></span>
-                                <span class="block truncate text-xs text-stone-500" x-text="[offer.brand, offer.discount, offer.price != null ? 'CHF ' + Number(offer.price).toFixed(2) : null, offer.valid_until ? $t('until :date', { date: new Date(offer.valid_until + 'T12:00:00').toLocaleDateString($store.i18n.locale.replace('_', '-'), { day: 'numeric', month: 'numeric' }) }) : null].filter(Boolean).join(' · ')"></span>
-                            </span>
-                            <button type="button" class="icon-button text-stone-400" @click="removeOfferItem(offer)" :aria-label="$t('Remove')">✕</button>
-                        </li>
-                    </template>
-                </ul>
+
+        {{-- Taken offers per shop: collapsible, (de)select or remove a shop at once --}}
+        <div x-show="offers.length" class="space-y-2">
+            <template x-for="group in offerGroups" :key="group.store">
+                <details class="group/shop overflow-hidden rounded-lg border border-stone-200" x-init="$el.open = group.offers.length <= 8">
+                    <summary class="flex cursor-pointer list-none items-center gap-3 bg-stone-50 px-3 py-2">
+                        <input type="checkbox" class="size-5 shrink-0 accent-emerald-700" @click.stop
+                            :checked="group.offers.every((offer) => offer.selected)"
+                            :indeterminate="group.offers.some((offer) => offer.selected) && !group.offers.every((offer) => offer.selected)"
+                            @change="selectGroup(group, $event.target.checked)" :aria-label="$t('Select all')">
+                        <span class="min-w-0 flex-1 truncate font-medium" x-text="group.store ? storeLabel(group.store) : $t('Other shops')"></span>
+                        <span class="shrink-0 text-sm tabular-nums text-stone-500" x-text="`${group.offers.filter((offer) => offer.selected).length}/${group.offers.length}`"></span>
+                        <button type="button" class="icon-button text-stone-400" @click.prevent.stop="removeOffers(group.offers)" :aria-label="$t('Remove')" :title="$t('Remove')">✕</button>
+                        <span class="text-stone-400 transition-transform group-open/shop:rotate-90" aria-hidden="true">›</span>
+                    </summary>
+                    <ul class="divide-y divide-stone-100 border-t border-stone-200">
+                        <template x-for="(offer, index) in group.offers" :key="offer.id ?? `${group.store}-${index}`">
+                            <li class="flex items-center gap-3 px-3 py-2" :class="offer.selected || 'text-stone-400'">
+                                <input type="checkbox" class="size-5 shrink-0 accent-emerald-700" x-model="offer.selected" :aria-label="offer.name">
+                                <span class="min-w-0 flex-1">
+                                    <span class="block truncate" x-text="offer.name"></span>
+                                    <span class="block truncate text-xs text-stone-500" x-text="[offer.brand, offer.discount, offer.price != null ? 'CHF ' + Number(offer.price).toFixed(2) : null].filter(Boolean).join(' · ')"></span>
+                                </span>
+                                <button type="button" class="icon-button text-stone-400" @click="removeOfferItem(offer)" :aria-label="$t('Remove')">✕</button>
+                            </li>
+                        </template>
+                    </ul>
+                </details>
+            </template>
+            <div class="flex items-center justify-between text-sm text-stone-500">
+                <span x-text="$t(':selected of :total offers selected', { selected: selectedOffers.length, total: offers.length })"></span>
+                <button type="button" class="underline" @click="removeOffers()" x-text="$t('Remove all')"></button>
             </div>
-        </template>
-        <p x-show="offers.length" class="text-sm text-stone-500" x-text="$t(':selected of :total offers selected', { selected: selectedOffers.length, total: offers.length })"></p>
-    </div>
+        </div>
+
+        {{-- Reading new offers is the exception: collapsed unless there is nothing else --}}
+        <details class="group/read rounded-lg border border-dashed border-stone-300"
+            x-effect="if (savedOffers !== null && !offers.length && !savedGroups.length) $el.open = true">
+            <summary class="flex cursor-pointer list-none items-center justify-between px-3 py-2 text-sm font-medium text-stone-600">
+                <span x-text="$t('Read new offers')"></span>
+                <span class="transition-transform group-open/read:rotate-90" aria-hidden="true">›</span>
+            </summary>
+            <div class="border-t border-dashed border-stone-300 p-3">
+                <x-offer-reader />
+            </div>
+        </details>
+    </x-planner-step>
 
     {{-- 2. Pantry --}}
-    <div class="space-y-3">
-        <h2 class="font-semibold" x-text="'2. ' + $t('At home (optional)')"></h2>
-        <p class="text-sm text-stone-500" x-text="$t('Photos of the fridge, freezer or pantry: what is already there is used first and left off the list.')"></p>
-        <label class="button-secondary inline-flex cursor-pointer items-center gap-2" :class="busy && 'pointer-events-none opacity-50'">
-            <input type="file" accept="image/*" multiple class="sr-only" :disabled="busy" @change="readPantry($event)">
-            <x-spinner x-show="busyKey === 'pantry'" />
-            <span x-text="label('pantry', $t('Add photos'))"></span>
-        </label>
-        <x-planner-error key="pantry" />
+    <x-planner-step number="2" title="$t('At home (optional)')">
+        <x-slot:actions>
+            <button type="button" x-show="pantry.length" class="shrink-0 text-sm text-stone-500 underline" @click="clearPantry()" x-text="$t('Remove all')"></button>
+        </x-slot:actions>
+        <p class="-mt-2 text-sm text-stone-500" x-text="$t('Used first and left off the list.')"></p>
         <div x-show="pantry.length" class="flex flex-wrap gap-2">
             <template x-for="(item, index) in pantry" :key="index">
                 <label class="flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-sm"
@@ -92,15 +106,22 @@
                 </label>
             </template>
         </div>
-        <form @submit.prevent="addPantryItem()" class="flex gap-2">
-            <input x-model="newPantryItem" class="field min-w-0 flex-1 text-sm" :placeholder="$t('Add by hand, e.g. rice')">
-            <button class="button-secondary text-sm" x-text="$t('Add')"></button>
-        </form>
-    </div>
+        <div class="flex flex-wrap gap-2">
+            <form @submit.prevent="addPantryItem()" class="flex min-w-0 flex-1 basis-60 gap-2">
+                <input x-model="newPantryItem" class="field min-w-0 flex-1" :placeholder="$t('e.g. rice')" :aria-label="$t('Add by hand')">
+                <button class="button-secondary" x-text="$t('Add')"></button>
+            </form>
+            <label class="button-secondary inline-flex cursor-pointer items-center gap-2" :class="busy && 'pointer-events-none opacity-50'" :title="$t('Photos of the fridge, freezer or pantry')">
+                <input type="file" accept="image/*" multiple class="sr-only" :disabled="busy" @change="readPantry($event)">
+                <x-spinner x-show="busyKey === 'pantry'" />
+                <span x-text="label('pantry', $t('Read from photos'))"></span>
+            </label>
+        </div>
+        <x-planner-error key="pantry" />
+    </x-planner-step>
 
     {{-- 3. Recipes --}}
-    <div class="space-y-3">
-        <h2 class="font-semibold" x-text="'3. ' + $t('Recipes')"></h2>
+    <x-planner-step number="3" title="$t('Recipes')">
         <div class="grid grid-cols-2 gap-3">
             <label class="block">
                 <span class="label" x-text="$t('Servings')"></span>
@@ -175,11 +196,10 @@
         </button>
         <x-planner-error key="more" />
         <p x-show="warning && warningMore" class="notice" x-text="warning"></p>
-    </div>
+    </x-planner-step>
 
     {{-- 4. Shopping list --}}
-    <div x-show="suggestions.length" class="space-y-3">
-        <h2 class="font-semibold" x-text="'4. ' + $t('Shopping list')"></h2>
+    <x-planner-step number="4" title="$t('Shopping list')" x-show="suggestions.length">
         <button type="button" class="button flex w-full items-center justify-center gap-2" :disabled="busy || !selectedSuggestions.length" @click="buildList()">
             <x-spinner x-show="busyKey === 'list'" />
             <span x-text="label('list', $t('Create shopping list'))"></span>
@@ -215,7 +235,7 @@
                     x-text="$t('Add :count items', { count: selectedItems.length })"></button>
             </div>
         </template>
-    </div>
+    </x-planner-step>
 
     <button type="button" x-show="offers.length || pantry.length || suggestions.length" class="text-sm text-stone-500 underline"
         @click="confirm($t('Start over?')) && reset()" x-text="$t('Start over')"></button>

@@ -56,6 +56,20 @@ class OfferController extends Controller
     }
 
     /**
+     * Deletes the user's own offers of a shop (`store` empty: offers without shop).
+     */
+    public function destroyStore(Request $request): JsonResponse
+    {
+        $store = $request->validate(['store' => ['present', 'nullable', 'string', 'max:255']])['store'];
+
+        $deleted = Offer::where('user_id', $request->user()->id)
+            ->when($store === null, fn ($q) => $q->whereNull('store'), fn ($q) => $q->where('store', $store))
+            ->delete();
+
+        return response()->json(['deleted' => $deleted]);
+    }
+
+    /**
      * Saves an offer; the same one already visible to the user (same shop, name, brand and end
      * date) is updated instead of added twice, if it is the user's own, or just returned.
      *
