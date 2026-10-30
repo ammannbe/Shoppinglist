@@ -233,9 +233,9 @@ export function planner({ addItems, merges, lists }) {
                 });
                 const known = new Set(more ? this.suggestions.map((suggestion) => suggestion.key) : []);
                 const added = result.suggestions.filter((suggestion) => !known.has(suggestion.key)).map((suggestion) => ({
-                    ...suggestion, selected: !more, servings: Number(this.servings) || 4, savedUrl: null,
+                    ...suggestion, selected: false, servings: Number(this.servings) || 4, savedUrl: null,
                 }));
-                // New suggestions on top; the earlier ones stay below, unselected, until removed.
+                // Nothing is selected, the user picks. New suggestions on top; the earlier ones stay below, unselected, until removed.
                 const keys = new Set(added.map((suggestion) => suggestion.key));
                 this.suggestions = more ? [...this.suggestions, ...added]
                     : [...added, ...this.suggestions.filter((suggestion) => !keys.has(suggestion.key)).map((suggestion) => ({ ...suggestion, selected: false }))];

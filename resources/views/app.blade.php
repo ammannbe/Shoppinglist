@@ -148,6 +148,19 @@
             <template x-if="list">
                 <div>
                     <form @submit.prevent="addItem()" class="mb-4 flex gap-2">
+                        {{-- Shop of the new items (native picker on top of the badge), kept until changed --}}
+                        <label class="field relative flex shrink-0 cursor-pointer items-center px-2" :title="newItemStore ? storeLabel(newItemStore) : $t('Shop')">
+                            <template x-if="newItemStore"><x-store-badge tag="newItemStore" class="!mr-0" /></template>
+                            <svg x-show="!newItemStore" viewBox="0 0 24 24" class="size-5 text-stone-500" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M4 9l1.5-5h13L20 9M4 9h16v11H4zM9 20v-6h6v6"/>
+                            </svg>
+                            <select x-model="newItemStore" class="absolute inset-0 cursor-pointer opacity-0" :aria-label="$t('Shop for new items')">
+                                <option value="" x-text="$t('No shop')"></option>
+                                <template x-for="store in quickStores" :key="store.id">
+                                    <option :value="storeTag(store)" x-text="store.name" :selected="storeTag(store) === newItemStore"></option>
+                                </template>
+                            </select>
+                        </label>
                         {{-- Picking a suggestion adds the item right away, the amount typed before is kept. --}}
                         <div class="relative min-w-0 flex-1" @click.outside="close()"
                             x-data="suggestField({ source: 'item', get: () => newItemText, set: (value) => newItemText = value, units: () => unitNames, onPick: () => addItem(), openItems: () => openItems })">
@@ -204,7 +217,7 @@
                                 {{-- Tap marks as done, edit/delete via swipe or "…" --}}
                                 <button type="button" class="flex min-w-0 flex-1 items-center py-3 pr-4 text-left" role="checkbox" aria-checked="false" @click="toggle(item)">
                                     <span class="check" aria-hidden="true"></span>
-                                    <img x-show="item.image" :src="imageUrl(item.image, 'thumb')" @click.stop="openImage(item.image)" :alt="$t('Show photo')" loading="lazy" decoding="async" class="mr-3 size-10 shrink-0 cursor-zoom-in rounded-md bg-stone-100 object-cover">
+                                    <img x-show="item.image" :src="imageUrl(item.image, 'thumb')" @click.stop="openImage(item.image)" :alt="$t('Show photo')" loading="lazy" decoding="async" class="mr-3 size-8 shrink-0 cursor-zoom-in rounded-md bg-stone-100 object-cover">
                                     <template x-for="tag in item.stores" :key="tag">
                                         <x-store-badge tag="tag" />
                                     </template>
@@ -234,7 +247,7 @@
                                         <span class="check check-done" aria-hidden="true">
                                             <svg viewBox="0 0 24 24" class="size-4"><path d="M5 12l5 5 9-10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
                                         </span>
-                                        <img x-show="item.image" :src="imageUrl(item.image, 'thumb')" @click.stop="openImage(item.image)" :alt="$t('Show photo')" loading="lazy" decoding="async" class="mr-3 opacity-50 size-10 shrink-0 cursor-zoom-in rounded-md bg-stone-100 object-cover">
+                                        <img x-show="item.image" :src="imageUrl(item.image, 'thumb')" @click.stop="openImage(item.image)" :alt="$t('Show photo')" loading="lazy" decoding="async" class="mr-3 opacity-50 size-8 shrink-0 cursor-zoom-in rounded-md bg-stone-100 object-cover">
                                         <template x-for="tag in item.stores" :key="tag">
                                             <x-store-badge tag="tag" muted />
                                         </template>
@@ -283,25 +296,6 @@
                 </div>
             </template>
 
-            <fieldset>
-                <legend class="mb-2 text-sm font-medium text-stone-600" x-text="$t('Actions on touch devices')"></legend>
-                <div class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
-                    <template x-for="option in [
-                        { value: 'swipe', label: $t('Swipe left'), hint: $t('Edit, share and delete appear next to the row.') },
-                        { value: 'longpress', label: $t('Long press'), hint: $t('A menu with edit, share and delete opens.') },
-                    ]" :key="option.value">
-                        <label class="flex cursor-pointer items-start gap-3 p-4 hover:bg-stone-50">
-                            <input type="radio" name="row-actions" class="mt-1 accent-emerald-700" :value="option.value"
-                                :checked="$store.prefs.row_actions === option.value" @change="$store.prefs.set('row_actions', option.value)">
-                            <span>
-                                <span class="block" x-text="option.label"></span>
-                                <span class="block text-sm text-stone-500" x-text="option.hint"></span>
-                            </span>
-                        </label>
-                    </template>
-                </div>
-            </fieldset>
-
             <div>
                 <h2 class="mb-2 text-sm font-medium text-stone-600" x-text="$t('Account')"></h2>
                 <div class="rounded-lg border border-stone-200 bg-white p-4">
@@ -321,6 +315,25 @@
                     </template>
                 </div>
             </div>
+
+            <fieldset>
+                <legend class="mb-2 text-sm font-medium text-stone-600" x-text="$t('Actions on touch devices')"></legend>
+                <div class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
+                    <template x-for="option in [
+                        { value: 'swipe', label: $t('Swipe left'), hint: $t('Edit, share and delete appear next to the row.') },
+                        { value: 'longpress', label: $t('Long press'), hint: $t('A menu with edit, share and delete opens.') },
+                    ]" :key="option.value">
+                        <label class="flex cursor-pointer items-start gap-3 p-4 hover:bg-stone-50">
+                            <input type="radio" name="row-actions" class="mt-1 accent-emerald-700" :value="option.value"
+                                :checked="$store.prefs.row_actions === option.value" @change="$store.prefs.set('row_actions', option.value)">
+                            <span>
+                                <span class="block" x-text="option.label"></span>
+                                <span class="block text-sm text-stone-500" x-text="option.hint"></span>
+                            </span>
+                        </label>
+                    </template>
+                </div>
+            </fieldset>
 
             <div>
                 <template x-if="recipeApp && loggedIn">
@@ -375,6 +388,30 @@
                 stores: $t('Shops can be chosen when editing an item, the item shows the icon or the code. Add, edit or delete your own shops here (with an own image if you like); standard shops cannot be changed, but you can hide the ones you do not use.'),
                 products: $t('Products are suggested when adding items. Rename or delete your own misspelled and unused ones here; standard products cannot be changed, but your photos are shown with them.'),
             }[route.view]"></p>
+            {{-- Own products: add one, export them and import a CSV (one column "name") --}}
+            <div x-show="route.view === 'products'" class="space-y-2">
+                <form @submit.prevent="createProduct()" class="flex gap-2">
+                    <input x-model="newProductName" class="field min-w-0 flex-1" maxlength="255" required :placeholder="$t('New product')" :aria-label="$t('New product')">
+                    <button class="button-secondary" x-text="$t('Add')"></button>
+                </form>
+                <details class="text-sm">
+                    <summary class="cursor-pointer text-stone-600 underline" x-text="$t('Export and import')"></summary>
+                    <div class="mt-2 space-y-2 rounded-lg border border-stone-200 bg-white p-3">
+                        <p class="text-stone-500" x-text="$t('A CSV file with one product name per line (column “name”). Photos are not included.')"></p>
+                        <div class="flex flex-wrap gap-2">
+                            <button type="button" class="button-secondary" @click="exportProducts()" :disabled="!ownProducts.length" x-text="$t('Export own products')"></button>
+                            <label class="button-secondary cursor-pointer">
+                                <span x-text="$t('Import and add')"></span>
+                                <input type="file" accept=".csv,text/csv,text/plain" class="sr-only" @change="importProducts($event, 'add')">
+                            </label>
+                            <label class="button-secondary cursor-pointer">
+                                <span x-text="$t('Import and replace own')"></span>
+                                <input type="file" accept=".csv,text/csv,text/plain" class="sr-only" @change="importProducts($event, 'replace')">
+                            </label>
+                        </div>
+                    </div>
+                </details>
+            </div>
             <form x-show="route.view === 'stores'" @submit.prevent="createStore()" class="flex gap-2">
                 <input x-model="newStore.name" class="field min-w-0 flex-1" maxlength="255" required :placeholder="$t('New shop, e.g. Amazon')" :aria-label="$t('Name')">
                 <input x-model="newStore.code" class="field w-28" maxlength="10" :placeholder="$t('Code (optional)')" :aria-label="$t('Code (optional)')">
@@ -658,6 +695,23 @@
                     <button class="button" x-text="$t('Save')"></button>
                 </div>
             </form>
+        </template>
+    </dialog>
+
+    {{-- Move an item to another list --}}
+    <dialog x-ref="moveDialog" class="dialog" @close="moving = null">
+        <template x-if="moving">
+            <div class="space-y-4">
+                <h2 class="font-semibold" x-text="$t('Move “:name” to', { name: moving.name })"></h2>
+                <ul class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200">
+                    <template x-for="target in lists.filter((list) => list.id !== moving.shopping_list_id)" :key="target.id">
+                        <li><button type="button" class="block w-full truncate px-4 py-3 text-left hover:bg-stone-50" @click="moveItem(target.id)" x-text="target.name"></button></li>
+                    </template>
+                </ul>
+                <div class="flex justify-end">
+                    <button type="button" class="button-secondary" @click="$refs.moveDialog.close()" x-text="$t('Cancel')"></button>
+                </div>
+            </div>
         </template>
     </dialog>
 
