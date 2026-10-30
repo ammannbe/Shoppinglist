@@ -88,6 +88,48 @@ class OfferTest extends TestCase
         $this->assertSame([], Offer::pluck('name')->all());
     }
 
+    public function test_offers_of_other_regions_are_hidden(): void
+    {
+        $user = User::factory()->create(['preferences' => ['regions' => ['M' => 'migros-aare']]]);
+        $other = User::factory()->create();
+        foreach ([['Aare', 'M', 'migros-aare'], ['Zürich', 'M', 'migros-zuerich'], ['National', 'M', null], ['Coop', 'C', null]] as [$name, $store, $region]) {
+            $this->actingAs($other)->postJson('/offers', compact('name', 'store', 'region'))->assertCreated();
+        }
+        $this->actingAs($user)->postJson('/offers', ['name' => 'Eigene', 'store' => 'M', 'region' => 'migros-zuerich'])->assertCreated();
+
+        $this->assertEqualsCanonicalizing(['Aare', 'National', 'Coop', 'Eigene'], array_column($this->actingAs($user)->getJson('/offers')->json('offers'), 'name'));
+        // Without a chosen region all regions are shown.
+        $this->assertCount(5, $this->actingAs($other)->getJson('/offers')->json('offers'));
+    }
+
+    public function test_regions_belong_to_their_shop(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->postJson('/offers', ['name' => 'Käse', 'store' => 'M', 'region' => 'Bern'])->assertUnprocessable();
+        $this->actingAs($user)->postJson('/offers', ['name' => 'Käse', 'store' => 'A', 'region' => 'migros-aare'])
+            ->assertCreated()->assertJsonPath('offer.region', null);
+        $id = $this->actingAs($user)->postJson('/offers', ['name' => 'Brot', 'store' => 'M', 'region' => 'migros-aare'])
+            ->assertCreated()->assertJsonPath('offer.region', 'migros-aare')->json('offer.id');
+
+        $this->actingAs($user)->patchJson("/offers/{$id}", ['store' => 'C'])->assertOk()->assertJsonPath('offer.region', null);
+    }
+
+    public function test_read_offers_get_the_region_of_the_material_or_the_user(): void
+    {
+        Http::fake(['openai.test/*' => Http::response($this->ai(['offers' => [
+            ['name' => 'Zopf', 'brand' => null, 'price' => 4.5, 'regular_price' => null, 'discount' => null, 'valid_from' => null, 'valid_until' => '2026-11-08', 'shop' => 'Migros', 'region' => 'migros-zuerich'],
+            ['name' => 'Butter', 'brand' => null, 'price' => 3.2, 'regular_price' => null, 'discount' => null, 'valid_from' => null, 'valid_until' => '2026-11-08', 'shop' => 'Migros', 'region' => null],
+            ['name' => 'Avocados', 'brand' => null, 'price' => 2.49, 'regular_price' => null, 'discount' => null, 'valid_from' => null, 'valid_until' => '2026-11-08', 'shop' => 'Lidl', 'region' => 'migros-aare'],
+        ]]))]);
+        $user = User::factory()->create(['preferences' => ['regions' => ['M' => 'migros-aare']]]);
+
+        $offers = $this->actingAs($user)->postJson('/planner/offers', ['text' => 'Aktionen …'])->assertOk()->json('offers');
+
+        $this->assertSame(['migros-zuerich', 'migros-aare', null], array_column($offers, 'region'));
+        Http::assertSent(fn (Request $request) => str_contains($request['instructions'], 'Migros Aare (AG, BE, SO)'));
+    }
+
     public function test_offers_need_a_verified_account(): void
     {
         $this->getJson('/offers')->assertUnauthorized();

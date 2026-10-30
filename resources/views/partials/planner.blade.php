@@ -3,7 +3,7 @@
     recipe suggestions (recipe app and AI ideas), shopping list. Needs a connection.
 --}}
 <section x-show="route.view === 'planner'" class="space-y-4"
-    x-data="planner({ addItems: (target, name, items) => addPlannedItems(target, name, items), lists: () => lists })">
+    x-data="planner({ addItems: (target, name, items, merge) => addPlannedItems(target, name, items, merge), merges: (target, items) => plannedMerges(target, items).size, lists: () => lists })">
     <div x-show="recipes && !recipes.connected" class="notice flex flex-wrap items-center justify-between gap-3">
         <span x-text="$t('Connect :name to get your own recipes suggested and to save new ones there.', { name: recipes?.name })"></span>
         <a href="/recipes/connect" data-online class="button-secondary shrink-0 text-sm" x-text="$t('Connect')"></a>
@@ -196,6 +196,10 @@
         </button>
         <x-planner-error key="more" />
         <p x-show="warning && warningMore" class="notice" x-text="warning"></p>
+        <div class="flex flex-wrap items-center justify-between gap-2 text-sm">
+            <a href="#/recipes" data-online class="font-medium underline" x-text="$t('Recipe history')"></a>
+            <button type="button" x-show="suggestions.length" class="text-stone-600 underline" :disabled="busy" @click="clearSuggestions()" x-text="$t('Remove all recipes')"></button>
+        </div>
     </x-planner-step>
 
     {{-- 4. Shopping list --}}
@@ -212,7 +216,7 @@
                     <template x-for="(item, index) in items" :key="index">
                         <li class="flex items-center gap-3 px-3 py-2" :class="item.selected || 'text-stone-400'">
                             <input type="checkbox" class="size-5 shrink-0 accent-emerald-700" x-model="item.selected" :aria-label="item.name">
-                            <span x-show="item.store" class="grid h-5 min-w-5 shrink-0 place-items-center rounded bg-orange-100 px-1 text-xs font-semibold text-orange-800" :title="storeLabel(item.store)" x-text="item.store"></span>
+                            <template x-if="item.store"><x-store-badge tag="item.store" /></template>
                             <span x-show="item.amount != null" class="shrink-0 tabular-nums text-stone-500" x-text="[item.amount, item.unit].filter((part) => part != null).join(' ')"></span>
                             <span class="min-w-0 flex-1">
                                 <span class="block truncate" x-text="item.name"></span>
@@ -231,8 +235,17 @@
                     </select>
                 </label>
                 <input x-show="!target" x-model="listName" class="field w-full" :aria-label="$t('Name')">
-                <button type="button" class="button w-full" :disabled="!selectedItems.length" @click="addToList()"
+                <button type="button" x-show="mergeCount === null" class="button w-full" :disabled="!selectedItems.length" @click="addToList()"
                     x-text="$t('Add :count items', { count: selectedItems.length })"></button>
+                {{-- Some ingredients are already open on the chosen list: merge or add them anyway --}}
+                <div x-show="mergeCount !== null" class="notice space-y-3" role="alertdialog" aria-live="polite">
+                    <p x-text="$t('Already on the list: :count. Merge them (amounts added, recipes kept)?', { count: mergeCount })"></p>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" class="button" @click="addToList(true)" x-text="$t('Merge')"></button>
+                        <button type="button" class="button-secondary" @click="addToList(false)" x-text="$t('Add separately')"></button>
+                        <button type="button" class="button-secondary" @click="mergeCount = null" x-text="$t('Cancel')"></button>
+                    </div>
+                </div>
             </div>
         </template>
     </x-planner-step>

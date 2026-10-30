@@ -4,9 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\Offer;
 use App\Models\User;
+use App\Support\ShopRegions;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -42,6 +44,10 @@ class OfferController extends Controller
         if ($from !== null && $until !== null && $from > $until) {
             throw ValidationException::withMessages(['valid_until' => __('validation.after_or_equal', ['attribute' => self::attributeNames()['valid_until'], 'date' => self::attributeNames()['valid_from']])]);
         }
+        if (array_key_exists('store', $data) || array_key_exists('region', $data)) {
+            // A region only belongs to its shop (moving the offer to another shop drops it).
+            $data['region'] = ShopRegions::valid(array_key_exists('store', $data) ? $data['store'] : $offer->store, array_key_exists('region', $data) ? $data['region'] : $offer->region);
+        }
         $offer->update($data);
 
         return response()->json(['offer' => $offer->toClient($request->user())]);
@@ -70,8 +76,8 @@ class OfferController extends Controller
     }
 
     /**
-     * Saves an offer; the same one already visible to the user (same shop, name, brand and end
-     * date) is updated instead of added twice, if it is the user's own, or just returned.
+     * Saves an offer; the same one already visible to the user (same shop, region, name, brand and
+     * end date) is updated instead of added twice, if it is the user's own, or just returned.
      *
      * @param  array<string, mixed>  $data
      */
@@ -79,9 +85,11 @@ class OfferController extends Controller
     {
         $data['valid_from'] = Offer::date($data['valid_from'] ?? null);
         $data['valid_until'] = Offer::date($data['valid_until'] ?? null);
+        $data['region'] = ShopRegions::valid($data['store'] ?? null, $data['region'] ?? null);
 
         $same = Offer::visibleTo($user)
             ->where('store', $data['store'] ?? null)
+            ->where('region', $data['region'])
             ->whereRaw('lower(name) = ?', [mb_strtolower(trim($data['name']))])
             ->where('brand', $data['brand'] ?? null)
             ->where(fn ($q) => isset($data['valid_until']) ? $q->whereDate('valid_until', $data['valid_until']) : $q->whereNull('valid_until'))
@@ -120,6 +128,8 @@ class OfferController extends Controller
 
         return $request->validate([
             'store' => ['nullable', 'string', 'max:255'],
+            // Region of a shop with regional offers (ShopRegions), null: everywhere.
+            'region' => ['nullable', 'string', Rule::in(ShopRegions::keys())],
             'name' => [$required, 'string', 'max:255'],
             'brand' => ['nullable', 'string', 'max:255'],
             'price' => ['nullable', 'numeric', 'min:0', 'max:99999'],

@@ -24,6 +24,28 @@ export async function shrinkImage(file) {
 }
 
 /**
+ * Icon of an own shop: max. 64 px, small enough to be synced inside the shop document.
+ *
+ * @param {File} file
+ * @returns {Promise<string>} data URL (WebP, or JPEG/PNG where the browser cannot encode WebP)
+ */
+export async function shrinkIcon(file) {
+    const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    try {
+        const blob = await encode(bitmap, 64, 0.85, ['image/webp', 'image/png']);
+
+        return await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(blob);
+        });
+    } finally {
+        bitmap.close();
+    }
+}
+
+/**
  * Photos for the AI (offers, pantry): large enough to read small print, but no 12 MP
  * originals over the mobile network. PDFs and other files are sent unchanged.
  *

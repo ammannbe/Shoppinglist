@@ -1,4 +1,5 @@
 import Alpine from 'alpinejs';
+import { deviceCountry } from './stores.js';
 
 // App settings per user (server: PUT /preferences, GET /me). Cached on the device, so
 // they work offline and for guests; changes made offline are sent with the next start.
@@ -7,7 +8,7 @@ const KEY = 'shoppinglist.prefs';
 const PENDING_KEY = 'shoppinglist.prefs-pending';
 
 // Same as PreferenceController::DEFAULTS.
-const DEFAULTS = { row_actions: 'swipe', list_sort: 'name_asc', hidden_stores: [] };
+const DEFAULTS = { row_actions: 'swipe', list_sort: 'name_asc', hidden_stores: [], country: null, regions: {} };
 
 export function createPrefsStore(api) {
     const stored = JSON.parse(localStorage.getItem(KEY) ?? '{}');
@@ -47,6 +48,8 @@ export function createPrefsStore(api) {
                 if (user.preferences?.[key]) this[key] = user.preferences[key];
             });
             this.save();
+            // New accounts get the country of the device (no location request), changeable in the settings.
+            if (!this.country) await this.set('country', deviceCountry());
         },
     };
 }
