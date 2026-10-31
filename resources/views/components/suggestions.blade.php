@@ -15,6 +15,12 @@
             <img x-show="option.kind === 'store' && option.icon" :src="option.icon" alt="" class="h-6 w-auto max-w-20 shrink-0 rounded bg-white object-contain">
             <span x-show="option.kind === 'store' && option.code && !option.icon" class="grid h-5 min-w-5 shrink-0 place-items-center rounded bg-orange-100 px-1 text-xs font-semibold text-orange-800" x-text="option.code"></span>
             <span class="min-w-0 flex-1 truncate" x-text="option.name"></span>
+            {{-- In season in Switzerland this month (/me season) --}}
+            <svg x-show="option.seasonal" viewBox="0 0 24 24" fill="none" class="size-4 shrink-0 text-emerald-600" role="img" :aria-label="$t('In season')">
+                <title x-text="$t('In season')"></title>
+                <path d="M11 20A7 7 0 0 1 4 13c0-5 4-9 16-9 0 12-4 16-9 16Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M4 20c4-4 7-7 11-10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
             <span x-show="option.kind === 'unit' && source === 'item'" class="shrink-0 rounded-full bg-stone-100 px-2 py-0.5 text-xs text-stone-600" x-text="$t('Unit')"></span>
             <span x-show="option.onList" class="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800" x-text="$t('on the list')"></span>
         </li>

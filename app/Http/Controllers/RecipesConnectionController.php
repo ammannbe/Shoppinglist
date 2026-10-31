@@ -11,11 +11,16 @@ use Illuminate\Support\Str;
 
 /**
  * "Connect with <recipe app>": OAuth 2 authorization code flow against the recipe app.
- * The result is shown in the settings of the app (/?recipes=…#/settings).
+ * The result is shown where the connection was started (`from`: the settings or the week planner).
  */
 class RecipesConnectionController extends Controller
 {
     private const STATE = 'recipes_oauth_state';
+
+    private const FROM = 'recipes_oauth_from';
+
+    /** Views of the app the connection can be started from (`?from=`), the first is the default. */
+    private const VIEWS = ['settings', 'planner'];
 
     public function connect(Request $request, RecipesClient $recipes): RedirectResponse
     {
@@ -23,6 +28,8 @@ class RecipesConnectionController extends Controller
 
         $state = Str::random(40);
         $request->session()->put(self::STATE, $state);
+        $from = (string) $request->query('from');
+        $request->session()->put(self::FROM, in_array($from, self::VIEWS, true) ? $from : self::VIEWS[0]);
 
         return redirect()->away($recipes->authorizeUrl($state));
     }
@@ -56,6 +63,8 @@ class RecipesConnectionController extends Controller
 
     private function back(string $result): RedirectResponse
     {
-        return redirect('/?'.http_build_query(['recipes' => $result]).'#/settings');
+        $view = session()->pull(self::FROM);
+
+        return redirect('/?'.http_build_query(['recipes' => $result]).'#/'.(in_array($view, self::VIEWS, true) ? $view : self::VIEWS[0]));
     }
 }

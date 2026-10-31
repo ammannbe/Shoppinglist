@@ -155,9 +155,10 @@ class Assistant
      * @param  list<array{id: int, name: string, foods: list<string>}>  $candidates
      * @param  array{categories?: list<string>, units?: list<string>, complexities?: list<string>}|null  $vocabulary  of the recipe app
      * @param  list<string>  $exclude  names of dishes already suggested
+     * @param  list<string>  $seasonal  foods in season in Switzerland this month
      * @return array{picks: list<array<string, mixed>>, ideas: list<array<string, mixed>>}
      */
-    public function suggest(array $offers, array $pantry, array $candidates, int $servings, int $count, bool $ideas, ?string $wishes, string $language, ?array $vocabulary = null, array $exclude = []): array
+    public function suggest(array $offers, array $pantry, array $candidates, int $servings, int $count, bool $ideas, ?string $wishes, string $language, ?array $vocabulary = null, array $exclude = [], array $seasonal = []): array
     {
         $complexities = ($vocabulary['complexities'] ?? []) ?: self::COMPLEXITIES;
         $categories = $vocabulary['categories'] ?? [];
@@ -168,6 +169,8 @@ class Assistant
             .'what is already at home (pantry) as much as possible. Be efficient: prefer dishes that combine several offers at once '
             .'(and pantry items) over one offer per dish, and spread the offers over the week so most of them get used. '
             .'Prefer the user\'s own recipes ("candidates", pick by id; their "offers" and "pantry" list what they use, best first); '
+            .($seasonal !== [] ? 'Next to the offers, prefer what is in season in Switzerland now ("seasonal"; a candidate\'s "season" lists its seasonal foods): '
+                .'among similar candidates pick the more seasonal ones, and build ideas around seasonal vegetables and fruit rather than out-of-season ones. ' : '')
             .($ideas ? 'fill up with new recipe ideas if fewer than '.$count.' candidates fit well. ' : 'do not invent new recipes, return no ideas. ')
             .'Ideas should combine at least two offers that go well together. '
             .'Ideas are complete recipes for '.$servings.' servings with ingredients (amount as number or null, unit like g, kg, '
@@ -180,7 +183,7 @@ class Assistant
             .'"uses_offers" and "uses_pantry" contain the exact names from the input. Vary the dishes. '
             .($exclude !== [] ? 'The user already has these dishes, suggest different ones: '.implode('; ', $exclude).'. ' : '')
             .'Write in '.$language.'.',
-            [OpenAiClient::text(json_encode(compact('offers', 'pantry', 'candidates', 'wishes'), JSON_UNESCAPED_UNICODE))],
+            [OpenAiClient::text(json_encode(compact('offers', 'pantry', 'candidates', 'wishes', 'seasonal'), JSON_UNESCAPED_UNICODE))],
             'suggestions',
             $this->object([
                 'picks' => $this->list($this->object([

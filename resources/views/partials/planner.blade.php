@@ -6,7 +6,7 @@
     x-data="planner({ addItems: (target, name, items, merge) => addPlannedItems(target, name, items, merge), merges: (target, items) => plannedMerges(target, items).size, lists: () => lists })">
     <div x-show="recipes && !recipes.connected" class="notice flex flex-wrap items-center justify-between gap-3">
         <span x-text="$t('Connect :name to get your own recipes suggested and to save new ones there.', { name: recipes?.name })"></span>
-        <a href="/recipes/connect" data-online class="button-secondary shrink-0 text-sm" x-text="$t('Connect')"></a>
+        <a href="/recipes/connect?from=planner" data-online class="button-secondary shrink-0 text-sm" x-text="$t('Connect')"></a>
     </div>
 
     {{-- Progress and errors are shown at the button that started the request; screen readers get the progress here --}}
@@ -144,6 +144,20 @@
         <x-planner-error key="suggest" />
         <p x-show="warning && !warningMore" class="notice" x-text="warning"></p>
 
+        {{-- Season calendar of the recipe app (the suggestions prefer foods in season) --}}
+        <a x-show="recipes?.url" :href="`${recipes?.url}/season`" target="_blank" rel="noopener"
+            class="flex items-center gap-3 rounded-lg border border-lime-200 bg-lime-50 px-4 py-3 text-sm text-lime-900 hover:bg-lime-100">
+            <svg viewBox="0 0 24 24" fill="none" class="size-5 shrink-0 text-lime-700" aria-hidden="true">
+                <path d="M11 20A7 7 0 0 1 4 13c0-5 4-9 16-9 0 12-4 16-9 16Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M4 20c4-4 7-7 11-10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <span class="min-w-0 flex-1">
+                <span class="block font-medium" x-text="$t('Season calendar')"></span>
+                <span class="block text-xs text-lime-800" x-text="$t('What is in season now; the suggestions prefer it.')"></span>
+            </span>
+            <span aria-hidden="true">↗</span>
+        </a>
+
         <div class="space-y-3">
             <template x-for="suggestion in suggestions" :key="suggestion.key">
                 <div class="rounded-lg border bg-white p-4" :class="suggestion.selected ? 'border-emerald-600' : 'border-stone-200'">
@@ -160,6 +174,7 @@
                             <p class="text-sm text-stone-600" x-text="suggestion.reason"></p>
                             <p x-show="suggestion.uses_offers.length" class="text-xs text-orange-800" x-text="$t('Offers') + ': ' + suggestion.uses_offers.join(', ')"></p>
                             <p x-show="suggestion.uses_pantry.length" class="text-xs text-emerald-800" x-text="$t('At home') + ': ' + suggestion.uses_pantry.join(', ')"></p>
+                            <p x-show="suggestion.uses_season?.length" class="text-xs text-lime-800" x-text="$t('In season') + ': ' + suggestion.uses_season.join(', ')"></p>
                             <template x-if="suggestion.source === 'ai'">
                                 <details class="text-sm">
                                     <summary class="cursor-pointer text-stone-500" x-text="$t('Ingredients and preparation')"></summary>

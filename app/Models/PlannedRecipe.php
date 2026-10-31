@@ -19,7 +19,7 @@ class PlannedRecipe extends Model
     public const LIMIT = 200;
 
     /** Fields of a suggestion kept in `data`. */
-    public const DATA = ['reason', 'uses_offers', 'uses_pantry', 'ingredients', 'instructions', 'category', 'complexity'];
+    public const DATA = ['reason', 'uses_offers', 'uses_pantry', 'uses_season', 'ingredients', 'instructions', 'category', 'complexity'];
 
     protected function casts(): array
     {

@@ -11,6 +11,7 @@ use App\Http\Controllers\PreferenceController;
 use App\Http\Controllers\RecipesConnectionController;
 use App\Http\Controllers\SyncController;
 use App\Recipes\RecipesClient;
+use App\Support\Seasons;
 use App\Support\ShopRegions;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -29,6 +30,8 @@ Route::middleware('auth')->group(function () {
         'preferences' => [...PreferenceController::DEFAULTS, ...($request->user()->preferences ?? [])],
         // Shops with regional offers and their regions (for the settings and the offers).
         'regions' => ShopRegions::ALL,
+        // Foods in season this month (for the product suggestions and the week planner).
+        'season' => ['month' => Seasons::month(), 'foods' => collect(Seasons::names(Seasons::month()))->sort(fn ($a, $b) => strcoll($a, $b))->values()->all()],
         // Week planner (AI) and the connected recipe app, null when not configured.
         'assistant' => OpenAiClient::enabled(),
         'recipes' => RecipesClient::enabled() ? [

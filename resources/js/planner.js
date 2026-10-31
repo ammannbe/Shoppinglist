@@ -283,7 +283,7 @@ export function planner({ addItems, merges, lists }) {
             const { id, draft_url: draftUrl, used_at: usedAt, created_at: createdAt, updated_at: updatedAt, ...suggestion } = recipe;
             const others = this.suggestions.filter((each) => each.key !== recipe.key);
             this.suggestions = [{
-                uses_offers: [], uses_pantry: [], ...suggestion, servings: recipe.servings || Number(this.servings) || 4, selected: true, savedUrl: draftUrl ?? null,
+                uses_offers: [], uses_pantry: [], uses_season: [], ...suggestion, servings: recipe.servings || Number(this.servings) || 4, selected: true, savedUrl: draftUrl ?? null,
             }, ...others];
             this.items = [];
         },
