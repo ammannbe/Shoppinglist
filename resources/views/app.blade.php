@@ -98,15 +98,6 @@
     <main x-show="$store.sync.status !== 'broken'" class="mx-auto max-w-xl px-3 pt-4 pb-[calc(2rem+env(safe-area-inset-bottom))]">
         {{-- Lists --}}
         <section x-show="route.view === 'lists'">
-            <a x-show="assistantEnabled" href="#/planner" class="mb-4 flex items-center gap-3 rounded-lg border border-violet-200 bg-violet-50 p-4 hover:bg-violet-100">
-                <span class="text-2xl" aria-hidden="true">✨</span>
-                <span class="min-w-0 flex-1">
-                    <span class="block font-medium" x-text="$t('Week planner')"></span>
-                    <span class="block text-sm text-stone-600" x-text="$t('Offers, what is at home, recipes and the shopping list')"></span>
-                </span>
-                <span aria-hidden="true">›</span>
-            </a>
-
             <form @submit.prevent="createList()" class="mb-4 flex gap-2">
                 <input x-model="newListName" class="field min-w-0 flex-1" :placeholder="$t('New list')" :aria-label="$t('New list')" enterkeyhint="done">
                 <button class="button shrink-0 px-3 min-[400px]:px-4" :aria-label="$t('Add')">
@@ -134,6 +125,16 @@
                     </x-swipe-row>
                 </template>
             </ul>
+
+            {{-- After the lists, so it does not push them down while they load --}}
+            <a x-show="assistantEnabled" href="#/planner" class="mt-4 flex items-center gap-3 rounded-lg border border-violet-200 bg-violet-50 p-4 hover:bg-violet-100">
+                <span class="text-2xl" aria-hidden="true">✨</span>
+                <span class="min-w-0 flex-1">
+                    <span class="block font-medium" x-text="$t('Week planner')"></span>
+                    <span class="block text-sm text-stone-600" x-text="$t('Offers, what is at home, recipes and the shopping list')"></span>
+                </span>
+                <span aria-hidden="true">›</span>
+            </a>
         </section>
 
         {{-- One list --}}
