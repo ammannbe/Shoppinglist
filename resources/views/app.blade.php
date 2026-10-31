@@ -18,7 +18,7 @@
 <body class="min-h-dvh bg-stone-50 text-stone-900 antialiased" :class="$store.sync.online || 'is-offline'" x-data="shoppinglist" x-cloak>
     <header class="sticky top-0 z-10 border-b border-stone-200 bg-white/95 pt-[env(safe-area-inset-top)] backdrop-blur">
         <div class="mx-auto flex h-14 max-w-xl items-center gap-2 px-3">
-            <a :href="backLink" x-show="!['lists', 'offline'].includes(route.view)" class="icon-button" :aria-label="$t('Back')">
+            <a :href="backLink" @click.prevent="goBack()" x-show="!['lists', 'offline'].includes(route.view)" class="icon-button" :aria-label="$t('Back')">
                 <svg viewBox="0 0 24 24" class="size-6"><path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </a>
 
@@ -534,7 +534,7 @@
     </div>
 
     {{-- Edit item --}}
-    <dialog x-ref="editDialog" class="dialog overflow-visible" @close="editing = null">
+    <dialog x-ref="editDialog" class="dialog" @close="editing = null">
         <template x-if="editing">
             <form @submit.prevent="saveItem()" class="space-y-4">
                 <label class="block">

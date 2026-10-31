@@ -7,6 +7,7 @@ import { byPosition, compareBy, csvFirstColumn, csvValue, formatAmount, mergedAm
 import { hasPendingLocale, htmlLang, initialLocale, LOCALES, storeLocale, translate } from './i18n.js';
 import { registerServiceWorker } from './pwa.js';
 import { shrinkIcon, shrinkImage } from './image.js';
+import { closeLayersOnBack } from './layers.js';
 import { createLightboxStore } from './lightbox.js';
 import { createPrefsStore } from './prefs.js';
 import { offersPool } from './offers.js';
@@ -137,9 +138,15 @@ Alpine.data('shoppinglist', () => ({
     menu: null,
     // Where the back button of the settings leads (the list they were opened from).
     settingsBack: '#/',
+    // Hashes visited in this tab, to make "back" go up in the structure (goBack).
+    navStack: [],
+    navReplacing: false,
 
     init() {
+        const layers = closeLayersOnBack({ menuOpen: () => this.menu !== null, closeMenu: () => { this.menu = null; } });
+        this.$watch('menu', (menu) => (menu ? layers.opened() : layers.closed()));
         const parse = (event) => {
+            this.trackNavigation(Boolean(event));
             const [, view, id = null] = location.hash.split('/');
             if (view === 'settings' && event) {
                 const from = new URL(event.oldURL).hash;
@@ -417,6 +424,30 @@ Alpine.data('shoppinglist', () => ({
         ];
     },
 
+    /** Keeps navStack in step with the browser history (push, back, or replaced entry). */
+    trackNavigation(changed) {
+        const hash = location.hash || '#/';
+        if (!changed) this.navStack = [hash];
+        else if (this.navReplacing) this.navStack[this.navStack.length - 1] = hash;
+        else if (this.navStack.at(-2) === hash) this.navStack.pop();
+        else this.navStack.push(hash);
+        this.navReplacing = false;
+    },
+
+    /**
+     * Back button: up in the structure (backLink). If that is the previous history entry, go
+     * back in the history, otherwise replace the current entry, so the system back gesture
+     * does not return to the page just left.
+     */
+    goBack(target = this.backLink) {
+        if (this.navStack.at(-2) === target) {
+            history.back();
+            return;
+        }
+        this.navReplacing = true;
+        location.replace(target);
+    },
+
     get backLink() {
         if (['products', 'units', 'stores', 'install'].includes(this.route.view)) return '#/settings';
         if (['offers', 'recipes'].includes(this.route.view)) return '#/planner';
@@ -490,7 +521,7 @@ Alpine.data('shoppinglist', () => ({
     },
 
     deleteList(id = this.route.id) {
-        if (this.route.id === id) location.hash = '#/';
+        if (this.route.id === id) this.goBack('#/');
         Alpine.store('undo').schedule(id, this.$t('List deleted'), async () => {
             await (await db.lists.findOne(id).exec())?.remove();
         });
@@ -502,7 +533,7 @@ Alpine.data('shoppinglist', () => ({
         await this.online(async () => {
             await api.delete(`/lists/${id}/members/${encodeURIComponent(Alpine.store('sync').user.email)}`);
             replication?.resync();
-            location.hash = '#/';
+            this.goBack('#/');
         });
     },
 
@@ -856,22 +887,29 @@ Alpine.data('shoppinglist', () => ({
 
     /**
      * The server keeps an item in its list, so moving is a copy at the end of the target list
-     * (with a new id) and deleting the original. Works offline like any other change.
+     * (with a new id) and deleting the original, undoable like a deletion (undo removes the
+     * copy). Works offline like any other change.
      */
     async moveItem(listId) {
         const item = this.moving;
         this.$refs.moveDialog.close();
         const fields = ['name', 'amount', 'unit', 'stores', 'note', 'recipes', 'image', 'done', 'creator_email'];
+        const copyId = uuid7();
         await db.items.insert({
             ...Object.fromEntries(fields.map((field) => [field, item[field] ?? null])),
             stores: [...(item.stores ?? [])],
             recipes: (item.recipes ?? []).map(({ name, url }) => ({ name, url: url ?? null })),
             done: Boolean(item.done),
-            id: uuid7(),
+            id: copyId,
             shopping_list_id: listId,
             position: nextPosition(this.itemsOf(listId)),
         });
-        await (await db.items.findOne(item.id).exec())?.remove();
+        const target = this.lists.find((list) => list.id === listId)?.name ?? '';
+        Alpine.store('undo').schedule(item.id, this.$t('“:name” moved to “:list”', { name: item.name, list: target }), async () => {
+            await (await db.items.findOne(item.id).exec())?.remove();
+        }, async () => {
+            await (await db.items.findOne(copyId).exec())?.remove();
+        });
     },
 
     // ---- sorting (lists overview: per user, items: per list)
