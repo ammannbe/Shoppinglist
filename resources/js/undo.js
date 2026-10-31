@@ -28,8 +28,9 @@ export function createUndoStore() {
          * @param {string|string[]} ids rows to hide until the deletion is final
          * @param {string} message toast text
          * @param {() => Promise<void>} remove the actual deletion
+         * @param {() => Promise<void>} [restore] runs on undo (e.g. removes a copy made already)
          */
-        schedule(ids, message, remove) {
+        schedule(ids, message, remove, restore = null) {
             this.flush();
             ids = [].concat(ids);
             ids.forEach((id) => { this.pending[id] = true; });
@@ -42,13 +43,14 @@ export function createUndoStore() {
                     ids.forEach((id) => delete this.pending[id]);
                 }
             };
-            this.toast = { message, ids };
+            this.toast = { message, ids, restore };
             this.timer = setTimeout(() => this.flush(), DELAY);
         },
 
         undo() {
             clearTimeout(this.timer);
             this.toast?.ids.forEach((id) => delete this.pending[id]);
+            this.toast?.restore?.();
             this.toast = null;
             this.commit = null;
         },

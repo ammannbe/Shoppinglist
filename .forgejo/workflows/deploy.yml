@@ -17,6 +17,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           npm ci
+          npm test
           npm run build
 
       - name: Set up SSH
@@ -61,6 +62,8 @@ jobs:
           set -Eeuo pipefail
 
           PHP=php85
+          # A failed step must not leave the site in maintenance mode.
+          trap '$PHP artisan up || true' ERR
 
           $PHP artisan down
 
@@ -73,6 +76,12 @@ jobs:
           $PHP artisan view:clear
           $PHP artisan optimize
           $PHP artisan up
+
+          # Every migration ran.
+          if $PHP artisan migrate:status --pending --no-ansi | grep -q 'Pending'; then
+            echo "Pending migrations after the deploy" >&2
+            exit 1
+          fi
           REMOTE
 
       - name: Verify website availability
@@ -80,6 +89,15 @@ jobs:
           PRIMARY_SITE_URL: ${{ vars.PRIMARY_SITE_URL }}
         run: |
           set -Eeuo pipefail
-          if [ -n "${PRIMARY_SITE_URL}" ]; then
-            curl --fail --silent --show-error --retry 3 "${PRIMARY_SITE_URL}" >/dev/null
+          URL="${PRIMARY_SITE_URL:-https://shoppinglist.narrenhaus.ch}"
+          URL="${URL%/}"
+          curl --fail --silent --show-error --retry 3 "${URL}" >/dev/null
+          # Laravel health route: the app boots.
+          curl --fail --silent --show-error --retry 3 "${URL}/up" >/dev/null
+          # The new build is online: the service worker lists the app bundle built above.
+          BUNDLE="$(grep -o 'build/assets/app-[A-Za-z0-9_-]*\.js' public/sw.js | head -n 1)"
+          LIVE_SW="$(curl --fail --silent --show-error --retry 3 "${URL}/sw.js")"
+          if [[ -z "${BUNDLE}" || "${LIVE_SW}" != *"${BUNDLE}"* ]]; then
+            echo "The live service worker does not list ${BUNDLE}" >&2
+            exit 1
           fi

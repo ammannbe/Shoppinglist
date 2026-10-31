@@ -575,5 +575,6 @@
     "“:name” already exists.": "«:name» gibt es schon.",
     "“:name” deleted": "«:name» gelöscht",
     "“:name” is already on the list.": "«:name» ist schon auf der Liste.",
+    "“:name” moved to “:list”": "«:name» nach «:list» verschoben",
     "… or paste the text of an offers page": "… oder den Text einer Aktionsseite einfügen"
 }

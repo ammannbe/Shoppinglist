@@ -8,6 +8,13 @@
         'Segoe UI Symbol', 'Noto Color Emoji';
 }
 
+/* No pull-to-refresh (Chrome on Android): dragging a row downwards at the top would reload
+   the page. The app syncs by itself. */
+html,
+body {
+    overscroll-behavior-y: none;
+}
+
 [x-cloak] {
     display: none !important;
 }
@@ -55,7 +62,8 @@
         @apply border-emerald-600 bg-emerald-600 text-white;
     }
 
+    /* Scrolls inside when the window is too low (suggestion lists then scroll with the content). */
     .dialog {
-        @apply m-auto w-[min(28rem,calc(100%-2rem))] rounded-xl p-5 shadow-xl backdrop:bg-stone-900/40;
+        @apply m-auto max-h-[calc(100dvh-2rem)] w-[min(28rem,calc(100%-2rem))] overflow-y-auto overscroll-contain rounded-xl p-5 shadow-xl backdrop:bg-stone-900/40;
     }
 }

@@ -30,16 +30,8 @@ export function createLightboxStore() {
             this.image = image;
             this.loaded = false;
             this.reset();
+            // The back button (Android) closes it like any dialog (layers.js).
             dialog.showModal();
-            // The back button (Android) closes the image instead of leaving the list.
-            history.pushState({ lightbox: true }, '');
-            window.addEventListener('popstate', this.onPopState, { once: true });
-        },
-
-        onPopState: null,
-
-        init() {
-            this.onPopState = () => this.dialog?.close();
         },
 
         close() {
@@ -47,11 +39,9 @@ export function createLightboxStore() {
         },
 
         /**
-         * Dialog closed (✕, Esc, tap or back button): drop the history entry of the image.
+         * Dialog closed (✕, Esc, tap or back button).
          */
         closed() {
-            window.removeEventListener('popstate', this.onPopState);
-            if (history.state?.lightbox) history.back();
             this.image = null;
             this.pointers.clear();
             this.gesture = null;
