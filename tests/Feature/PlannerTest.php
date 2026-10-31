@@ -4,9 +4,11 @@ namespace Tests\Feature;
 
 use App\Ai\Assistant;
 use App\Models\User;
+use App\Support\Seasons;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -172,8 +174,8 @@ class PlannerTest extends TestCase
             'servings' => 2, 'count' => 3, 'ideas' => false,
         ])->assertOk();
 
-        // Offers and pantry are searched separately.
-        Http::assertSent(fn (Request $request) => str_ends_with($request->url(), '/api/recipes/search') && $request['food_ids'] === [1, 2]);
+        // Offers and pantry are searched separately, seasonal recipes preferred.
+        Http::assertSent(fn (Request $request) => str_ends_with($request->url(), '/api/recipes/search') && $request['food_ids'] === [1, 2] && $request['season_month'] === Seasons::month());
         Http::assertSent(fn (Request $request) => str_ends_with($request->url(), '/api/recipes/search') && $request['food_ids'] === [3]);
 
         Http::assertSent(function (Request $request) {
@@ -185,6 +187,58 @@ class PlannerTest extends TestCase
             return array_column($candidates, 'name') === ['Lasagne', 'Tomatensalat', 'Omelette']
                 && $candidates[0]['offers'] === ['Rindshackfleisch', 'Cherry-Tomaten']
                 && $candidates[0]['pantry'] === ['Eier'];
+        });
+    }
+
+    public function test_seasonal_foods_rank_candidates_and_go_to_the_ai(): void
+    {
+        $this->travelTo(Carbon::parse('2026-07-10 12:00', 'Europe/Zurich'));
+        Http::fake([
+            'recipes.test/api/foods' => Http::response(['data' => [
+                ['id' => 1, 'name' => 'Hackfleisch', 'season_months' => [], 'storage_months' => []],
+                ['id' => 2, 'name' => 'Zucchetti', 'season_months' => [6, 7, 8, 9], 'storage_months' => []],
+                ['id' => 3, 'name' => 'Rosenkohl', 'season_months' => [10, 11, 12, 1], 'storage_months' => []],
+            ]]),
+            'recipes.test/api/vocabulary' => Http::response(['data' => ['categories' => [], 'units' => [], 'complexities' => []]]),
+            'recipes.test/api/recipes/search' => Http::response(['data' => [
+                ['id' => 8, 'name' => 'Rosenkohl-Gratin', 'url' => null, 'food_ids' => [1, 3]],
+                ['id' => 9, 'name' => 'Zucchetti-Lasagne', 'url' => null, 'food_ids' => [1, 2]],
+            ]]),
+            'openai.test/*' => Http::sequence()
+                ->push($this->ai(['matches' => [['product' => 'Rindshackfleisch', 'food_id' => 1]]]))
+                ->push($this->ai(['picks' => [], 'ideas' => []])),
+        ]);
+
+        $this->actingAs($this->connected())->postJson('/planner/suggestions', [
+            'offers' => [['name' => 'Rindshackfleisch']], 'pantry' => [], 'servings' => 2, 'count' => 3, 'ideas' => true,
+        ])->assertOk();
+
+        Http::assertSent(function (Request $request) {
+            if (! str_contains($request->url(), 'openai.test') || ! str_contains($request['instructions'] ?? '', 'in season in Switzerland')) {
+                return false;
+            }
+            $input = json_decode($request['input'][0]['content'][0]['text'], true);
+
+            // Same offers: the recipe with foods in season first; the recipe app's season data is used.
+            return array_column($input['candidates'], 'name') === ['Zucchetti-Lasagne', 'Rosenkohl-Gratin']
+                && $input['candidates'][0]['season'] === ['Zucchetti']
+                && $input['seasonal'] === ['Zucchetti'];
+        });
+    }
+
+    public function test_without_recipe_app_the_season_list_of_the_app_is_used(): void
+    {
+        $this->travelTo(Carbon::parse('2026-12-10 12:00', 'Europe/Zurich'));
+        Http::fake(['openai.test/*' => Http::response($this->ai(['picks' => [], 'ideas' => []]))]);
+
+        $this->actingAs(User::factory()->create())->postJson('/planner/suggestions', [
+            'offers' => [['name' => 'Rindshackfleisch']], 'pantry' => [], 'servings' => 2, 'count' => 3, 'ideas' => true,
+        ])->assertOk();
+
+        Http::assertSent(function (Request $request) {
+            $seasonal = json_decode($request['input'][0]['content'][0]['text'] ?? '{}', true)['seasonal'] ?? [];
+
+            return in_array('Rosenkohl', $seasonal, true) && ! in_array('Tomaten', $seasonal, true);
         });
     }
 
@@ -409,5 +463,24 @@ class PlannerTest extends TestCase
 
         $this->actingAs($user)->deleteJson('/recipes/connection')->assertNoContent();
         $this->assertNull($user->fresh()->recipes_connection);
+    }
+
+    public function test_connecting_returns_to_where_it_was_started(): void
+    {
+        $user = User::factory()->create();
+        Http::fake([
+            'recipes.test/oauth/token' => Http::response(['access_token' => 'at', 'refresh_token' => 'rt', 'expires_in' => 3600]),
+            'recipes.test/api/user' => Http::response(['id' => 3, 'name' => 'Beni', 'email' => 'beni@example.ch']),
+        ]);
+
+        $this->actingAs($user)->get('/recipes/connect?from=planner');
+        $this->actingAs($user)->get('/recipes/callback?error=access_denied&state=x')->assertRedirect('/?recipes=denied#/planner');
+
+        $this->actingAs($user)->get('/recipes/connect?from=planner');
+        $this->actingAs($user)->get('/recipes/callback?code=abc&state='.session('recipes_oauth_state'))->assertRedirect('/?recipes=connected#/planner');
+
+        // Unknown views fall back to the settings.
+        $this->actingAs($user)->get('/recipes/connect?from=list/123');
+        $this->actingAs($user)->get('/recipes/callback?code=abc&state='.session('recipes_oauth_state'))->assertRedirect('/?recipes=connected#/settings');
     }
 }

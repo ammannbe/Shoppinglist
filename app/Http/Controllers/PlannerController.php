@@ -9,6 +9,7 @@ use App\Http\Requests\PlannerSuggestionsRequest;
 use App\Models\PlannedRecipe;
 use App\Recipes\RecipesClient;
 use App\Recipes\RecipesException;
+use App\Support\Seasons;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -66,13 +67,14 @@ class PlannerController extends Controller
         $user = $request->user();
 
         return $this->answer(function () use ($data, $offers, $pantry, $user) {
-            [$candidates, $urls, $warning] = $this->candidates($user, $offers, $pantry);
+            $month = Seasons::month();
+            [$candidates, $urls, $warning, $foods] = $this->candidates($user, $offers, $pantry, $month);
             $excludedIds = $data['exclude']['recipe_ids'] ?? [];
             $candidates = array_values(array_filter($candidates, fn (array $candidate) => ! in_array($candidate['id'], $excludedIds, true)));
             $result = $this->assistant->suggest(
                 $offers, $pantry, $candidates, (int) $data['servings'], (int) $data['count'],
                 (bool) $data['ideas'] || $candidates === [], $data['wishes'] ?? null, $this->language(),
-                $this->vocabulary($user), $data['exclude']['names'] ?? [],
+                $this->vocabulary($user), $data['exclude']['names'] ?? [], Seasons::names($month, $foods),
             );
             $names = array_column($candidates, 'name', 'id');
 
@@ -204,16 +206,18 @@ class PlannerController extends Controller
     }
 
     /**
-     * Recipes of the recipe app that use the offers or the pantry; recipes using several offers come first.
+     * Recipes of the recipe app that use the offers or the pantry; recipes using several offers come
+     * first, then by pantry and by foods in season. Also returns the recipe app's foods (null if unknown).
      *
-     * @return array{0: list<array{id: int, name: string, foods: list<string>, offers: list<string>, pantry: list<string>}>, 1: array<int, string>, 2: ?string}
+     * @return array{0: list<array{id: int, name: string, foods: list<string>, offers: list<string>, pantry: list<string>, season: list<string>}>, 1: array<int, string>, 2: ?string, 3: ?list<array<string, mixed>>}
      */
-    private function candidates($user, array $offers, array $pantry): array
+    private function candidates($user, array $offers, array $pantry, int $month): array
     {
         if (! RecipesClient::connected($user)) {
-            return [[], [], null];
+            return [[], [], null, null];
         }
 
+        $foods = null;
         try {
             $foods = $this->recipes->get($user, '/api/foods')['data'] ?? [];
             $offerNames = array_values(array_unique(array_column($offers, 'name')));
@@ -222,7 +226,7 @@ class PlannerController extends Controller
             $offerFoods = array_filter(array_intersect_key($matches, array_flip($offerNames)));
             $pantryFoods = array_filter(array_intersect_key($matches, array_flip($pantryNames)));
             if ($offerFoods === [] && $pantryFoods === []) {
-                return [[], [], null];
+                return [[], [], null, $foods];
             }
 
             // The recipe app ranks by matched foods: search the offers on their own so recipes
@@ -231,17 +235,19 @@ class PlannerController extends Controller
             foreach ([[$offerFoods, 25], [$pantryFoods, $offerFoods === [] ? 30 : 10]] as [$ids, $limit]) {
                 $ids = array_values(array_unique($ids));
                 if ($ids !== []) {
-                    $found = [...$found, ...$this->recipes->post($user, '/api/recipes/search', ['food_ids' => array_slice($ids, 0, 200), 'limit' => $limit])['data'] ?? []];
+                    // season_month: among equally good matches the recipe app prefers seasonal recipes.
+                    $found = [...$found, ...$this->recipes->post($user, '/api/recipes/search', ['food_ids' => array_slice($ids, 0, 200), 'limit' => $limit, 'season_month' => $month])['data'] ?? []];
                 }
             }
             $found = collect($found)->unique('id')->values()->all();
         } catch (RecipesException $e) {
             report($e);
 
-            return [[], [], __('The recipes of :name could not be loaded.', ['name' => config('services.recipes.name')])];
+            return [[], [], __('The recipes of :name could not be loaded.', ['name' => config('services.recipes.name')]), $foods];
         }
 
         $foodNames = array_column($foods, 'name', 'id');
+        $seasonal = Seasons::foodIds($month, $foods);
         $using = fn (array $recipe, array $products) => array_keys(array_filter(
             $products, fn ($foodId) => in_array($foodId, $recipe['food_ids'] ?? [], true),
         ));
@@ -254,12 +260,15 @@ class PlannerController extends Controller
                     'foods' => array_values(array_filter(array_map(fn ($id) => $foodNames[$id] ?? null, $recipe['food_ids'] ?? []))),
                     'offers' => array_map('strval', $using($recipe, $offerFoods)),
                     'pantry' => array_map('strval', $using($recipe, $pantryFoods)),
+                    'season' => array_values(array_filter(array_map(fn ($id) => in_array($id, $seasonal, true) ? $foodNames[$id] ?? null : null, $recipe['food_ids'] ?? []))),
                 ])
-                ->sortByDesc(fn (array $recipe) => count($recipe['offers']) * 100 + count($recipe['pantry']))
+                // Offers first, then the pantry, then foods in season.
+                ->sortByDesc(fn (array $recipe) => count($recipe['offers']) * 10000 + count($recipe['pantry']) * 100 + count($recipe['season']))
                 ->values()
                 ->all(),
             array_column($found, 'url', 'id'),
             null,
+            $foods,
         ];
     }
 

@@ -6,7 +6,7 @@
     x-data="planner({ addItems: (target, name, items, merge) => addPlannedItems(target, name, items, merge), merges: (target, items) => plannedMerges(target, items).size, lists: () => lists })">
     <div x-show="recipes && !recipes.connected" class="notice flex flex-wrap items-center justify-between gap-3">
         <span x-text="$t('Connect :name to get your own recipes suggested and to save new ones there.', { name: recipes?.name })"></span>
-        <a href="/recipes/connect" data-online class="button-secondary shrink-0 text-sm" x-text="$t('Connect')"></a>
+        <a href="/recipes/connect?from=planner" data-online class="button-secondary shrink-0 text-sm" x-text="$t('Connect')"></a>
     </div>
 
     {{-- Progress and errors are shown at the button that started the request; screen readers get the progress here --}}
