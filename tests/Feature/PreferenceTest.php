@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 class PreferenceTest extends TestCase
@@ -62,6 +63,17 @@ class PreferenceTest extends TestCase
 
         $this->actingAs($user)->putJson('/preferences', ['regions' => ['M' => 'migros-bern']])->assertUnprocessable();
         $this->actingAs($user)->putJson('/preferences', ['regions' => ['C' => 'migros-aare']])->assertUnprocessable();
+    }
+
+    public function test_me_lists_the_foods_in_season(): void
+    {
+        $this->travelTo(Carbon::parse('2026-07-10 12:00', 'Europe/Zurich'));
+
+        $season = $this->actingAs(User::factory()->create())->getJson('/me')->assertOk()->json('season');
+
+        $this->assertSame(7, $season['month']);
+        $this->assertContains('Zucchetti', $season['foods']);
+        $this->assertNotContains('Rosenkohl', $season['foods']);
     }
 
     public function test_invalid_values_and_guests_are_rejected(): void

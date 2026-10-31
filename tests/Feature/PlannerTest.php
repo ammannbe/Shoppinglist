@@ -206,12 +206,19 @@ class PlannerTest extends TestCase
             ]]),
             'openai.test/*' => Http::sequence()
                 ->push($this->ai(['matches' => [['product' => 'Rindshackfleisch', 'food_id' => 1]]]))
-                ->push($this->ai(['picks' => [], 'ideas' => []])),
+                ->push($this->ai(['picks' => [['recipe_id' => 9, 'reason' => 'x', 'uses_offers' => [], 'uses_pantry' => []]], 'ideas' => [[
+                    'name' => 'Sommerpfanne', 'reason' => 'y', 'servings' => 2, 'category' => 'Hauptgang', 'complexity' => 'simple', 'instructions' => '1. Braten',
+                    'ingredients' => [['amount' => 2, 'unit' => null, 'name' => 'Zucchetti'], ['amount' => 1, 'unit' => 'Stk.', 'name' => 'Rosenkohl']],
+                    'uses_offers' => [], 'uses_pantry' => [],
+                ]]])),
         ]);
 
+        // The suggestions name the foods in season they use.
         $this->actingAs($this->connected())->postJson('/planner/suggestions', [
             'offers' => [['name' => 'Rindshackfleisch']], 'pantry' => [], 'servings' => 2, 'count' => 3, 'ideas' => true,
-        ])->assertOk();
+        ])->assertOk()
+            ->assertJsonPath('suggestions.0.uses_season', ['Zucchetti'])
+            ->assertJsonPath('suggestions.1.uses_season', ['Zucchetti']);
 
         Http::assertSent(function (Request $request) {
             if (! str_contains($request->url(), 'openai.test') || ! str_contains($request['instructions'] ?? '', 'in season in Switzerland')) {

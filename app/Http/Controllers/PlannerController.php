@@ -69,14 +69,16 @@ class PlannerController extends Controller
         return $this->answer(function () use ($data, $offers, $pantry, $user) {
             $month = Seasons::month();
             [$candidates, $urls, $warning, $foods] = $this->candidates($user, $offers, $pantry, $month);
+            $seasonal = Seasons::names($month, $foods);
             $excludedIds = $data['exclude']['recipe_ids'] ?? [];
             $candidates = array_values(array_filter($candidates, fn (array $candidate) => ! in_array($candidate['id'], $excludedIds, true)));
             $result = $this->assistant->suggest(
                 $offers, $pantry, $candidates, (int) $data['servings'], (int) $data['count'],
                 (bool) $data['ideas'] || $candidates === [], $data['wishes'] ?? null, $this->language(),
-                $this->vocabulary($user), $data['exclude']['names'] ?? [], Seasons::names($month, $foods),
+                $this->vocabulary($user), $data['exclude']['names'] ?? [], $seasonal,
             );
             $names = array_column($candidates, 'name', 'id');
+            $seasonOf = array_column($candidates, 'season', 'id');
 
             $suggestions = [
                 ...array_map(fn (array $pick) => [
@@ -88,12 +90,14 @@ class PlannerController extends Controller
                     'reason' => $pick['reason'],
                     'uses_offers' => $pick['uses_offers'],
                     'uses_pantry' => $pick['uses_pantry'],
+                    'uses_season' => $seasonOf[$pick['recipe_id']] ?? [],
                 ], $result['picks']),
                 // Unique keys: "suggest more" appends to the shown suggestions.
                 ...array_map(fn (array $idea) => [
                     'key' => 'idea-'.Str::uuid7(),
                     'source' => 'ai',
                     ...$idea,
+                    'uses_season' => Seasons::among(array_column($idea['ingredients'] ?? [], 'name'), $seasonal),
                 ], $result['ideas']),
             ];
 

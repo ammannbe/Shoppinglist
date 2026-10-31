@@ -37,6 +37,34 @@ class Seasons
     }
 
     /**
+     * The seasonal foods among ingredient names: equal, or the end/start of a longer name
+     * ("Cherrytomaten" → "Tomaten"); the longest match wins ("Knoblauch", not "Lauch").
+     *
+     * @param  list<string>  $ingredients
+     * @param  list<string>  $seasonal
+     * @return list<string>
+     */
+    public static function among(array $ingredients, array $seasonal): array
+    {
+        $found = [];
+        foreach ($ingredients as $ingredient) {
+            $name = mb_strtolower(trim($ingredient));
+            $best = null;
+            foreach ($seasonal as $food) {
+                $key = mb_strtolower($food);
+                if (($name === $key || str_ends_with($name, $key) || str_starts_with($name, $key)) && mb_strlen($key) > mb_strlen((string) $best)) {
+                    $best = $food;
+                }
+            }
+            if ($best !== null) {
+                $found[$best] = true;
+            }
+        }
+
+        return array_keys($found);
+    }
+
+    /**
      * Ids of the recipe app's foods in season in the month (none without season data).
      *
      * @param  list<array<string, mixed>>  $foods

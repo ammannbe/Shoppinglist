@@ -67,6 +67,27 @@ export function csvValue(value) {
 }
 
 /**
+ * The food in season a product stands for: equal, or the end/start of a longer name
+ * ("Cherrytomaten" → "Tomaten"); the longest match wins ("Knoblauch", not "Lauch").
+ * Same rule as App\Support\Seasons::among.
+ *
+ * @param {string} name
+ * @param {string[]} foods names of the foods in season
+ * @returns {string|null}
+ */
+export function seasonalFood(name, foods = []) {
+    const product = String(name ?? '').trim().toLowerCase();
+    if (!product) return null;
+    let best = null;
+    for (const food of foods) {
+        const key = food.toLowerCase();
+        if ((product === key || product.endsWith(key) || product.startsWith(key)) && key.length > (best?.length ?? 0)) best = food;
+    }
+
+    return best;
+}
+
+/**
  * Comparable form of a product name: case and accents are ignored ("apfel" finds "Äpfel").
  */
 export function normalizeName(name) {

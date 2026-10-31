@@ -1,5 +1,5 @@
 import Alpine from 'alpinejs';
-import { normalizeName, splitItemInput, suggestNames, usageOf } from './helpers.js';
+import { normalizeName, seasonalFood, splitItemInput, suggestNames, usageOf } from './helpers.js';
 import { storeIconUrl, storeUsage } from './stores.js';
 
 /**
@@ -53,8 +53,9 @@ export function suggestField({ source, get, set, units = () => [], stores = () =
 
             const products = data.products.filter((product) => !Alpine.store('undo').hidden(product.id)).map((product) => product.name);
             const onList = new Set(openItems().map((item) => normalizeName(item.name)));
+            const seasonal = Alpine.store('sync').user?.season?.foods ?? [];
             const productOptions = suggestNames(query, products, usageOf(data.items))
-                .map((name) => ({ kind: 'product', name, onList: onList.has(normalizeName(name)) }));
+                .map((name) => ({ kind: 'product', name, onList: onList.has(normalizeName(name)), seasonal: Boolean(seasonalFood(name, seasonal)) }));
 
             return [...unitOptions, ...productOptions].slice(0, 8);
         },

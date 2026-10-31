@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { csvFirstColumn, csvValue, mergedAmount, normalizeName, parseItemInput, sameName, splitItemInput, suggestNames } from '../../resources/js/helpers.js';
+import { csvFirstColumn, csvValue, mergedAmount, normalizeName, parseItemInput, sameName, seasonalFood, splitItemInput, suggestNames } from '../../resources/js/helpers.js';
 
 const UNITS = ['l', 'kg', 'g', 'Stk.'];
 
@@ -55,5 +55,16 @@ describe('CSV', () => {
         const names = ['Milch', 'Bio-Hafer, fein', 'A;B', 'Er sagt "Hallo"'];
         expect(names.map(csvValue)).toEqual(['Milch', '"Bio-Hafer, fein"', '"A;B"', '"Er sagt ""Hallo"""']);
         expect(csvFirstColumn(['name', ...names.map(csvValue)].join('\r\n'))).toEqual(names);
+    });
+});
+
+describe('seasonalFood', () => {
+    it('finds the food a product stands for, the longest match wins', () => {
+        const foods = ['Tomaten', 'Lauch', 'Knoblauch', 'Zucchetti'];
+        expect(seasonalFood('Cherrytomaten', foods)).toBe('Tomaten');
+        expect(seasonalFood('zucchetti', foods)).toBe('Zucchetti');
+        expect(seasonalFood('Knoblauch', foods)).toBe('Knoblauch');
+        expect(seasonalFood('Milch', foods)).toBeNull();
+        expect(seasonalFood('Tomaten', [])).toBeNull();
     });
 });
