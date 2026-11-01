@@ -95,6 +95,7 @@ export function swipeRow() {
             // The finger lifts later: that click must not toggle or open the row.
             this.suppressClick = true;
             navigator.vibrate?.(10);
+            document.documentElement.classList.add('row-held');
 
             const move = (event) => {
                 event.preventDefault();
@@ -185,6 +186,7 @@ export function swipeRow() {
             document.removeEventListener('touchcancel', end);
             this.touchListeners = null;
             this.lifted = false;
+            document.documentElement.classList.remove('row-held');
             this.start = null;
 
             if (this.drag) this.drop();

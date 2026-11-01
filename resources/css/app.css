@@ -8,10 +8,10 @@
         'Segoe UI Symbol', 'Noto Color Emoji';
 }
 
-/* No pull-to-refresh (Chrome on Android): dragging a row downwards at the top would reload
-   the page. The app syncs by itself. */
-html,
-body {
+/* No pull-to-refresh (Chrome on Android) while a row is held: dragging it downwards at the top
+   would reload the page. Otherwise pulling down reloads as usual. */
+html.row-held,
+html.row-held body {
     overscroll-behavior-y: none;
 }
 
