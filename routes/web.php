@@ -1,6 +1,7 @@
 <?php
 
 use App\Ai\OpenAiClient;
+use App\Http\Controllers\Auth\OidcController;
 use App\Http\Controllers\ImageController;
 use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\MemberController;
@@ -20,6 +21,12 @@ use Illuminate\Support\Facades\Route;
 Route::view('/', 'app')->name('home');
 
 Route::put('locale', [LocaleController::class, 'update'])->name('locale.update');
+
+// Optional OpenID Connect login (config/login.php).
+Route::middleware('throttle:20,1')->group(function () {
+    Route::get('auth/oidc/redirect', [OidcController::class, 'redirect'])->name('oidc.redirect');
+    Route::get('auth/oidc/callback', [OidcController::class, 'callback'])->name('oidc.callback');
+});
 
 Route::middleware('auth')->group(function () {
     Route::get('me', fn (Request $request) => [
@@ -47,6 +54,7 @@ Route::middleware('auth')->group(function () {
     Route::get('account', fn (Request $request) => view('account', [
         'passkeyCount' => $request->user()->passkeys()->count(),
     ]))->name('account');
+    Route::delete('account/oidc', [OidcController::class, 'destroy'])->name('oidc.unlink');
     Route::get('account/passkeys', fn (Request $request) => view('account-passkeys', [
         'passkeys' => $request->user()->passkeys()->latest()->get(),
     ]))->middleware('password.confirm')->name('account.passkeys');

@@ -161,7 +161,8 @@ return [
     */
 
     'features' => [
-        Features::registration(),
+        // AUTH_LOCAL_REGISTRATION=false: accounts only through the OpenID Connect login (config/login.php).
+        ...(env('AUTH_LOCAL_REGISTRATION', true) ? [Features::registration()] : []),
         Features::resetPasswords(),
         Features::emailVerification(),
         Features::updateProfileInformation(),

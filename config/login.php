@@ -1,0 +1,48 @@
+<?php
+
+return [
+
+    /*
+    |--------------------------------------------------------------------------
+    | Local login
+    |--------------------------------------------------------------------------
+    |
+    | E-mail/password and passkey login of the app itself. When disabled, only
+    | the addresses in "emergency_emails" may still sign in with a password
+    | (e.g. while the OpenID Connect provider is down). Registration follows
+    | AUTH_LOCAL_REGISTRATION (config/fortify.php). Password reset stays
+    | available, so that users without password can set one.
+    |
+    */
+
+    'local' => [
+        'enabled' => (bool) env('AUTH_LOCAL_ENABLED', true),
+        'emergency_emails' => array_values(array_filter(array_map(
+            fn (string $email): string => mb_strtolower(trim($email)),
+            explode(',', (string) env('AUTH_LOCAL_EMERGENCY_EMAILS', '')),
+        ))),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | OpenID Connect login
+    |--------------------------------------------------------------------------
+    |
+    | Optional "Log in with …" through any OpenID Connect provider (e.g.
+    | Pocket ID). The provider connection itself is configured in
+    | config/services.php ("oidc").
+    |
+    */
+
+    'oidc' => [
+        'enabled' => (bool) env('AUTH_OIDC_ENABLED', false),
+        'label' => env('AUTH_OIDC_LABEL', 'SSO'),
+
+        // Create a new account on the first OIDC login of an unknown user.
+        'registration' => (bool) env('AUTH_OIDC_REGISTRATION', true),
+
+        // Only users with this value in the "groups" claim may log in.
+        'required_group' => env('AUTH_OIDC_REQUIRED_GROUP') ?: null,
+    ],
+
+];

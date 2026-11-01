@@ -579,5 +579,21 @@
     "“:name” deleted": "«:name» gelöscht",
     "“:name” is already on the list.": "«:name» ist schon auf der Liste.",
     "“:name” moved to “:list”": "«:name» nach «:list» verschoben",
-    "… or paste the text of an offers page": "… oder den Text einer Aktionsseite einfügen"
+    "… or paste the text of an offers page": "… oder den Text einer Aktionsseite einfügen",
+    "The login did not return a user.": "Die Anmeldung hat keinen Benutzer geliefert.",
+    "Your email address must be verified with the login provider.": "Deine E-Mail-Adresse muss beim Anmeldedienst bestätigt sein.",
+    "There is no account for this email address.": "Für diese E-Mail-Adresse gibt es kein Konto.",
+    "You do not have access to this app.": "Du hast keinen Zugang zu dieser App.",
+    "This login is already linked to another account.": "Diese Anmeldung ist bereits mit einem anderen Konto verknüpft.",
+    "This account is already linked to another login.": "Dieses Konto ist bereits mit einer anderen Anmeldung verknüpft.",
+    "The login failed. Please try again.": "Die Anmeldung ist fehlgeschlagen. Bitte versuche es nochmals.",
+    "The login is linked to your account.": "Die Anmeldung ist mit deinem Konto verknüpft.",
+    "The login is unlinked.": "Die Verknüpfung ist gelöst.",
+    "Log in with :provider": "Anmelden mit :provider",
+    "or": "oder",
+    "You can log in with :provider.": "Du kannst dich mit :provider anmelden.",
+    "Unlink :provider": "Verknüpfung mit :provider lösen",
+    "Link your account to log in with :provider.": "Verknüpfe dein Konto, um dich mit :provider anzumelden.",
+    "Link :provider": "Mit :provider verknüpfen",
+    "Your account has no password yet. You can set one with \"Forgot your password?\" on the login page.": "Dein Konto hat noch kein Passwort. Du kannst eines mit «Passwort vergessen?» auf der Anmeldeseite setzen."
 }
