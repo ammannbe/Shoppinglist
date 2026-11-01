@@ -25,7 +25,9 @@ class MemberController extends Controller
 
         [$member, $invited] = DB::transaction(function () use ($list, $email) {
             $member = User::firstWhere('email', $email);
-            $invited = $member === null;
+            // Unverified accounts get the invitation too: choosing a password proves the address
+            // and ends the sessions of whoever registered it.
+            $invited = $member === null || ! $member->hasVerifiedEmail();
 
             // Unknown users get an account and set their password via the invitation link.
             $member ??= User::create([

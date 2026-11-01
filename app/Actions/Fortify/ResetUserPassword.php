@@ -25,6 +25,12 @@ class ResetUserPassword implements ResetsUserPasswords
             'password' => $this->passwordRules(),
         ])->validate();
 
+        // Somebody else may have registered the unverified address before: their passkeys go, and
+        // the new password ends their sessions (AuthenticateSession).
+        if (! $user->hasVerifiedEmail()) {
+            $user->passkeys()->delete();
+        }
+
         // The reset link proves ownership of the address (e.g. invited users).
         $user->forceFill([
             'password' => Hash::make($input['password']),

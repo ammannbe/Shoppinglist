@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Fortify\ResetUserPassword;
 use App\Models\ShoppingList;
 use App\Models\User;
 use App\Notifications\ShoppingListShared;
@@ -99,5 +100,31 @@ class MemberTest extends TestCase
         ])->assertRedirect();
 
         $this->assertNotNull($user->fresh()->email_verified_at);
+    }
+
+    public function test_accounts_registered_by_somebody_else_are_taken_over_by_the_invited_user(): void
+    {
+        Notification::fake();
+        $owner = User::factory()->create();
+        $list = $this->listOf($owner);
+        // Somebody registered the address before, without verifying it.
+        $victim = User::factory()->unverified()->create(['email' => 'anna@example.com']);
+        $victim->passkeys()->create(['name' => 'Fremd', 'credential_id' => 'abc', 'credential' => []]);
+
+        $this->actingAs($owner)->postJson("/lists/{$list->id}/members", ['email' => $victim->email])->assertNoContent();
+        Notification::assertSentTo($victim, ShoppingListShared::class, function ($notification) use ($victim) {
+            return str_contains($notification->toMail($victim)->actionUrl, '/reset-password/');
+        });
+
+        $this->flushSession();
+        $this->actingAs($victim)->getJson('/me')->assertOk();
+        $this->actingAs($victim)->getJson('/me')->assertOk();
+
+        app(ResetUserPassword::class)->reset($victim, ['password' => 'new-password-123', 'password_confirmation' => 'new-password-123']);
+
+        $this->assertSame(0, $victim->passkeys()->count());
+        $this->assertNotNull($victim->fresh()->email_verified_at);
+        // The session of whoever registered the address ends.
+        $this->actingAs($victim)->getJson('/me')->assertUnauthorized();
     }
 }
