@@ -3,10 +3,12 @@
 namespace Tests\Feature;
 
 use App\Auth\OidcClaims;
+use App\Auth\OidcLabel;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Testing\TestResponse;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\AbstractProvider;
@@ -296,5 +298,39 @@ class OidcLoginTest extends TestCase
         $this->actingAs($user)->get(route('account'))
             ->assertOk()
             ->assertDontSee('current_password', false);
+    }
+
+    public function test_the_register_page_offers_the_provider_and_its_signup(): void
+    {
+        config(['login.oidc.signup_url' => 'https://konto.example.com/register']);
+
+        $this->get(route('register'))->assertOk()
+            ->assertSee(route('oidc.redirect'), false)
+            ->assertSee('https://konto.example.com/register', false)
+            ->assertSee('name="password"', false);
+
+        config(['login.oidc.registration' => false]);
+
+        $this->get(route('register'))->assertOk()->assertDontSee(route('oidc.redirect'), false);
+    }
+
+    public function test_the_label_falls_back_to_the_name_published_by_pocket_id(): void
+    {
+        config(['login.oidc.label' => null, 'services.oidc.base_url' => 'https://login.example.com']);
+        Http::fake(['login.example.com/api/application-configuration' => Http::response([
+            ['key' => 'appName', 'type' => '', 'value' => 'NarrenLogin'],
+        ])]);
+
+        $this->assertSame('NarrenLogin', OidcLabel::get());
+        $this->get(route('login'))->assertSee('NarrenLogin');
+        Http::assertSentCount(1);
+    }
+
+    public function test_the_label_is_sso_when_the_provider_publishes_no_name(): void
+    {
+        config(['login.oidc.label' => null, 'services.oidc.base_url' => 'https://login.example.com']);
+        Http::fake(['*' => Http::response('Not found', 404)]);
+
+        $this->assertSame(OidcLabel::FALLBACK, OidcLabel::get());
     }
 }

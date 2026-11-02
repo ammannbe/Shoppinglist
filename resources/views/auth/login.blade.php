@@ -6,8 +6,9 @@
 <x-guest-layout :title="__('Log in')">
     @if ($oidc)
         <a href="{{ route('oidc.redirect') }}" class="{{ $local ? 'button-secondary' : 'button' }} mb-6 flex w-full items-center justify-center gap-2">
-            {{ __('Log in with :provider', ['provider' => config('login.oidc.label')]) }}
+            {{ __('Log in with :provider', ['provider' => App\Auth\OidcLabel::get()]) }}
         </a>
+        <x-oidc-signup class="-mt-3 mb-6" />
 
         @if ($local)
             <p class="mb-6 flex items-center gap-3 text-sm text-stone-500">
