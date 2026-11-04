@@ -42,6 +42,17 @@ describe('mergedAmount', () => {
         expect(mergedAmount({ amount: null, unit: null }, { amount: null, unit: null })).toBe(2);
         expect(mergedAmount({ amount: 1, unit: 'l' }, { amount: 500, unit: 'g' })).toBeNull();
     });
+
+    it('converts g/kg and ml/cl/dl/l into the open item\'s unit', () => {
+        expect(mergedAmount({ amount: 1, unit: 'kg' }, { amount: 250, unit: 'g' })).toBe(1.25);
+        expect(mergedAmount({ amount: 300, unit: 'g' }, { amount: 0.5, unit: 'kg' })).toBe(800);
+        expect(mergedAmount({ amount: 5, unit: 'dl' }, { amount: 1, unit: 'l' })).toBe(15);
+        expect(mergedAmount({ amount: 2, unit: 'dl' }, { amount: 50, unit: 'ml' })).toBe(2.5);
+        // Not without both amounts, and not between weight and volume or pieces.
+        expect(mergedAmount({ amount: null, unit: 'kg' }, { amount: 250, unit: 'g' })).toBeNull();
+        expect(mergedAmount({ amount: 1, unit: 'kg' }, { amount: 1, unit: 'l' })).toBeNull();
+        expect(mergedAmount({ amount: 1, unit: 'kg' }, { amount: 2, unit: 'Stk.' })).toBeNull();
+    });
 });
 
 describe('CSV', () => {
