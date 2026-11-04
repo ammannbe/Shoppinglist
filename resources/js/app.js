@@ -342,7 +342,7 @@ Alpine.data('shoppinglist', () => ({
 
     /**
      * Adds the planned items to a list (new one without target). With `merge`, items already open
-     * on the list with the same unit get the amount added and the recipes and shops of both.
+     * on the list with the same unit (or g/kg, ml/dl/l) get the amount added and the recipes and shops of both.
      */
     async addPlannedItems(target, name, items, merge = false) {
         let listId = target;

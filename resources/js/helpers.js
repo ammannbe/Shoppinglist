@@ -186,14 +186,30 @@ export function suggestNames(query, names, usage = new Map(), { limit = 8, all =
     return matches.slice(0, limit).map((match) => match.name);
 }
 
+// Metric units that convert into each other: [measure, grams or milliliters per unit].
+const METRIC_UNITS = {
+    g: ['mass', 1], kg: ['mass', 1000],
+    ml: ['volume', 1], cl: ['volume', 10], dl: ['volume', 100], l: ['volume', 1000],
+};
+
+function metricUnit(unit) {
+    return METRIC_UNITS[(unit ?? '').toLowerCase().replace(/\.$/, '')] ?? null;
+}
+
 /**
  * Merging a new entry into an open item of the same product is only possible with the
- * same unit; a missing amount counts as one piece.
+ * same unit, or with g/kg and ml/cl/dl/l (converted into the open item's unit); a missing
+ * amount counts as one piece.
  *
- * @returns {number|null} merged amount, null if the units differ
+ * @returns {number|null} merged amount in the open item's unit, null if the units differ
  */
 export function mergedAmount(existing, added) {
-    if ((existing.unit ?? '').toLowerCase() !== (added.unit ?? '').toLowerCase()) return null;
+    if ((existing.unit ?? '').toLowerCase() !== (added.unit ?? '').toLowerCase()) {
+        const [to, from] = [metricUnit(existing.unit), metricUnit(added.unit)];
+        if (!to || !from || to[0] !== from[0] || existing.amount == null || added.amount == null) return null;
+
+        return Math.round((existing.amount + added.amount * from[1] / to[1]) * 1000) / 1000;
+    }
 
     return Math.round(((existing.amount ?? 1) + (added.amount ?? 1)) * 1000) / 1000;
 }

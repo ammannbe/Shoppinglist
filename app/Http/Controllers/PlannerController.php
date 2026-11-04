@@ -7,6 +7,7 @@ use App\Ai\Assistant;
 use App\Http\Requests\PlannerListRequest;
 use App\Http\Requests\PlannerSuggestionsRequest;
 use App\Models\PlannedRecipe;
+use App\Recipes\RecipeIngredients;
 use App\Recipes\RecipesClient;
 use App\Recipes\RecipesException;
 use App\Support\Seasons;
@@ -115,26 +116,25 @@ class PlannerController extends Controller
 
         return $this->answer(function () use ($data, $user) {
             $recipes = [];
-            foreach ($data['recipes'] as $recipe) {
+            $loaded = [];
+            foreach ($data['recipes'] as $index => $recipe) {
                 if ($recipe['source'] === 'recipes') {
                     try {
                         $details = $this->recipes->get($user, '/api/recipes/'.$recipe['recipe_id'], ['servings' => $recipe['servings']])['data'] ?? [];
                     } catch (RecipesException $e) {
                         throw new AiException(__('The recipes of :name could not be loaded.', ['name' => config('services.recipes.name')]), previous: $e);
                     }
-                    $recipes[] = [
-                        'name' => $details['name'] ?? $recipe['name'],
-                        'servings' => $recipe['servings'],
-                        'ingredients' => array_map(fn (array $ingredient) => [
-                            'amount' => $ingredient['amount'] ?? null,
-                            'unit' => $ingredient['unit'] ?? null,
-                            'name' => $ingredient['food'] ?? $ingredient['text'] ?? '',
-                        ], $details['ingredients'] ?? []),
-                    ];
+                    $loaded[$index] = $details['ingredients'] ?? [];
+                    $recipes[$index] = ['name' => $details['name'] ?? $recipe['name'], 'servings' => $recipe['servings']];
                 } else {
-                    $recipes[] = ['name' => $recipe['name'], 'servings' => $recipe['servings'], 'ingredients' => $recipe['ingredients'] ?? []];
+                    $recipes[$index] = ['name' => $recipe['name'], 'servings' => $recipe['servings'], 'ingredients' => $recipe['ingredients'] ?? []];
                 }
             }
+
+            foreach (RecipeIngredients::unify($loaded) as $index => $ingredients) {
+                $recipes[$index]['ingredients'] = $ingredients;
+            }
+            $recipes = array_values($recipes);
 
             $items = $this->assistant->shoppingList($recipes, $data['offers'] ?? [], $data['pantry'] ?? [], $this->language());
             PlannedRecipe::where('user_id', $user->id)->whereIn('key', array_filter(array_column($data['recipes'], 'key')))
