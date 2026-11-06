@@ -400,6 +400,34 @@ class PlannerTest extends TestCase
         $this->actingAs($user)->getJson('/planned-recipes')->assertJsonCount(0, 'recipes');
     }
 
+    public function test_the_list_returns_the_saved_recipes_the_items_link_to(): void
+    {
+        Http::fake([
+            'recipes.test/api/recipes/5*' => Http::response(['data' => ['name' => 'Lasagne al forno', 'ingredients' => [
+                ['food' => 'Hackfleisch', 'amount' => 500, 'unit' => 'g'], ['text' => 'Salz', 'amount' => null, 'unit' => null],
+            ]]]),
+            'openai.test/*' => Http::response($this->ai(['items' => [
+                ['name' => 'Hackfleisch', 'amount' => 500, 'unit' => 'g', 'offer' => null, 'at_home' => false, 'recipes' => ['Lasagne al forno', 'Omelette']],
+            ]])),
+        ]);
+        $user = $this->connected();
+        $idea = 'idea-0190a0b0-0000-7000-8000-000000000001';
+
+        $response = $this->actingAs($user)->postJson('/planner/list', ['offers' => [], 'pantry' => [], 'recipes' => [
+            ['source' => 'recipes', 'key' => 'recipe-5', 'recipe_id' => 5, 'name' => 'Lasagne', 'url' => 'https://recipes.test/recipes/5', 'servings' => 4],
+            ['source' => 'ai', 'key' => $idea, 'name' => 'Omelette', 'servings' => 2, 'ingredients' => [['amount' => 4, 'unit' => 'Stk.', 'name' => 'Eier']], 'instructions' => '1. Braten'],
+        ]])->assertOk();
+
+        // The items name the suggestions, the ids are the saved recipes.
+        $response->assertJsonPath('items.0.recipes', ['Lasagne', 'Omelette']);
+        $saved = PlannedRecipe::where('user_id', $user->id)->pluck('id', 'key');
+        $this->assertSame([['key' => 'recipe-5', 'id' => $saved['recipe-5']], ['key' => $idea, 'id' => $saved[$idea]]], $response->json('recipes'));
+
+        // Own recipes keep the ingredients of the recipe app (Recipes tab).
+        $this->assertSame([['amount' => 500, 'unit' => 'g', 'name' => 'Hackfleisch'], ['amount' => null, 'unit' => null, 'name' => 'Salz']],
+            PlannedRecipe::find($saved['recipe-5'])->data['ingredients']);
+    }
+
     public function test_older_clients_without_keys_build_lists_without_saving(): void
     {
         Http::fake(['openai.test/*' => Http::response($this->ai(['items' => []]))]);

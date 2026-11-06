@@ -4,6 +4,7 @@ import { prepareForAi } from './image.js';
 import { offerReader } from './offers.js';
 import { closeDialogThen } from './layers.js';
 import { allowedStep, recipePayload, remoteIsNewer, replaceSuggestions, STEPS, stepAllowed, stepTrail, suggestionExclude, SYNCED_KEYS, syncedState } from './planner-state.js';
+import { listRecipes } from './recipe-links.js';
 import { requests } from './requests.js';
 
 // Week planner (#/planner/<step>): offers (screenshots, PDFs, text) and pantry photos are read
@@ -504,14 +505,19 @@ export function planner({ addItems, merges, lists, open, navigate }) {
 
         async buildList() {
             await this.run('list', this.$t('Creating the shopping list …'), async () => {
-                const { items } = await api.post('/planner/list', {
+                const { items, recipes = [] } = await api.post('/planner/list', {
                     offers: this.offerPayload(),
                     pantry: this.pantryPayload(),
                     // With all details: the server saves them (Recipes tab), the items link to them.
                     recipes: this.selectedSuggestions.map((suggestion) => recipePayload(suggestion)),
                 });
                 this.items = items.map((item) => ({ ...item, selected: !item.at_home }));
-                this.selectedSuggestions.forEach((suggestion) => { suggestion.saved = true; });
+                // Saved recipe of each suggestion: the items link to it (recipes[].key).
+                const planned = new Map(recipes.map(({ key, id }) => [key, id]));
+                this.selectedSuggestions.forEach((suggestion) => {
+                    suggestion.saved = true;
+                    suggestion.planned_id = planned.get(suggestion.key) ?? suggestion.planned_id ?? null;
+                });
                 if (!this.listName) this.listName = this.$t('Weekly shopping :date', { date: new Date().toLocaleDateString(Alpine.store('i18n').locale.replace('_', '-')) });
             });
         },
@@ -521,12 +527,11 @@ export function planner({ addItems, merges, lists, open, navigate }) {
          * (`merge` is the answer).
          */
         async addToList(merge = null) {
-            // Recipes as names from the list step, linked if the suggestion has a URL (own recipes).
-            const urls = new Map(this.suggestions.map((suggestion) => [suggestion.name.toLowerCase(), suggestion.url ?? null]));
+            // Recipes as names from the list step, linked to the saved recipe and the recipe app (own recipes).
             const items = this.selectedItems.map(({ name, amount, unit, store, note, recipes }) => ({
                 name, amount, unit, note,
                 stores: store ? [store] : [],
-                recipes: (recipes ?? []).map((recipe) => ({ name: recipe, url: urls.get(recipe.toLowerCase()) ?? null })),
+                recipes: listRecipes(recipes, this.suggestions),
             }));
             if (!items.length) return;
             if (merge === null && this.target) {

@@ -132,15 +132,57 @@ class PlannerController extends Controller
             foreach (RecipeIngredients::unify($loaded) as $index => $ingredients) {
                 $recipes[$index]['ingredients'] = $ingredients;
             }
-            $recipes = array_values($recipes);
 
-            $items = $this->assistant->shoppingList($recipes, $data['offers'] ?? [], $data['pantry'] ?? [], $this->language());
-            // The recipes on a list are saved (Recipes tab), the items link to them. Recipes without
-            // key (older clients) are not saved.
-            PlannedRecipe::remember($user, array_values(array_filter($data['recipes'], fn (array $recipe) => filled($recipe['key'] ?? null))), used: true);
+            // The items name the recipes as the AI got them: the suggestion's name again (the
+            // client links the items to the saved recipes by it).
+            $names = [];
+            foreach ($recipes as $index => $recipe) {
+                $names[mb_strtolower($recipe['name'])] = $data['recipes'][$index]['name'];
+            }
+            $items = array_map(fn (array $item) => [
+                ...$item,
+                'recipes' => array_values(array_unique(array_map(fn (string $name) => $names[mb_strtolower($name)] ?? $name, $item['recipes'] ?? []))),
+            ], $this->assistant->shoppingList(array_values($recipes), $data['offers'] ?? [], $data['pantry'] ?? [], $this->language()));
 
-            return ['items' => $items];
+            // The recipes on a list are saved (Recipes tab), own recipes with the ingredients loaded
+            // above. Recipes without key (older clients) are not saved.
+            $saving = array_filter($data['recipes'], fn (array $recipe) => filled($recipe['key'] ?? null));
+            foreach (array_keys($saving) as $index) {
+                if (isset($loaded[$index])) {
+                    $saving[$index]['ingredients'] = $this->savedIngredients($loaded[$index]);
+                }
+            }
+            $saved = PlannedRecipe::remember($user, array_values($saving), used: true);
+
+            return [
+                'items' => $items,
+                // Ids of the saved recipes: the items link to them (`items.recipes[].key`).
+                'recipes' => array_map(fn (array $recipe, PlannedRecipe $planned) => ['key' => $recipe['key'], 'id' => $planned->id], array_values($saving), $saved),
+            ];
         });
+    }
+
+    /**
+     * Ingredients of a recipe app recipe as saved with the recipe (amounts for its servings).
+     *
+     * @param  list<array<string, mixed>>  $ingredients  API ingredients
+     * @return list<array{amount: mixed, unit: ?string, name: string}>
+     */
+    private function savedIngredients(array $ingredients): array
+    {
+        $saved = [];
+        foreach (array_slice($ingredients, 0, 100) as $ingredient) {
+            $name = trim((string) ($ingredient['food'] ?? $ingredient['text'] ?? ''));
+            if ($name !== '') {
+                $saved[] = [
+                    'amount' => is_numeric($ingredient['amount'] ?? null) ? $ingredient['amount'] : null,
+                    'unit' => filled($ingredient['unit'] ?? null) ? mb_substr((string) $ingredient['unit'], 0, 50) : null,
+                    'name' => mb_substr($name, 0, 255),
+                ];
+            }
+        }
+
+        return $saved;
     }
 
     /**

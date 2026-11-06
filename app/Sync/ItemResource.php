@@ -3,6 +3,7 @@
 namespace App\Sync;
 
 use App\Models\Item;
+use App\Models\PlannedRecipe;
 use App\Models\Product;
 use App\Models\ShoppingList;
 use App\Models\User;
@@ -31,7 +32,7 @@ class ItemResource extends SyncResource
             'unit' => $model->unit,
             'stores' => $model->stores ?? [],
             'note' => $model->note,
-            'recipes' => $model->recipes ?? [],
+            'recipes' => array_map(fn (array $recipe) => ['name' => $recipe['name'], 'url' => $recipe['url'] ?? null, 'key' => $recipe['key'] ?? null], $model->recipes ?? []),
             'image' => $model->image,
             'done' => $model->done,
             'position' => $model->position,
@@ -114,18 +115,50 @@ class ItemResource extends SyncResource
         $stores = array_key_exists('stores', $doc) ? $doc['stores'] : (array_key_exists('store', $doc)
             ? array_filter([$doc['store']])
             : $item?->stores);
-        $recipes = array_key_exists('recipes', $doc) ? $doc['recipes'] : $item?->recipes;
+        $recipes = array_key_exists('recipes', $doc) ? $this->recipes($doc['recipes'] ?? [], $user, $item) : $item?->recipes;
 
         return [
             'image' => $image,
             'stores' => $stores ? array_values(array_unique(array_map('trim', $stores))) : null,
             'note' => $doc['note'] ?? null,
-            'recipes' => $recipes ? array_map(fn (array $recipe) => ['name' => $recipe['name'], 'url' => $recipe['url'] ?? null], $recipes) : null,
+            'recipes' => $recipes ?: null,
             'name' => $doc['name'],
             'amount' => $doc['amount'] ?? null,
             'unit' => $doc['unit'] ?? null,
             'done' => (bool) ($doc['done'] ?? false),
             'position' => $doc['position'] ?? null,
         ];
+    }
+
+    /**
+     * Recipes of an item, `key` links a saved recipe (planned_recipes id, Recipes tab). Kept are
+     * keys the item has, own recipes and ones already linked in the user's lists (moved items),
+     * so nobody gets read access to a foreign recipe by pushing its id. Clients from before the
+     * links send no key: the item's link of the same recipe stays.
+     *
+     * @param  list<array{name: string, url?: ?string, key?: ?string}>  $recipes
+     * @return list<array{name: string, url: ?string, key: ?string}>
+     */
+    private function recipes(array $recipes, User $user, ?Item $item): array
+    {
+        $known = array_values(array_filter($item?->recipes ?? [], fn (array $recipe) => filled($recipe['key'] ?? null)));
+        $pushed = array_values(array_diff(array_unique(array_filter(array_column($recipes, 'key'))), array_column($known, 'key')));
+        $allowed = [
+            ...array_column($known, 'key'),
+            ...PlannedRecipe::whereIn('id', $pushed)->where('user_id', $user->id)->pluck('id'),
+            ...PlannedRecipe::linkedInListsOf($user, $pushed),
+        ];
+
+        return array_map(function (array $recipe) use ($known, $allowed) {
+            $url = $recipe['url'] ?? null;
+            $key = $recipe['key'] ?? null;
+            foreach ($key === null ? $known : [] as $each) {
+                if ($each['name'] === $recipe['name'] && ($each['url'] ?? null) === $url) {
+                    $key = $each['key'];
+                }
+            }
+
+            return ['name' => $recipe['name'], 'url' => $url, 'key' => in_array($key, $allowed, true) ? $key : null];
+        }, $recipes);
     }
 }

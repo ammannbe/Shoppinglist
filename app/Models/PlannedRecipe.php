@@ -70,6 +70,39 @@ class PlannedRecipe extends Model
     }
 
     /**
+     * The owner, and members of a list with an item linked to the recipe (`items.recipes[].key`),
+     * e.g. a recipe somebody else planned for a shared list.
+     */
+    public function readableBy(User $user): bool
+    {
+        return $this->user_id === $user->id || self::linkedInListsOf($user, [$this->id]) !== [];
+    }
+
+    /**
+     * The ones of `$keys` (planned recipe ids) an item in the user's lists links to.
+     *
+     * @param  list<string>  $keys  uuids
+     * @return list<string>
+     */
+    public static function linkedInListsOf(User $user, array $keys): array
+    {
+        if ($keys === []) {
+            return [];
+        }
+
+        // The JSON column is searched as text (MariaDB and SQLite), the decoded keys decide.
+        $linked = Item::whereIn('shopping_list_id', $user->accessibleListIds())
+            ->where(function ($query) use ($keys) {
+                foreach ($keys as $key) {
+                    $query->orWhere('recipes', 'like', '%"key":"'.$key.'"%');
+                }
+            })
+            ->pluck('recipes')->flatten(1)->pluck('key')->filter()->all();
+
+        return array_values(array_intersect($keys, $linked));
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function toClient(): array
@@ -88,5 +121,15 @@ class PlannedRecipe extends Model
             'created_at' => $this->created_at->toIso8601String(),
             'updated_at' => $this->updated_at->toIso8601String(),
         ];
+    }
+
+    /**
+     * Read only for other members of a list linked to the recipe: without the owner's import link.
+     *
+     * @return array<string, mixed>
+     */
+    public function toShared(): array
+    {
+        return [...collect($this->toClient())->except(['draft_url', 'used_at'])->all(), 'shared' => true];
     }
 }

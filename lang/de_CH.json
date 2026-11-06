@@ -613,5 +613,11 @@
     "Take offers or add what is at home first.": "Übernimm zuerst Aktionen oder füge hinzu, was du zu Hause hast.",
     "Select at least one recipe.": "Wähle mindestens ein Rezept aus.",
     "The planner state is too large.": "Der Stand der Wochenplanung ist zu gross.",
-    "“:name” saved in the recipes.": "«:name» ist jetzt bei den Rezepten gespeichert."
+    "“:name” saved in the recipes.": "«:name» ist jetzt bei den Rezepten gespeichert.",
+    "For": "Für",
+    ":done/:total done": ":done/:total erledigt",
+    "On your lists": "Auf deinen Listen",
+    "Saved by another member of the list.": "Von einer anderen Person auf der Liste gespeichert.",
+    "The details of this recipe are not available (removed, or saved by somebody else).": "Die Details dieses Rezepts sind nicht verfügbar (entfernt oder von jemand anderem gespeichert).",
+    "This recipe is not saved anymore.": "Dieses Rezept ist nicht mehr gespeichert."
 }

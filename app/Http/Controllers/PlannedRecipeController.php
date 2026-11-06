@@ -28,6 +28,18 @@ class PlannedRecipeController extends Controller
         return response()->json(['recipe' => $recipe->toClient()], $recipe->wasRecentlyCreated ? 201 : 200);
     }
 
+    /**
+     * One recipe, for the recipe links of items (#/recipes/<id>): own ones, and read only the ones
+     * of others linked by an item in a list the user is a member of.
+     */
+    public function show(Request $request, PlannedRecipe $plannedRecipe): JsonResponse
+    {
+        $user = $request->user();
+        abort_unless($plannedRecipe->readableBy($user), 404);
+
+        return response()->json(['recipe' => $plannedRecipe->user_id === $user->id ? $plannedRecipe->toClient() : $plannedRecipe->toShared()]);
+    }
+
     public function destroy(Request $request, PlannedRecipe $plannedRecipe): Response
     {
         abort_unless($plannedRecipe->user_id === $request->user()->id, 403);

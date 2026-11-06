@@ -1,7 +1,8 @@
 {{--
     Recipe details as dialog (week planner suggestions, Recipes tab): the Alpine component has
     `detail` (the recipe, null when closed) and opens `$refs.recipeDialog`. Back closes it
-    (resources/js/layers.js). The slot holds the actions, `meta` optional lines below the title.
+    (resources/js/layers.js). The slot holds the actions, `meta` optional lines below the title,
+    `linked` optional content above the details (Recipes tab: the items linked to the recipe).
 --}}
 <dialog x-ref="recipeDialog" class="dialog p-0" @close="detail = null" aria-labelledby="recipe-dialog-title">
     <template x-if="detail">
@@ -22,6 +23,7 @@
             </div>
 
             <div class="space-y-4 px-5 py-4 text-sm">
+                {{ $linked ?? '' }}
                 <p x-show="detail.reason" class="text-stone-600" x-text="detail.reason"></p>
                 <div x-show="detail.uses_offers?.length || detail.uses_pantry?.length || detail.uses_season?.length" class="space-y-1 text-xs">
                     <p x-show="detail.uses_offers?.length" class="text-orange-800" x-text="$t('Offers') + ': ' + (detail.uses_offers ?? []).join(', ')"></p>

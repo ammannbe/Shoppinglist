@@ -7,12 +7,13 @@ import { byPosition, compareBy, csvFirstColumn, csvValue, formatAmount, mergedAm
 import { hasPendingLocale, htmlLang, initialLocale, LOCALES, storeLocale, translate } from './i18n.js';
 import { registerServiceWorker } from './pwa.js';
 import { shrinkIcon, shrinkImage } from './image.js';
-import { closeLayersOnBack } from './layers.js';
+import { closeDialogThen, closeLayersOnBack } from './layers.js';
 import { createLightboxStore } from './lightbox.js';
 import { createPrefsStore } from './prefs.js';
 import { offersPool } from './offers.js';
 import { clearPlannerState, planner } from './planner.js';
-import { recipeHistory } from './recipe-history.js';
+import { clearRecipeCache, recipeHistory } from './recipe-history.js';
+import { joinRecipes, plainRecipes } from './recipe-links.js';
 import { deviceCountry, inCountry, storeIconUrl, storeUsage } from './stores.js';
 import { suggestField } from './suggest.js';
 import { swipeRow } from './swipe.js';
@@ -365,16 +366,15 @@ Alpine.data('shoppinglist', () => ({
         const merges = merge ? this.plannedMerges(target, items) : new Map();
         let position = nextPosition(this.itemsOf(listId)) ?? 0;
         for (const [index, item] of items.entries()) {
-            const recipes = (item.recipes ?? []).map(({ name, url }) => ({ name, url: url ?? null }));
+            const recipes = plainRecipes(item.recipes);
             const existing = merges.get(index);
             if (existing) {
-                const known = existing.recipes ?? [];
                 const note = [existing.note, item.note].filter(Boolean);
                 await (await db.items.findOne(existing.id).exec())?.incrementalPatch({
                     amount: item.amount == null && existing.amount == null ? null : mergedAmount(existing, item),
                     unit: existing.unit ?? item.unit ?? null,
                     stores: [...new Set([...(existing.stores ?? []), ...(item.stores ?? [])])],
-                    recipes: [...known.map(({ name, url }) => ({ name, url: url ?? null })), ...recipes.filter((recipe) => !known.some((each) => sameName(each.name, recipe.name)))],
+                    recipes: joinRecipes(existing.recipes, recipes),
                     note: [...new Set(note)].join('\n').slice(0, 255) || null,
                 });
                 continue;
@@ -843,6 +843,21 @@ Alpine.data('shoppinglist', () => ({
         this.$nextTick(() => this.$refs.editDialog.showModal());
     },
 
+    /**
+     * Link of an item's recipe to the saved recipe (Recipes tab with its dialog), null for
+     * entries without key (older ones; they show the name or the recipe app link).
+     */
+    recipeHref(recipe) {
+        return recipe.key && this.loggedIn ? `#/recipes/${recipe.key}` : null;
+    },
+
+    /** From the edit dialog: its history entry has to be gone before navigating. */
+    openRecipe(recipe) {
+        const dialog = this.$refs.editDialog;
+        closeDialogThen(dialog, () => this.navigate(this.recipeHref(recipe)));
+        this.editing = null;
+    },
+
     async saveItem() {
         const { id, name, amount, unit, note } = this.editing;
         // A shop typed but not picked yet counts too.
@@ -970,7 +985,7 @@ Alpine.data('shoppinglist', () => ({
         await db.items.insert({
             ...Object.fromEntries(fields.map((field) => [field, item[field] ?? null])),
             stores: [...(item.stores ?? [])],
-            recipes: (item.recipes ?? []).map(({ name, url }) => ({ name, url: url ?? null })),
+            recipes: plainRecipes(item.recipes),
             done: Boolean(item.done),
             id: copyId,
             shopping_list_id: listId,
@@ -1155,6 +1170,7 @@ async function wipeLocalData() {
     localStorage.removeItem(OWNER_KEY);
     localStorage.removeItem(USER_KEY);
     clearPlannerState();
+    clearRecipeCache();
 }
 
 async function boot() {

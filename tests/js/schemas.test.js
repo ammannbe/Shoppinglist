@@ -20,4 +20,10 @@ describe('local migrations', () => {
         expect(schemas.migrations.items[4]({ id: 'i', store: 'M' })).toEqual({ id: 'i', stores: ['M'], recipes: [] });
         expect(schemas.migrations.items[4]({ id: 'i', store: null })).toEqual({ id: 'i', stores: [], recipes: [] });
     });
+
+    it('give the recipes of items a key, keeping pulled ones', () => {
+        expect(schemas.migrations.items[5]({ id: 'i', recipes: [{ name: 'Lasagne', url: null }, { name: 'Salat', url: null, key: 'r2' }] }))
+            .toEqual({ id: 'i', recipes: [{ name: 'Lasagne', url: null, key: null }, { name: 'Salat', url: null, key: 'r2' }] });
+        expect(schemas.migrations.items[5]({ id: 'i' })).toEqual({ id: 'i', recipes: [] });
+    });
 });

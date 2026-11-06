@@ -18,7 +18,7 @@
 <body class="min-h-dvh bg-stone-50 text-stone-900 antialiased" :class="$store.sync.online || 'is-offline'" x-data="shoppinglist" x-cloak>
     <header class="sticky top-0 z-10 border-b border-stone-200 bg-white/95 pt-[env(safe-area-inset-top)] backdrop-blur">
         <div class="mx-auto flex h-14 max-w-xl items-center gap-2 px-3">
-            <a :href="backLink" @click.prevent="goBack()" x-show="!tab && route.view !== 'offline'" class="icon-button" :aria-label="$t('Back')">
+            <a :href="backLink" @click.prevent="goBack()" x-show="(!tab || (!showTabs && tab !== 'lists')) && route.view !== 'offline'" class="icon-button" :aria-label="$t('Back')">
                 <svg viewBox="0 0 24 24" class="size-6"><path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </a>
 
@@ -216,22 +216,29 @@
                     <ul class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white" x-show="shownOpenItems.length" @row-move="moveRow('items', $event.detail)">
                         <template x-for="item in shownOpenItems" :key="item.id">
                             <x-swipe-row actions="itemActions(item)" x-bind:data-sort-id="item.id">
-                                {{-- Tap marks as done, edit/delete via swipe or "…" --}}
-                                <button type="button" class="flex min-w-0 flex-1 items-center py-3 pr-4 text-left" role="checkbox" aria-checked="false" @click="toggle(item)">
-                                    <span class="check" aria-hidden="true"></span>
-                                    <img x-show="item.image" :src="imageUrl(item.image, 'thumb')" @click.stop="openImage(item.image)" :alt="$t('Show photo')" loading="lazy" decoding="async" class="mr-3 size-8 shrink-0 cursor-zoom-in rounded-md bg-stone-100 object-cover">
-                                    <template x-for="tag in item.stores" :key="tag">
-                                        <x-store-badge tag="tag" />
-                                    </template>
-                                    <span x-show="item.stores.length" class="mr-0.5" aria-hidden="true"></span>
-                                    <span x-show="amount(item)" class="mr-2 shrink-0 tabular-nums text-stone-500" x-text="amount(item)"></span>
-                                    <span class="min-w-0">
-                                        <span class="block truncate" x-text="item.name"></span>
-                                        <span x-show="item.note" class="block whitespace-pre-line break-words text-xs text-stone-500" x-text="item.note"></span>
-                                        {{-- Links to the recipes are in the edit dialog (no links inside the row button) --}}
-                                        <span x-show="item.recipes?.length" class="block truncate text-xs text-violet-700" x-text="$t('For :recipes', { recipes: item.recipes.map((recipe) => recipe.name).join(', ') })"></span>
-                                    </span>
-                                </button>
+                                {{-- Tap marks as done, edit/delete via swipe or "…"; the recipe links are below the button (no links inside it) --}}
+                                <div class="min-w-0 flex-1">
+                                    <button type="button" class="flex w-full min-w-0 items-center pt-3 pr-4 text-left" :class="item.recipes?.length ? 'pb-0.5' : 'pb-3'" role="checkbox" aria-checked="false" @click="toggle(item)">
+                                        <span class="check" aria-hidden="true"></span>
+                                        <img x-show="item.image" :src="imageUrl(item.image, 'thumb')" @click.stop="openImage(item.image)" :alt="$t('Show photo')" loading="lazy" decoding="async" class="mr-3 size-8 shrink-0 cursor-zoom-in rounded-md bg-stone-100 object-cover">
+                                        <template x-for="tag in item.stores" :key="tag">
+                                            <x-store-badge tag="tag" />
+                                        </template>
+                                        <span x-show="item.stores.length" class="mr-0.5" aria-hidden="true"></span>
+                                        <span x-show="amount(item)" class="mr-2 shrink-0 tabular-nums text-stone-500" x-text="amount(item)"></span>
+                                        <span class="min-w-0">
+                                            <span class="block truncate" x-text="item.name"></span>
+                                            <span x-show="item.note" class="block whitespace-pre-line break-words text-xs text-stone-500" x-text="item.note"></span>
+                                        </span>
+                                    </button>
+                                    {{-- Saved recipes open in the Recipes tab, older entries (no key) show the name; the rest of the line toggles like the button --}}
+                                    <p x-show="item.recipes?.length" class="truncate pr-4 pb-3 pl-12 text-xs text-violet-700" @click="$event.target.closest('a') || toggle(item)">
+                                        <span x-text="$t('For')"></span>
+                                        <template x-for="(recipe, index) in item.recipes" :key="index">
+                                            <span><span x-show="index > 0">, </span><a x-show="recipeHref(recipe)" :href="recipeHref(recipe)" class="underline" draggable="false" x-text="recipe.name"></a><span x-show="!recipeHref(recipe)" x-text="recipe.name"></span></span>
+                                        </template>
+                                    </p>
+                                </div>
                             </x-swipe-row>
                         </template>
                     </ul>
@@ -603,8 +610,10 @@
                     <template x-for="(recipe, index) in editing.recipes" :key="index">
                         <span>
                             <span x-show="index > 0">, </span>
-                            <a x-show="recipe.url" :href="recipe.url" target="_blank" rel="noopener" class="font-medium text-violet-700 underline" x-text="recipe.name"></a>
-                            <span x-show="!recipe.url" x-text="recipe.name"></span>
+                            {{-- Saved recipe: Recipes tab with its dialog, otherwise the recipe app (own recipes) or the name --}}
+                            <a x-show="recipeHref(recipe)" :href="recipeHref(recipe)" @click.prevent="openRecipe(recipe)" class="font-medium text-violet-700 underline" x-text="recipe.name"></a>
+                            <a x-show="!recipeHref(recipe) && recipe.url" :href="recipe.url" target="_blank" rel="noopener" class="font-medium text-violet-700 underline" x-text="recipe.name"></a>
+                            <span x-show="!recipeHref(recipe) && !recipe.url" x-text="recipe.name"></span>
                         </span>
                     </template>
                 </p>
