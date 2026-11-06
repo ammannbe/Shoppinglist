@@ -31,7 +31,7 @@ class RecipesConnectionController extends Controller
         $from = (string) $request->query('from');
         $request->session()->put(self::FROM, in_array($from, self::VIEWS, true) ? $from : self::VIEWS[0]);
 
-        return redirect()->away($recipes->authorizeUrl($state));
+        return redirect()->away($recipes->authorizeUrl($state, $request->user()));
     }
 
     public function callback(Request $request, RecipesClient $recipes): RedirectResponse

@@ -452,6 +452,12 @@ class PlannerTest extends TestCase
         $this->assertStringStartsWith('https://recipes.test/oauth/authorize?', $redirect);
         parse_str((string) parse_url($redirect, PHP_URL_QUERY), $query);
         $this->assertSame(route('recipes.callback'), $query['redirect_uri']);
+        // Only SSO users are sent straight to the recipe app's OIDC login.
+        $this->assertArrayNotHasKey('sso', $query);
+        $ssoUser = User::factory()->create(['oidc_sub' => 'sub-1']);
+        $ssoRedirect = $this->actingAs($ssoUser)->get('/recipes/connect')->headers->get('Location');
+        parse_str((string) parse_url($ssoRedirect, PHP_URL_QUERY), $ssoQuery);
+        $this->assertSame('1', $ssoQuery['sso']);
 
         // A wrong state is refused.
         $this->actingAs($user)->get('/recipes/callback?code=abc&state=wrong')->assertRedirect('/?recipes=failed#/settings');

@@ -32,6 +32,8 @@
             lifted ? 'bg-emerald-50 ring-2 ring-inset ring-emerald-600' : pressing ? 'bg-stone-100' : 'bg-white',
         ]"
         @pointerdown="down($event)" @pointermove="move($event)" @pointerup="up()" @pointercancel="up()"
+        {{-- Present from touchstart on (not passive): Chrome only lets a held row cancel scrolling and pull-to-refresh then --}}
+        @touchmove="lifted && $event.cancelable && $event.preventDefault()"
         @click.capture="guardClick($event)" @contextmenu="contextMenu($event)">
         {{ $slot }}
 

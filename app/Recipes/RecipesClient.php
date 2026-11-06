@@ -23,15 +23,20 @@ class RecipesClient
         return route('recipes.callback');
     }
 
-    public function authorizeUrl(string $state): string
+    /**
+     * `sso=1` only for users linked to the OIDC login: the recipe app then sends its guests
+     * straight to the same provider, everybody else gets its login form.
+     */
+    public function authorizeUrl(string $state, ?User $user = null): string
     {
-        return config('services.recipes.url').'/oauth/authorize?'.http_build_query([
+        return config('services.recipes.url').'/oauth/authorize?'.http_build_query(array_filter([
             'client_id' => config('services.recipes.client_id'),
             'redirect_uri' => self::redirectUri(),
             'response_type' => 'code',
             'scope' => '',
             'state' => $state,
-        ]);
+            'sso' => filled($user?->oidc_sub) ? '1' : null,
+        ], fn ($value) => $value !== null));
     }
 
     /**
