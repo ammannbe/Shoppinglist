@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allowedStep, remoteIsNewer, stepAllowed, stepTrail, syncedState } from '../../resources/js/planner-state.js';
+import { allowedStep, recipePayload, remoteIsNewer, replaceSuggestions, stepAllowed, stepTrail, suggestionExclude, syncedState } from '../../resources/js/planner-state.js';
 
 const empty = { offers: [], pantry: [], suggestions: [], items: [] };
 
@@ -64,5 +64,47 @@ describe('remoteIsNewer', () => {
         expect(remoteIsNewer({ updated_at: 30 }, { state: {}, updated_at: 20 })).toBe(false);
         expect(remoteIsNewer({ updated_at: 0 }, { state: null, updated_at: 0 })).toBe(false);
         expect(remoteIsNewer(null, { state: { offers: [] }, updated_at: 1 })).toBe(true);
+    });
+});
+
+describe('replaceSuggestions', () => {
+    it('replaces the shown suggestions but keeps the ones picked for the list', () => {
+        const current = [{ key: 'a', selected: false }, { key: 'b', selected: true }, { key: 'c', selected: false }];
+        const added = [{ key: 'd', selected: false }, { key: 'b', selected: false }];
+
+        expect(replaceSuggestions(current, added)).toEqual([{ key: 'b', selected: true }, { key: 'd', selected: false }]);
+        expect(replaceSuggestions([], added)).toEqual(added);
+    });
+
+    it('keeps the list step reachable only with picked recipes', () => {
+        const state = { ...empty, suggestions: replaceSuggestions([{ key: 'a', selected: false }], [{ key: 'b', selected: false }]) };
+        expect(stepAllowed('list', state)).toBe(false);
+        expect(stepAllowed('list', { ...empty, suggestions: replaceSuggestions([{ key: 'a', selected: true }], []) })).toBe(true);
+    });
+});
+
+describe('suggestionExclude', () => {
+    it('lists recipe ids and names of the given suggestions', () => {
+        expect(suggestionExclude([{ recipe_id: 5, name: 'Lasagne' }, { recipe_id: null, name: 'Omelette' }]))
+            .toEqual({ recipe_ids: [5], names: ['Lasagne', 'Omelette'] });
+    });
+});
+
+describe('recipePayload', () => {
+    it('keeps the saved fields only, as plain values', () => {
+        const suggestion = {
+            key: 'idea-1', source: 'ai', name: 'Omelette', servings: '3', selected: true, saved: false, savedUrl: null, url: null,
+            reason: 'Eier', ingredients: [{ amount: 4, unit: 'Stk.', name: 'Eier' }], instructions: '1. Braten', uses_offers: [],
+        };
+
+        expect(recipePayload(suggestion)).toEqual({
+            key: 'idea-1', source: 'ai', name: 'Omelette', servings: 3, reason: 'Eier',
+            ingredients: [{ amount: 4, unit: 'Stk.', name: 'Eier' }], instructions: '1. Braten', uses_offers: [],
+        });
+        expect(recipePayload(suggestion).ingredients).not.toBe(suggestion.ingredients);
+    });
+
+    it('falls back to one serving for invalid numbers', () => {
+        expect(recipePayload({ source: 'recipes', recipe_id: 5, name: 'Lasagne', servings: '' }).servings).toBe(1);
     });
 });

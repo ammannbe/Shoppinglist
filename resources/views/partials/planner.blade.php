@@ -195,50 +195,37 @@
             <span aria-hidden="true">↗</span>
         </a>
 
+        {{-- Suggestions: tap opens the details; "Save" keeps one in the recipes (Recipes tab) --}}
         <div class="space-y-3">
             <template x-for="suggestion in suggestions" :key="suggestion.key">
                 <div class="rounded-lg border bg-white p-4" :class="suggestion.selected ? 'border-emerald-600' : 'border-stone-200'">
                     <div class="flex items-start gap-3">
                         <input type="checkbox" class="mt-1 size-5 shrink-0 accent-emerald-700" x-model="suggestion.selected" :aria-label="suggestion.name">
-                        <div class="min-w-0 flex-1 space-y-1">
-                            <div class="flex flex-wrap items-center gap-2">
-                                <a x-show="suggestion.url" :href="suggestion.url" target="_blank" rel="noopener" class="font-medium underline" x-text="suggestion.name"></a>
-                                <span x-show="!suggestion.url" class="font-medium" x-text="suggestion.name"></span>
+                        <button type="button" class="min-w-0 flex-1 space-y-1 text-left" @click="openDetail(suggestion)" :aria-label="$t('Show “:name”', { name: suggestion.name })">
+                            <span class="flex flex-wrap items-center gap-2">
+                                <span class="font-medium underline decoration-stone-300 underline-offset-2" x-text="suggestion.name"></span>
                                 <span class="rounded-full px-2 py-0.5 text-xs"
                                     :class="suggestion.source === 'ai' ? 'bg-violet-100 text-violet-800' : 'bg-emerald-100 text-emerald-800'"
                                     x-text="suggestion.source === 'ai' ? $t('AI idea') : recipes?.name"></span>
-                            </div>
-                            <p class="text-sm text-stone-600" x-text="suggestion.reason"></p>
-                            <p x-show="suggestion.uses_offers.length" class="text-xs text-orange-800" x-text="$t('Offers') + ': ' + suggestion.uses_offers.join(', ')"></p>
-                            <p x-show="suggestion.uses_pantry.length" class="text-xs text-emerald-800" x-text="$t('At home') + ': ' + suggestion.uses_pantry.join(', ')"></p>
-                            <p x-show="suggestion.uses_season?.length" class="text-xs text-lime-800" x-text="$t('In season') + ': ' + suggestion.uses_season.join(', ')"></p>
-                            <template x-if="suggestion.source === 'ai'">
-                                <details class="text-sm">
-                                    <summary class="cursor-pointer text-stone-500" x-text="$t('Ingredients and preparation')"></summary>
-                                    <ul class="mt-2 list-disc pl-5">
-                                        <template x-for="ingredient in suggestion.ingredients" :key="ingredient.name">
-                                            <li x-text="[ingredient.amount, ingredient.unit, ingredient.name].filter((part) => part !== null && part !== '').join(' ')"></li>
-                                        </template>
-                                    </ul>
-                                    <p class="mt-2 whitespace-pre-line" x-text="suggestion.instructions"></p>
-                                    <template x-if="recipes?.connected">
-                                        <p class="mt-2">
-                                            <a x-show="suggestion.savedUrl" :href="suggestion.savedUrl" target="_blank" rel="noopener" class="font-medium underline" x-text="$t('Check and import in :name', { name: recipes.name })"></a>
-                                            <button x-show="!suggestion.savedUrl" type="button" class="inline-flex items-center gap-2 font-medium underline disabled:opacity-50" :disabled="busy" @click="saveIdea(suggestion)">
-                                                <x-spinner x-show="busyKey === `idea:${suggestion.key}`" />
-                                                <span x-text="label(`idea:${suggestion.key}`, $t('Import into :name', { name: recipes.name }))"></span>
-                                            </button>
-                                        </p>
-                                        <p x-show="error && errorKey === `idea:${suggestion.key}`" class="mt-2 rounded-lg bg-red-50 px-3 py-2 text-red-800" role="alert" x-text="error"></p>
-                                    </template>
-                                </details>
-                            </template>
-                        </div>
+                            </span>
+                            <span class="block text-sm text-stone-600" x-text="suggestion.reason"></span>
+                            <span x-show="suggestion.uses_offers?.length" class="block text-xs text-orange-800" x-text="$t('Offers') + ': ' + (suggestion.uses_offers ?? []).join(', ')"></span>
+                            <span x-show="suggestion.uses_pantry?.length" class="block text-xs text-emerald-800" x-text="$t('At home') + ': ' + (suggestion.uses_pantry ?? []).join(', ')"></span>
+                            <span x-show="suggestion.uses_season?.length" class="block text-xs text-lime-800" x-text="$t('In season') + ': ' + (suggestion.uses_season ?? []).join(', ')"></span>
+                        </button>
                         <label class="w-16 shrink-0">
                             <span class="sr-only" x-text="$t('Servings')"></span>
                             <input x-model.number="suggestion.servings" type="number" min="1" max="20" inputmode="numeric" class="field w-full px-2 text-center text-sm" :title="$t('Servings')">
                         </label>
                     </div>
+                    <div class="mt-2 flex justify-end">
+                        <span x-show="suggestion.saved" class="text-sm text-stone-500" x-text="$t('Saved')"></span>
+                        <button type="button" x-show="!suggestion.saved" class="inline-flex items-center gap-2 text-sm font-medium underline disabled:opacity-50" :disabled="busy" @click="saveSuggestion(suggestion)">
+                            <x-spinner x-show="busyKey === `save:${suggestion.key}`" />
+                            <span x-text="label(`save:${suggestion.key}`, $t('Save'))"></span>
+                        </button>
+                    </div>
+                    <p x-show="error && errorKey === `save:${suggestion.key}` && detail?.key !== suggestion.key" class="mt-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800" role="alert" x-text="error"></p>
                 </div>
             </template>
         </div>
@@ -248,9 +235,29 @@
         </button>
         <x-planner-error key="more" />
         <p x-show="warning && warningMore" class="notice" x-text="warning"></p>
-        <div x-show="suggestions.length" class="flex justify-end text-sm">
-            <button type="button" class="text-stone-600 underline" :disabled="busy" @click="clearSuggestions()" x-text="$t('Remove all recipes')"></button>
-        </div>
+
+        {{-- Details of a suggestion: pick it, save it, import an AI idea into the recipe app --}}
+        <x-recipe-dialog>
+            <label class="mr-auto flex items-center gap-2">
+                <input type="checkbox" class="size-5 accent-emerald-700" x-model="detail.selected">
+                <span x-text="$t('For the shopping list')"></span>
+            </label>
+            <template x-if="detail.source === 'ai' && recipes?.connected">
+                <span>
+                    <a x-show="detail.savedUrl" :href="detail.savedUrl" target="_blank" rel="noopener" class="button-secondary inline-flex" x-text="$t('Check and import in :name', { name: recipes.name })"></a>
+                    <button x-show="!detail.savedUrl" type="button" class="button-secondary inline-flex items-center gap-2" :disabled="busy" @click="saveIdea(detail)">
+                        <x-spinner x-show="busyKey === `idea:${detail.key}`" />
+                        <span x-text="label(`idea:${detail.key}`, $t('Import into :name', { name: recipes.name }))"></span>
+                    </button>
+                </span>
+            </template>
+            <span x-show="detail.saved" class="text-stone-500" x-text="$t('Saved')"></span>
+            <button type="button" x-show="!detail.saved" class="button inline-flex items-center gap-2" :disabled="busy" @click="saveSuggestion(detail)">
+                <x-spinner x-show="busyKey === `save:${detail.key}`" />
+                <span x-text="label(`save:${detail.key}`, $t('Save'))"></span>
+            </button>
+            <p x-show="error && (errorKey === `save:${detail.key}` || errorKey === `idea:${detail.key}`)" class="w-full rounded-lg bg-red-50 px-3 py-2 text-red-800" role="alert" x-text="error"></p>
+        </x-recipe-dialog>
     </x-planner-step>
 
     {{-- 4. Shopping list --}}

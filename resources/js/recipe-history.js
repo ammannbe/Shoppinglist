@@ -1,14 +1,16 @@
 import Alpine from 'alpinejs';
 import { createApi } from './api.js';
+import { closeDialogThen } from './layers.js';
 import { requests } from './requests.js';
 
-// History of the recipes the week planner suggested (#/recipes, PlannedRecipeController):
-// cook one again (ingredients and preparation of AI ideas are kept), plan it again (adds it to
-// the planner's recipes) or import an AI idea into the recipe app afterwards. Needs a connection.
+// Recipes tab (#/recipes, PlannedRecipeController): planner suggestions the user saved or put on
+// a shopping list. A tap opens the details in a dialog: cook one again (ingredients and
+// preparation of AI ideas are kept), plan it again (adds it to the planner's recipes) or import
+// an AI idea into the recipe app afterwards. Needs a connection.
 
 const api = createApi();
 
-/** Takes a recipe of the history into the week planner (planner.js listens). */
+/** Takes a saved recipe into the week planner (planner.js listens). */
 export function planRecipe(recipe) {
     window.dispatchEvent(new CustomEvent('plan-recipe', { detail: recipe }));
 }
@@ -22,8 +24,8 @@ export function recipeHistory({ open: openTab }) {
         ...requests(),
         recipes: [],
         loaded: false,
-        // Recipe opened for cooking (ingredients and preparation).
-        open: null,
+        // Recipe shown in the dialog (all details and actions).
+        detail: null,
 
         init() {
             const opened = () => location.hash.startsWith('#/recipes') && this.load();
@@ -38,15 +40,23 @@ export function recipeHistory({ open: openTab }) {
             });
         },
 
+        openDetail(recipe) {
+            this.detail = recipe;
+            this.$nextTick(() => this.$refs.recipeDialog.showModal());
+        },
+
+        /** Into the planner's recipes; the dialog's history entry has to be gone before navigating. */
         plan(recipe) {
             planRecipe(recipe);
-            openTab('#/planner/recipes');
+            closeDialogThen(this.$refs.recipeDialog, () => openTab('#/planner/recipes'));
         },
 
         async remove(recipe) {
             await this.run(`remove:${recipe.id}`, this.$t('Removing …'), async () => {
                 await api.delete(`/planned-recipes/${recipe.id}`);
-                this.recipes = this.recipes.filter((each) => each.id !== recipe.id);
+                closeDialogThen(this.$refs.recipeDialog, () => {
+                    this.recipes = this.recipes.filter((each) => each.id !== recipe.id);
+                });
             });
         },
 

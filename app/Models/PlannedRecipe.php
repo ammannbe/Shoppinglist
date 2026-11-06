@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * A recipe the week planner suggested (history), see PlannedRecipeController.
+ * A planner suggestion the user saved or put on a shopping list (Recipes tab), see PlannedRecipeController.
  */
 #[Fillable(['key', 'source', 'recipe_id', 'name', 'url', 'servings', 'data', 'draft_url', 'used_at'])]
 class PlannedRecipe extends Model
@@ -32,30 +32,41 @@ class PlannedRecipe extends Model
     }
 
     /**
-     * Saves the suggestions of the planner: own recipes once (moved to the top again), AI ideas each.
+     * Saves planner suggestions (on "Save" and when they go into a shopping list): own recipes
+     * once per recipe id (moved to the top again), AI ideas by their key. Fields not sent keep
+     * their saved value.
      *
-     * @param  list<array<string, mixed>>  $suggestions
+     * @param  list<array<string, mixed>>  $suggestions  validated by StorePlannedRecipeRequest::recipe()
+     * @return list<self>
      */
-    public static function remember(User $user, array $suggestions): void
+    public static function remember(User $user, array $suggestions, bool $used = false): array
     {
+        $saved = [];
         foreach ($suggestions as $suggestion) {
-            $recipe = self::firstOrNew(['user_id' => $user->id, 'key' => $suggestion['key']]);
+            $own = $suggestion['source'] === 'recipes';
+            $recipe = self::firstOrNew(['user_id' => $user->id, 'key' => $own ? 'recipe-'.$suggestion['recipe_id'] : $suggestion['key']]);
             $recipe->fill([
                 'source' => $suggestion['source'],
-                'recipe_id' => $suggestion['recipe_id'] ?? null,
+                'recipe_id' => $own ? $suggestion['recipe_id'] : null,
                 'name' => mb_substr($suggestion['name'], 0, 255),
-                'url' => $suggestion['url'] ?? null,
-                'servings' => $suggestion['servings'] ?? $recipe->servings,
-                'data' => array_intersect_key($suggestion, array_flip(self::DATA)),
+                'url' => $own ? ($suggestion['url'] ?? $recipe->url) : null,
+                'servings' => isset($suggestion['servings']) ? (int) round($suggestion['servings']) : $recipe->servings,
+                'data' => [...$recipe->data ?? [], ...array_intersect_key($suggestion, array_flip(self::DATA))],
             ]);
+            if ($used) {
+                $recipe->used_at = now();
+            }
             $recipe->user()->associate($user);
             $recipe->touch();
+            $saved[] = $recipe;
         }
 
         $old = self::where('user_id', $user->id)->latest('updated_at')->skip(self::LIMIT)->take(PHP_INT_MAX)->pluck('id');
         if ($old->isNotEmpty()) {
             self::whereIn('id', $old)->delete();
         }
+
+        return $saved;
     }
 
     /**

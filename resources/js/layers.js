@@ -4,6 +4,25 @@
 // (CloseWatcher) leave the entry, which is then dropped the same way.
 
 /**
+ * Closes a dialog, then runs `then` once its history entry is gone: navigating right away
+ * would be undone by the pending history.back() of the layer.
+ */
+export function closeDialogThen(dialog, then) {
+    if (!dialog?.open) {
+        then();
+        return;
+    }
+    const others = document.querySelectorAll('dialog[open]').length > 1;
+    if (history.state?.layer && !others) {
+        window.addEventListener('popstate', () => setTimeout(then), { once: true });
+        dialog.close();
+        return;
+    }
+    dialog.close();
+    then();
+}
+
+/**
  * @param {object} options
  * @param {() => boolean} options.menuOpen whether the context menu is open
  * @param {() => void} options.closeMenu

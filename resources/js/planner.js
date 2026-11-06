@@ -2,7 +2,8 @@ import Alpine from 'alpinejs';
 import { createApi, HttpError } from './api.js';
 import { prepareForAi } from './image.js';
 import { offerReader } from './offers.js';
-import { allowedStep, remoteIsNewer, STEPS, stepAllowed, stepTrail, SYNCED_KEYS, syncedState } from './planner-state.js';
+import { closeDialogThen } from './layers.js';
+import { allowedStep, recipePayload, remoteIsNewer, replaceSuggestions, STEPS, stepAllowed, stepTrail, suggestionExclude, SYNCED_KEYS, syncedState } from './planner-state.js';
 import { requests } from './requests.js';
 
 // Week planner (#/planner/<step>): offers (screenshots, PDFs, text) and pantry photos are read
@@ -99,6 +100,8 @@ export function planner({ addItems, merges, lists, open, navigate }) {
         savedOffers: null,
         // Ingredients already open on the target list, asked before adding (null: not asked).
         mergeCount: null,
+        // Suggestion shown in the recipe dialog (all details and actions).
+        detail: null,
         ...requests(),
         ...offerReader(),
 
@@ -412,10 +415,12 @@ export function planner({ addItems, merges, lists, open, navigate }) {
         },
 
         /**
-         * New suggestions; with `more` they are added to the shown ones, which are left out.
+         * New suggestions replace the shown ones (the recipes picked for the list stay); with
+         * `more` they are added to the shown ones, which are left out.
          */
         async suggest(more = false) {
             await this.run(more ? 'more' : 'suggest', this.$t('Looking for recipes …'), async () => {
+                const kept = more ? this.suggestions : this.selectedSuggestions;
                 const result = await api.post('/planner/suggestions', {
                     offers: this.offerPayload(),
                     pantry: this.pantryPayload(),
@@ -423,23 +428,39 @@ export function planner({ addItems, merges, lists, open, navigate }) {
                     count: Number(this.count) || 5,
                     ideas: this.ideas,
                     wishes: this.wishes.trim() || null,
-                    exclude: more ? {
-                        recipe_ids: this.suggestions.map((suggestion) => suggestion.recipe_id).filter(Boolean),
-                        names: this.suggestions.map((suggestion) => suggestion.name),
-                    } : undefined,
+                    exclude: kept.length ? suggestionExclude(kept) : undefined,
                 });
-                const known = new Set(more ? this.suggestions.map((suggestion) => suggestion.key) : []);
+                const known = new Set(kept.map((suggestion) => suggestion.key));
+                // Nothing is selected, the user picks. Not saved until "Save" or the list.
                 const added = result.suggestions.filter((suggestion) => !known.has(suggestion.key)).map((suggestion) => ({
-                    ...suggestion, selected: false, servings: Number(this.servings) || 4, savedUrl: null,
+                    ...suggestion, selected: false, servings: Number(this.servings) || 4, savedUrl: null, saved: false,
                 }));
-                // Nothing is selected, the user picks. New suggestions on top; the earlier ones stay below, unselected, until removed.
-                const keys = new Set(added.map((suggestion) => suggestion.key));
-                this.suggestions = more ? [...this.suggestions, ...added]
-                    : [...added, ...this.suggestions.filter((suggestion) => !keys.has(suggestion.key)).map((suggestion) => ({ ...suggestion, selected: false }))];
+                this.suggestions = more ? [...this.suggestions, ...added] : replaceSuggestions(this.suggestions, added);
                 this.warning = more && !added.length ? this.$t('No further recipes found.') : result.warning;
                 this.warningMore = more;
-                if (!more) this.items = [];
             });
+        },
+
+        /**
+         * Saves a suggestion into the recipes (Recipes tab). It leaves the suggestions, unless it
+         * is picked for the list: then it stays there, marked as saved.
+         */
+        async saveSuggestion(suggestion) {
+            await this.run(`save:${suggestion.key}`, this.$t('Saving …'), async () => {
+                await api.post('/planned-recipes', recipePayload(suggestion));
+                Alpine.store('notice').show(this.$t('“:name” saved in the recipes.', { name: suggestion.name }));
+                const remove = () => {
+                    if (suggestion.selected) suggestion.saved = true;
+                    else this.suggestions = this.suggestions.filter((each) => each.key !== suggestion.key);
+                };
+                if (this.detail?.key === suggestion.key && !suggestion.selected) closeDialogThen(this.$refs.recipeDialog, remove);
+                else remove();
+            });
+        },
+
+        openDetail(suggestion) {
+            this.detail = suggestion;
+            this.$nextTick(() => this.$refs.recipeDialog.showModal());
         },
 
         // Hands the idea to the recipe app as a draft and opens its import, where the user
@@ -466,21 +487,15 @@ export function planner({ addItems, merges, lists, open, navigate }) {
             }
         },
 
-        /** Removes all shown recipes (they stay in the history, #/recipes). */
-        clearSuggestions() {
-            if (!confirm(this.$t('Remove all recipes? They stay in the history.'))) return;
-            this.suggestions = [];
-            this.items = [];
-            this.warning = null;
-            this.mergeCount = null;
-        },
-
-        /** Recipe of the history: shown on top and selected (again). */
-        planRecipe(recipe) {
+        /** Saved recipe (Recipes tab): shown on top and selected (again). */
+        async planRecipe(recipe) {
+            // The planner may not have pulled yet (opened from the Recipes tab): otherwise this
+            // newer change would replace the suggestions of another device.
+            await this.pullState();
             const { id, draft_url: draftUrl, used_at: usedAt, created_at: createdAt, updated_at: updatedAt, ...suggestion } = recipe;
             const others = this.suggestions.filter((each) => each.key !== recipe.key);
             this.suggestions = [{
-                uses_offers: [], uses_pantry: [], uses_season: [], ...suggestion, servings: recipe.servings || Number(this.servings) || 4, selected: true, savedUrl: draftUrl ?? null,
+                uses_offers: [], uses_pantry: [], uses_season: [], ...suggestion, servings: recipe.servings || Number(this.servings) || 4, selected: true, savedUrl: draftUrl ?? null, saved: true,
             }, ...others];
             this.items = [];
         },
@@ -492,16 +507,11 @@ export function planner({ addItems, merges, lists, open, navigate }) {
                 const { items } = await api.post('/planner/list', {
                     offers: this.offerPayload(),
                     pantry: this.pantryPayload(),
-                    recipes: this.selectedSuggestions.map((suggestion) => ({
-                        key: suggestion.key,
-                        source: suggestion.source,
-                        recipe_id: suggestion.recipe_id ?? null,
-                        name: suggestion.name,
-                        servings: Number(suggestion.servings) || 1,
-                        ingredients: suggestion.source === 'ai' ? suggestion.ingredients : undefined,
-                    })),
+                    // With all details: the server saves them (Recipes tab), the items link to them.
+                    recipes: this.selectedSuggestions.map((suggestion) => recipePayload(suggestion)),
                 });
                 this.items = items.map((item) => ({ ...item, selected: !item.at_home }));
+                this.selectedSuggestions.forEach((suggestion) => { suggestion.saved = true; });
                 if (!this.listName) this.listName = this.$t('Weekly shopping :date', { date: new Date().toLocaleDateString(Alpine.store('i18n').locale.replace('_', '-')) });
             });
         },

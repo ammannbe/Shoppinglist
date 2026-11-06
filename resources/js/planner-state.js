@@ -57,6 +57,36 @@ export function syncedState(state) {
 }
 
 /**
+ * Suggestions after a new search: the new ones replace the shown ones, only the recipes picked
+ * for the list stay (on top, still selected), so the list step keeps what it was built from.
+ */
+export function replaceSuggestions(current, added) {
+    const kept = (current ?? []).filter((suggestion) => suggestion.selected);
+    const keys = new Set(kept.map((suggestion) => suggestion.key));
+
+    return [...kept, ...added.filter((suggestion) => !keys.has(suggestion.key))];
+}
+
+/** Recipes not to suggest again (`exclude` of POST /planner/suggestions). */
+export function suggestionExclude(suggestions) {
+    return {
+        recipe_ids: suggestions.map((suggestion) => suggestion.recipe_id).filter(Boolean),
+        names: suggestions.map((suggestion) => suggestion.name),
+    };
+}
+
+/** Fields of a suggestion the server saves (POST /planned-recipes, recipes of POST /planner/list). */
+const RECIPE_FIELDS = ['key', 'source', 'recipe_id', 'name', 'url', 'servings', 'reason', 'category', 'complexity', 'ingredients', 'instructions', 'uses_offers', 'uses_pantry', 'uses_season'];
+
+/** Plain copy of a suggestion with the saved fields only (no selection or other device state). */
+export function recipePayload(suggestion) {
+    const picked = Object.fromEntries(RECIPE_FIELDS.filter((field) => suggestion[field] != null).map((field) => [field, suggestion[field]]));
+    if (picked.servings != null) picked.servings = Number(picked.servings) || 1;
+
+    return JSON.parse(JSON.stringify(picked));
+}
+
+/**
  * Whether the server's state replaces the local one: newer than the local change (last write
  * wins). `local`/`remote`: { updated_at } in milliseconds, 0 if never changed.
  */

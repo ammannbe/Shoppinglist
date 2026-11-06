@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Ai\Assistant;
+use App\Models\PlannedRecipe;
 use App\Models\User;
 use App\Support\Seasons;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -10,6 +11,7 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class PlannerTest extends TestCase
@@ -327,7 +329,7 @@ class PlannerTest extends TestCase
         Http::assertSent(fn (Request $request) => str_contains($request->url(), '/api/recipes/5?servings=4'));
     }
 
-    public function test_suggested_recipes_are_kept_in_the_history(): void
+    public function test_suggestions_are_saved_on_click_or_with_the_list(): void
     {
         Http::fake([
             'recipes.test/api/foods' => Http::response(['data' => [['id' => 1, 'name' => 'Hackfleisch']]]),
@@ -341,41 +343,111 @@ class PlannerTest extends TestCase
                 ->push($this->ai(['matches' => [['product' => 'Rindshackfleisch', 'food_id' => 1]]]))
                 ->push($this->ai([
                     'picks' => [['recipe_id' => 5, 'reason' => 'Aktion', 'uses_offers' => ['Rindshackfleisch'], 'uses_pantry' => []]],
-                    'ideas' => [['name' => 'Omelette', 'reason' => 'Eier', 'servings' => 2, 'ingredients' => [['amount' => 4, 'unit' => 'Stk.', 'name' => 'Eier']], 'instructions' => '1. Braten', 'uses_offers' => [], 'uses_pantry' => []]],
+                    'ideas' => [
+                        ['name' => 'Omelette', 'reason' => 'Eier', 'servings' => 2, 'ingredients' => [['amount' => 4, 'unit' => 'Stk.', 'name' => 'Eier']], 'instructions' => '1. Braten', 'uses_offers' => [], 'uses_pantry' => []],
+                        ['name' => 'Rösti', 'reason' => 'Kartoffeln', 'servings' => 2, 'ingredients' => [['amount' => 800, 'unit' => 'g', 'name' => 'Kartoffeln']], 'instructions' => '1. Reiben', 'uses_offers' => [], 'uses_pantry' => []],
+                    ],
                 ]))
-                ->push($this->ai(['items' => [['name' => 'Hackfleisch', 'amount' => 500, 'unit' => 'g', 'offer' => null, 'at_home' => false, 'recipes' => ['Lasagne']]]])),
+                ->push($this->ai(['items' => [['name' => 'Hackfleisch', 'amount' => 500, 'unit' => 'g', 'offer' => null, 'at_home' => false, 'recipes' => ['Lasagne', 'Rösti']]]])),
         ]);
         $user = $this->connected();
         $other = User::factory()->create();
 
-        $suggestions = $this->actingAs($user)->postJson('/planner/suggestions', [
-            'offers' => [['name' => 'Rindshackfleisch', 'store' => 'M']], 'pantry' => [], 'servings' => 4, 'count' => 2, 'ideas' => true,
+        [$lasagne, $omelette, $roesti] = $this->actingAs($user)->postJson('/planner/suggestions', [
+            'offers' => [['name' => 'Rindshackfleisch', 'store' => 'M']], 'pantry' => [], 'servings' => 4, 'count' => 3, 'ideas' => true,
         ])->assertOk()->json('suggestions');
 
-        $history = $this->actingAs($user)->getJson('/planned-recipes')->assertOk()->assertJsonCount(2, 'recipes')->json('recipes');
-        $idea = collect($history)->firstWhere('source', 'ai');
-        $this->assertSame(['Omelette', 2, '1. Braten', $suggestions[1]['key']], [$idea['name'], $idea['servings'], $idea['instructions'], $idea['key']]);
-        $this->assertSame(4, collect($history)->firstWhere('source', 'recipes')['servings']);
+        // Suggestions are not saved by themselves.
+        $this->actingAs($user)->getJson('/planned-recipes')->assertOk()->assertJsonCount(0, 'recipes');
 
+        // "Save": an AI idea keeps ingredients and preparation.
+        $saved = $this->actingAs($user)->postJson('/planned-recipes', [...$omelette, 'servings' => 2])
+            ->assertCreated()->json('recipe');
+        $this->assertSame(['Omelette', 2, '1. Braten', $omelette['key'], 'Eier'], [$saved['name'], $saved['servings'], $saved['instructions'], $saved['key'], $saved['ingredients'][0]['name']]);
+        $this->assertNull($saved['used_at']);
+
+        // Own recipes once per recipe id, whatever key the client sends.
+        $this->actingAs($user)->postJson('/planned-recipes', [...$lasagne, 'servings' => 4])->assertCreated();
+        $this->actingAs($user)->postJson('/planned-recipes', [...$lasagne, 'key' => 'recipe-999', 'servings' => 6])->assertOk()
+            ->assertJsonPath('recipe.key', 'recipe-5')->assertJsonPath('recipe.servings', 6)->assertJsonPath('recipe.url', 'https://recipes.test/recipes/5');
+        $this->actingAs($user)->getJson('/planned-recipes')->assertJsonCount(2, 'recipes');
+
+        // The recipes on a list are saved (also the ones not saved before) and marked as used.
         $this->actingAs($user)->postJson('/planner/list', ['offers' => [], 'pantry' => [], 'recipes' => [
-            ['key' => $suggestions[0]['key'], 'source' => 'recipes', 'recipe_id' => 5, 'name' => 'Lasagne', 'servings' => 4],
+            [...$lasagne, 'servings' => 4],
+            [...$roesti, 'servings' => 2],
         ]])->assertOk();
-        $this->actingAs($user)->postJson('/planner/recipes', [
-            'key' => $idea['key'], 'name' => 'Omelette', 'servings' => 2, 'instructions' => '1. Braten', 'ingredients' => [['amount' => 4, 'unit' => 'Stk.', 'name' => 'Eier']],
-        ])->assertOk();
+        $history = collect($this->actingAs($user)->getJson('/planned-recipes')->json('recipes'))->keyBy('name');
+        $this->assertCount(3, $history);
+        $this->assertNotNull($history['Lasagne']['used_at']);
+        $this->assertSame([$roesti['key'], '1. Reiben', 2], [$history['Rösti']['key'], $history['Rösti']['instructions'], $history['Rösti']['servings']]);
+        $this->assertNotNull($history['Rösti']['used_at']);
+        $this->assertNull($history['Omelette']['used_at']);
 
-        $history = collect($this->actingAs($user)->getJson('/planned-recipes')->json('recipes'));
-        $this->assertNotNull($history->firstWhere('source', 'recipes')['used_at']);
-        $this->assertSame('https://recipes.test/import?draft=abc', $history->firstWhere('source', 'ai')['draft_url']);
+        $this->actingAs($user)->postJson('/planner/recipes', [
+            'key' => $omelette['key'], 'name' => 'Omelette', 'servings' => 2, 'instructions' => '1. Braten', 'ingredients' => [['amount' => 4, 'unit' => 'Stk.', 'name' => 'Eier']],
+        ])->assertOk();
+        $history = collect($this->actingAs($user)->getJson('/planned-recipes')->json('recipes'))->keyBy('name');
+        $this->assertSame('https://recipes.test/import?draft=abc', $history['Omelette']['draft_url']);
 
         // Private: others neither see nor remove them.
         $this->actingAs($other)->getJson('/planned-recipes')->assertJsonCount(0, 'recipes');
-        $this->actingAs($other)->deleteJson('/planned-recipes/'.$idea['id'])->assertForbidden();
+        $this->actingAs($other)->deleteJson('/planned-recipes/'.$history['Omelette']['id'])->assertForbidden();
 
-        $this->actingAs($user)->deleteJson('/planned-recipes/'.$idea['id'])->assertNoContent();
-        $this->actingAs($user)->getJson('/planned-recipes')->assertJsonCount(1, 'recipes');
+        $this->actingAs($user)->deleteJson('/planned-recipes/'.$history['Omelette']['id'])->assertNoContent();
+        $this->actingAs($user)->getJson('/planned-recipes')->assertJsonCount(2, 'recipes');
         $this->actingAs($user)->deleteJson('/planned-recipes')->assertNoContent();
         $this->actingAs($user)->getJson('/planned-recipes')->assertJsonCount(0, 'recipes');
+    }
+
+    public function test_older_clients_without_keys_build_lists_without_saving(): void
+    {
+        Http::fake(['openai.test/*' => Http::response($this->ai(['items' => []]))]);
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->postJson('/planner/list', ['offers' => [], 'pantry' => [], 'recipes' => [
+            ['source' => 'ai', 'name' => 'Omelette', 'servings' => 2, 'ingredients' => [['amount' => 4, 'unit' => 'Stk.', 'name' => 'Eier']]],
+        ]])->assertOk();
+
+        $this->assertSame(0, PlannedRecipe::count());
+    }
+
+    public function test_saving_a_recipe_is_validated(): void
+    {
+        $user = User::factory()->create();
+        $idea = ['key' => 'idea-0190a0b0-0000-7000-8000-000000000001', 'source' => 'ai', 'name' => 'Omelette', 'servings' => 2,
+            'ingredients' => [['amount' => 4, 'unit' => 'Stk.', 'name' => 'Eier']], 'instructions' => '1. Braten'];
+
+        $this->actingAs($user)->postJson('/planned-recipes', [...$idea, 'ingredients' => []])->assertJsonValidationErrors('ingredients');
+        $this->actingAs($user)->postJson('/planned-recipes', [...$idea, 'instructions' => null])->assertJsonValidationErrors('instructions');
+        $this->actingAs($user)->postJson('/planned-recipes', [...$idea, 'key' => 'other<script>'])->assertJsonValidationErrors('key');
+        $this->actingAs($user)->postJson('/planned-recipes', ['source' => 'recipes', 'name' => 'Lasagne'])->assertJsonValidationErrors('recipe_id');
+        $this->actingAs($user)->postJson('/planned-recipes', ['source' => 'recipes', 'recipe_id' => 5, 'name' => 'Lasagne', 'url' => 'javascript:alert(1)'])
+            ->assertJsonValidationErrors('url');
+        $this->actingAs($user)->postJson('/planned-recipes', [...$idea, 'source' => 'other'])->assertJsonValidationErrors('source');
+
+        // AI ideas get no URL.
+        $this->actingAs($user)->postJson('/planned-recipes', [...$idea, 'url' => 'https://example.com'])->assertCreated()->assertJsonPath('recipe.url', null);
+
+        $this->actingAs(User::factory()->unverified()->create())->postJson('/planned-recipes', $idea)->assertForbidden();
+        auth()->logout();
+        $this->postJson('/planned-recipes', $idea)->assertUnauthorized();
+    }
+
+    public function test_saved_recipes_are_limited_per_user(): void
+    {
+        $user = User::factory()->create();
+        $now = now();
+        PlannedRecipe::insert(collect(range(1, PlannedRecipe::LIMIT))->map(fn (int $i) => [
+            'id' => (string) Str::uuid7(), 'user_id' => $user->id, 'key' => 'recipe-'.$i, 'source' => 'recipes', 'recipe_id' => $i,
+            'name' => 'Rezept '.$i, 'data' => '{}', 'created_at' => $now->copy()->subMinutes($i), 'updated_at' => $now->copy()->subMinutes($i),
+        ])->all());
+
+        $this->actingAs($user)->postJson('/planned-recipes', ['source' => 'recipes', 'recipe_id' => 999, 'name' => 'Neu'])->assertCreated();
+
+        $this->assertSame(PlannedRecipe::LIMIT, PlannedRecipe::where('user_id', $user->id)->count());
+        $this->assertFalse(PlannedRecipe::where('key', 'recipe-'.PlannedRecipe::LIMIT)->exists());
+        $this->assertTrue(PlannedRecipe::where('key', 'recipe-999')->exists());
     }
 
     public function test_amounts_are_rounded_to_what_one_buys(): void

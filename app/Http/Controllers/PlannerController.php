@@ -102,9 +102,7 @@ class PlannerController extends Controller
                 ], $result['ideas']),
             ];
 
-            // History (#/recipes): plan or cook them later, import AI ideas afterwards.
-            PlannedRecipe::remember($user, array_map(fn (array $suggestion) => ['servings' => (int) $data['servings'], ...$suggestion], $suggestions));
-
+            // Not saved: the user saves the ones to keep (POST /planned-recipes), the ones put on a list are saved then.
             return ['suggestions' => $suggestions, 'warning' => $warning];
         });
     }
@@ -137,8 +135,9 @@ class PlannerController extends Controller
             $recipes = array_values($recipes);
 
             $items = $this->assistant->shoppingList($recipes, $data['offers'] ?? [], $data['pantry'] ?? [], $this->language());
-            PlannedRecipe::where('user_id', $user->id)->whereIn('key', array_filter(array_column($data['recipes'], 'key')))
-                ->update(['used_at' => now()]);
+            // The recipes on a list are saved (Recipes tab), the items link to them. Recipes without
+            // key (older clients) are not saved.
+            PlannedRecipe::remember($user, array_values(array_filter($data['recipes'], fn (array $recipe) => filled($recipe['key'] ?? null))), used: true);
 
             return ['items' => $items];
         });
@@ -151,7 +150,7 @@ class PlannerController extends Controller
     public function saveRecipe(Request $request): JsonResponse
     {
         $data = $request->validate([
-            // History entry of the idea (gets the import link).
+            // Saved entry of the idea (gets the import link).
             'key' => ['nullable', 'string', 'max:100'],
             'name' => ['required', 'string', 'max:100'],
             'servings' => ['required', 'integer', 'min:1', 'max:100'],
