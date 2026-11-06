@@ -34,6 +34,7 @@ function initialState() {
  * @param {(target: string, name: string, items: object[], merge: boolean) => Promise<string>} options.addItems adds the items, returns the list id
  * @param {(target: string, items: object[]) => number} options.merges number of items that could be merged into open ones
  * @param {() => object[]} options.lists lists to add to
+ * @param {(hash: string) => void} options.open opens a page next to the lists (shoppinglist.openFromLists)
  */
 /**
  * Offers grouped by shop tag, in order of the tag; offers without shop last.
@@ -53,7 +54,7 @@ function groupByStore(offers) {
         .map(([store, list]) => ({ store, offers: list }));
 }
 
-export function planner({ addItems, merges, lists }) {
+export function planner({ addItems, merges, lists, open }) {
     return {
         ...initialState(),
         ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}'),
@@ -332,7 +333,8 @@ export function planner({ addItems, merges, lists }) {
             this.mergeCount = null;
             const listId = await addItems(this.target, this.listName.trim() || this.$t('Shopping list'), items, Boolean(merge));
             this.reset();
-            location.hash = `#/list/${listId}`;
+            // Back from the new list leads to the lists, not into the finished planner.
+            open(`#/list/${listId}`);
         },
 
         get lists() {

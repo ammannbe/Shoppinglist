@@ -304,7 +304,6 @@
     "Offers": "Aktionen",
     "Offers of :shop": "Aktionen von :shop",
     "Offers of all regions are shown for :shops.": "Bei :shops siehst du die Aktionen aller Regionen.",
-    "Offers, what is at home, recipes and the shopping list": "Aktionen, Vorrat, Rezepte und Einkaufsliste mit KI",
     "Offline": "Offline",
     "OK": "OK",
     "Oldest": "Älteste",
@@ -373,7 +372,6 @@
     "Reading offers :current/:total …": "Aktionen werden gelesen (:current/:total) …",
     "Reading offers …": "Aktionen werden gelesen …",
     "Recipe": "Rezept",
-    "Recipe history": "Rezeptverlauf",
     "Recipe ideas": "Rezeptideen",
     "Recipes": "Rezepte",
     "Recipes the week planner suggested, newest first.": "Rezepte, die der Wochenplaner vorgeschlagen hat, neueste zuerst.",
@@ -598,5 +596,6 @@
     "Register with :provider": "Registrieren mit :provider",
     "No :provider account yet?": "Noch kein :provider-Konto?",
     "Create one": "Jetzt erstellen",
-    "Your account has no password yet. You can set one with \"Forgot your password?\" on the login page.": "Dein Konto hat noch kein Passwort. Du kannst eines mit «Passwort vergessen?» auf der Anmeldeseite setzen."
+    "Your account has no password yet. You can set one with \"Forgot your password?\" on the login page.": "Dein Konto hat noch kein Passwort. Du kannst eines mit «Passwort vergessen?» auf der Anmeldeseite setzen.",
+    "Overview": "Übersicht"
 }

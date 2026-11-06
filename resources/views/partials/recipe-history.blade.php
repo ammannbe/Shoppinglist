@@ -3,7 +3,7 @@
     Cook one (ingredients and preparation of AI ideas), plan it again or import an AI idea into
     the recipe app afterwards. Needs a connection.
 --}}
-<section x-show="route.view === 'recipes'" class="space-y-4" x-data="recipeHistory()">
+<section x-show="route.view === 'recipes'" class="space-y-4" x-data="recipeHistory({ open: (hash) => openTab(hash) })">
     <p class="sr-only" role="status" x-text="busy ?? ''"></p>
 
     <div class="flex items-center gap-2">

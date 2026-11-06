@@ -3,7 +3,7 @@
     recipe suggestions (recipe app and AI ideas), shopping list. Needs a connection.
 --}}
 <section x-show="route.view === 'planner'" class="space-y-4"
-    x-data="planner({ addItems: (target, name, items, merge) => addPlannedItems(target, name, items, merge), merges: (target, items) => plannedMerges(target, items).size, lists: () => lists })">
+    x-data="planner({ addItems: (target, name, items, merge) => addPlannedItems(target, name, items, merge), merges: (target, items) => plannedMerges(target, items).size, lists: () => lists, open: (hash) => openFromLists(hash) })">
     <div x-show="recipes && !recipes.connected" class="notice flex flex-wrap items-center justify-between gap-3">
         <span x-text="$t('Connect :name to get your own recipes suggested and to save new ones there.', { name: recipes?.name })"></span>
         <a href="/recipes/connect?from=planner" data-online class="button-secondary shrink-0 text-sm" x-text="$t('Connect')"></a>
@@ -211,9 +211,8 @@
         </button>
         <x-planner-error key="more" />
         <p x-show="warning && warningMore" class="notice" x-text="warning"></p>
-        <div class="flex flex-wrap items-center justify-between gap-2 text-sm">
-            <a href="#/recipes" data-online class="font-medium underline" x-text="$t('Recipe history')"></a>
-            <button type="button" x-show="suggestions.length" class="text-stone-600 underline" :disabled="busy" @click="clearSuggestions()" x-text="$t('Remove all recipes')"></button>
+        <div x-show="suggestions.length" class="flex justify-end text-sm">
+            <button type="button" class="text-stone-600 underline" :disabled="busy" @click="clearSuggestions()" x-text="$t('Remove all recipes')"></button>
         </div>
     </x-planner-step>
 

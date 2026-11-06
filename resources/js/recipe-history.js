@@ -13,7 +13,11 @@ export function planRecipe(recipe) {
     window.dispatchEvent(new CustomEvent('plan-recipe', { detail: recipe }));
 }
 
-export function recipeHistory() {
+/**
+ * @param {object} options
+ * @param {(hash: string) => void} options.open opens another tab (shoppinglist.openTab)
+ */
+export function recipeHistory({ open: openTab }) {
     return {
         ...requests(),
         recipes: [],
@@ -36,7 +40,7 @@ export function recipeHistory() {
 
         plan(recipe) {
             planRecipe(recipe);
-            location.hash = '#/planner';
+            openTab('#/planner');
         },
 
         async remove(recipe) {
