@@ -216,29 +216,8 @@
                     <ul class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white" x-show="shownOpenItems.length" @row-move="moveRow('items', $event.detail)">
                         <template x-for="item in shownOpenItems" :key="item.id">
                             <x-swipe-row actions="itemActions(item)" x-bind:data-sort-id="item.id">
-                                {{-- Tap marks as done, edit/delete via swipe or "…"; the recipe links are below the button (no links inside it) --}}
-                                <div class="min-w-0 flex-1">
-                                    <button type="button" class="flex w-full min-w-0 items-center pt-3 pr-4 text-left" :class="item.recipes?.length ? 'pb-0.5' : 'pb-3'" role="checkbox" aria-checked="false" @click="toggle(item)">
-                                        <span class="check" aria-hidden="true"></span>
-                                        <img x-show="item.image" :src="imageUrl(item.image, 'thumb')" @click.stop="openImage(item.image)" :alt="$t('Show photo')" loading="lazy" decoding="async" class="mr-3 size-8 shrink-0 cursor-zoom-in rounded-md bg-stone-100 object-cover">
-                                        <template x-for="tag in item.stores" :key="tag">
-                                            <x-store-badge tag="tag" />
-                                        </template>
-                                        <span x-show="item.stores.length" class="mr-0.5" aria-hidden="true"></span>
-                                        <span x-show="amount(item)" class="mr-2 shrink-0 tabular-nums text-stone-500" x-text="amount(item)"></span>
-                                        <span class="min-w-0">
-                                            <span class="block truncate" x-text="item.name"></span>
-                                            <span x-show="item.note" class="block whitespace-pre-line break-words text-xs text-stone-500" x-text="item.note"></span>
-                                        </span>
-                                    </button>
-                                    {{-- Saved recipes open in the Recipes tab, older entries (no key) show the name; the rest of the line toggles like the button --}}
-                                    <p x-show="item.recipes?.length" class="truncate pr-4 pb-3 pl-12 text-xs text-violet-700" @click="$event.target.closest('a') || toggle(item)">
-                                        <span x-text="$t('For')"></span>
-                                        <template x-for="(recipe, index) in item.recipes" :key="index">
-                                            <span><span x-show="index > 0">, </span><a x-show="recipeHref(recipe)" :href="recipeHref(recipe)" class="underline" draggable="false" x-text="recipe.name"></a><span x-show="!recipeHref(recipe)" x-text="recipe.name"></span></span>
-                                        </template>
-                                    </p>
-                                </div>
+                                {{-- Checkbox checks off, tap on the row edits; delete/move via swipe, long press or "…" --}}
+                                <x-item-row />
                             </x-swipe-row>
                         </template>
                     </ul>
@@ -252,17 +231,7 @@
                         <ul x-show="showDone" class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
                             <template x-for="item in doneItems" :key="item.id">
                                 <x-swipe-row actions="itemActions(item)" class="text-stone-400">
-                                    <button type="button" class="flex min-w-0 flex-1 items-center py-3 pr-4 text-left" role="checkbox" aria-checked="true" @click="toggle(item)">
-                                        <span class="check check-done" aria-hidden="true">
-                                            <svg viewBox="0 0 24 24" class="size-4"><path d="M5 12l5 5 9-10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                                        </span>
-                                        <img x-show="item.image" :src="imageUrl(item.image, 'thumb')" @click.stop="openImage(item.image)" :alt="$t('Show photo')" loading="lazy" decoding="async" class="mr-3 opacity-50 size-8 shrink-0 cursor-zoom-in rounded-md bg-stone-100 object-cover">
-                                        <template x-for="tag in item.stores" :key="tag">
-                                            <x-store-badge tag="tag" muted />
-                                        </template>
-                                        <span x-show="amount(item)" class="mr-2 shrink-0 tabular-nums line-through" x-text="amount(item)"></span>
-                                        <span class="truncate line-through" x-text="item.name"></span>
-                                    </button>
+                                    <x-item-row done />
                                 </x-swipe-row>
                             </template>
                         </ul>
