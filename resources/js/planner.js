@@ -470,16 +470,15 @@ export function planner({ addItems, merges, lists, open, navigate }) {
             // Open the tab while still in the click, otherwise browsers block it as a pop-up.
             const tab = navigator.onLine ? window.open('', '_blank') : null;
             await this.run(`idea:${suggestion.key}`, this.$t('Handing over …'), async () => {
-                const { url } = await api.post('/planner/recipes', {
-                    key: suggestion.key,
-                    name: suggestion.name,
+                // With all details: an idea not saved yet is saved first (Recipes tab keeps the import link).
+                const { url, recipe } = await api.post('/planner/recipes', {
+                    ...recipePayload(suggestion),
                     servings: suggestion.servings,
                     category: suggestion.category ?? null,
                     complexity: suggestion.complexity ?? null,
-                    instructions: suggestion.instructions,
-                    ingredients: suggestion.ingredients,
                 });
                 suggestion.savedUrl = url;
+                if (recipe) suggestion.saved = true;
             });
             if (tab && suggestion.savedUrl) {
                 tab.location.href = suggestion.savedUrl;

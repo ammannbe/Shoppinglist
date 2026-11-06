@@ -188,12 +188,13 @@ class PlannerController extends Controller
     /**
      * Hand an AI recipe idea to the recipe app as a draft. The user checks and imports it there
      * (matching foods, units and the category), so nothing is created without a person.
+     * An idea with a key is saved first if it is not yet (Recipes tab), so the import link is kept.
      */
     public function saveRecipe(Request $request): JsonResponse
     {
         $data = $request->validate([
-            // Saved entry of the idea (gets the import link).
-            'key' => ['nullable', 'string', 'max:100'],
+            // Saved entry of the idea (gets the import link, saved now if it is not yet).
+            'key' => ['nullable', 'string', 'max:100', 'regex:/^idea-[A-Za-z0-9-]+$/'],
             'name' => ['required', 'string', 'max:100'],
             'servings' => ['required', 'integer', 'min:1', 'max:100'],
             'category' => ['nullable', 'string', 'max:50'],
@@ -203,7 +204,14 @@ class PlannerController extends Controller
             'ingredients.*.name' => ['required', 'string', 'max:50'],
             'ingredients.*.amount' => ['nullable', 'numeric', 'min:0'],
             'ingredients.*.unit' => ['nullable', 'string', 'max:20'],
+            // Only kept when the idea is saved here.
+            'reason' => ['nullable', 'string', 'max:1000'],
+            ...collect(['uses_offers', 'uses_pantry', 'uses_season'])->flatMap(fn (string $field) => [
+                $field => ['nullable', 'array', 'max:50'],
+                $field.'.*' => ['string', 'max:255'],
+            ])->all(),
         ]);
+        $user = $request->user();
 
         try {
             $result = $this->recipes->post($request->user(), '/api/recipe-drafts', [
@@ -222,11 +230,14 @@ class PlannerController extends Controller
         }
 
         $url = $result['data']['url'] ?? null;
+        $saved = null;
         if (filled($data['key'] ?? null) && $url !== null) {
-            PlannedRecipe::where('user_id', $request->user()->id)->where('key', $data['key'])->update(['draft_url' => $url]);
+            $saved = PlannedRecipe::where('user_id', $user->id)->where('key', $data['key'])->first()
+                ?? PlannedRecipe::remember($user, [[...$data, 'source' => 'ai']])[0];
+            $saved->update(['draft_url' => $url]);
         }
 
-        return response()->json(['url' => $url]);
+        return response()->json(['url' => $url, 'recipe' => $saved?->toClient()]);
     }
 
     /**

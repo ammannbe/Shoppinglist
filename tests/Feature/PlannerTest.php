@@ -505,6 +505,33 @@ class PlannerTest extends TestCase
             && $request['ingredients'] === [['amount' => 4, 'unit' => 'Stk.', 'food' => 'Eier']]);
     }
 
+    public function test_imported_ideas_are_saved_with_the_import_link(): void
+    {
+        Http::fake(['recipes.test/api/recipe-drafts' => Http::sequence()
+            ->push(['data' => ['id' => 'abc', 'url' => 'https://recipes.test/import?draft=abc']], 201)
+            ->push(['data' => ['id' => 'def', 'url' => 'https://recipes.test/import?draft=def']], 201)]);
+        $user = $this->connected();
+        $idea = [
+            'key' => 'idea-0190a0b0-0000-7000-8000-000000000001', 'source' => 'ai', 'name' => 'Omelette', 'servings' => 2, 'reason' => 'Eier',
+            'uses_pantry' => ['Eier'], 'instructions' => '1. Braten', 'ingredients' => [['amount' => 4, 'unit' => 'Stk.', 'name' => 'Eier']],
+        ];
+
+        // Not saved before: saved now, with the import link and all details.
+        $this->actingAs($user)->postJson('/planner/recipes', $idea)->assertOk()
+            ->assertJsonPath('url', 'https://recipes.test/import?draft=abc')
+            ->assertJsonPath('recipe.key', $idea['key'])
+            ->assertJsonPath('recipe.draft_url', 'https://recipes.test/import?draft=abc');
+        $saved = PlannedRecipe::sole();
+        $this->assertSame([$user->id, 'ai', 'Omelette', 2, 'Eier', ['Eier'], '1. Braten', null],
+            [$saved->user_id, $saved->source, $saved->name, $saved->servings, $saved->data['reason'], $saved->data['uses_pantry'], $saved->data['instructions'], $saved->used_at]);
+
+        // Saved already: only the import link changes, no second entry.
+        $this->actingAs($user)->postJson('/planner/recipes', [...$idea, 'name' => 'Anders'])->assertOk();
+        $this->assertSame(['Omelette', 'https://recipes.test/import?draft=def'], [PlannedRecipe::sole()->name, PlannedRecipe::sole()->draft_url]);
+
+        $this->actingAs($user)->postJson('/planner/recipes', [...$idea, 'key' => 'recipe-5'])->assertUnprocessable();
+    }
+
     public function test_drafts_get_a_default_category_and_complexity(): void
     {
         Http::fake(['recipes.test/api/recipe-drafts' => Http::response(['data' => ['url' => 'https://recipes.test/x']], 201)]);
