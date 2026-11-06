@@ -1,16 +1,39 @@
 import Alpine from 'alpinejs';
-import { createApi } from './api.js';
+import { createApi, HttpError } from './api.js';
 import { prepareForAi } from './image.js';
 import { offerReader } from './offers.js';
+import { allowedStep, remoteIsNewer, STEPS, stepAllowed, stepTrail, SYNCED_KEYS, syncedState } from './planner-state.js';
 import { requests } from './requests.js';
 
-// Week planner (#/planner): offers (screenshots, PDFs, text) and pantry photos are read by the
-// AI on the server, recipes come from the connected recipe app and/or the AI, the result is
-// added to a list. The state is kept in localStorage, so a reload (Android may kill the
-// browser while the camera is open) does not lose the progress.
+// Week planner (#/planner/<step>): offers (screenshots, PDFs, text) and pantry photos are read
+// by the AI on the server, recipes come from the connected recipe app and/or the AI, the result
+// is added to a list. Four steps (planner-state.js STEPS), each its own history entry.
+// The state is kept in localStorage, so a reload (Android may kill the browser while the camera
+// is open) does not lose the progress, and on the server (PlannerStateController) to continue
+// on another device: last write wins by the time of the change.
 
 const STORAGE_KEY = 'shoppinglist.planner';
+// { updated_at: ms of the last change, pending: not sent to the server yet }
+const SYNC_KEY = 'shoppinglist.planner-sync';
+// Last step opened (device only), #/planner opens it.
+const STEP_KEY = 'shoppinglist.planner-step';
+const OWNER_KEY = 'shoppinglist.owner';
+const PUSH_DELAY = 1000;
 const api = createApi();
+
+/** Logout or another account: the planner state of this device is removed with the local data. */
+export function clearPlannerState() {
+    [STORAGE_KEY, SYNC_KEY, STEP_KEY].forEach((key) => localStorage.removeItem(key));
+}
+
+function readSyncMeta(stored) {
+    const meta = JSON.parse(localStorage.getItem(SYNC_KEY) ?? 'null');
+    if (meta) return meta;
+    // State of a version without server sync: sent once, unless the server has one already.
+    const started = Boolean(stored.offers?.length || stored.pantry?.length || stored.suggestions?.length);
+
+    return { updated_at: started ? 1 : 0, pending: started };
+}
 function initialState() {
     return {
         offers: [],
@@ -30,13 +53,6 @@ function initialState() {
 }
 
 /**
- * @param {object} options
- * @param {(target: string, name: string, items: object[], merge: boolean) => Promise<string>} options.addItems adds the items, returns the list id
- * @param {(target: string, items: object[]) => number} options.merges number of items that could be merged into open ones
- * @param {() => object[]} options.lists lists to add to
- * @param {(hash: string) => void} options.open opens a page next to the lists (shoppinglist.openFromLists)
- */
-/**
  * Offers grouped by shop tag, in order of the tag; offers without shop last.
  *
  * @returns {{ store: string, offers: object[] }[]}
@@ -54,10 +70,29 @@ function groupByStore(offers) {
         .map(([store, list]) => ({ store, offers: list }));
 }
 
-export function planner({ addItems, merges, lists, open }) {
+/**
+ * @param {object} options
+ * @param {(target: string, name: string, items: object[], merge: boolean) => Promise<string>} options.addItems adds the items, returns the list id
+ * @param {(target: string, items: object[]) => number} options.merges number of items that could be merged into open ones
+ * @param {() => object[]} options.lists lists to add to
+ * @param {(hash: string) => void} options.open opens a page next to the lists (shoppinglist.openFromLists)
+ * @param {(hash: string, options: object) => void} options.navigate shoppinglist.navigate (history aware)
+ */
+export function planner({ addItems, merges, lists, open, navigate }) {
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
+    // Synced state as last sent or received (JSON), to notice real changes.
+    let syncedJson = null;
+    let pushTimer = null;
+    let pushing = false;
+    let pulling = false;
+
     return {
         ...initialState(),
-        ...JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}'),
+        ...stored,
+        // Current step (route #/planner/<step>), null outside the planner.
+        step: null,
+        steps: STEPS,
+        syncMeta: readSyncMeta(stored),
         offerText: '',
         newPantryItem: '',
         // Saved offers (pool) not taken yet, grouped by shop to take them per shop.
@@ -68,24 +103,185 @@ export function planner({ addItems, merges, lists, open }) {
         ...offerReader(),
 
         init() {
+            syncedJson = JSON.stringify(syncedState(this));
             const save = () => {
                 const state = Object.fromEntries(Object.keys(initialState()).map((key) => [key, this[key]]));
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+                this.stateChanged();
             };
             Object.keys(initialState()).forEach((key) => this.$watch(key, save));
             this.$watch('target', () => { this.mergeCount = null; });
             // A recipe of the history (#/recipes) planned again.
             window.addEventListener('plan-recipe', (event) => this.planRecipe(event.detail));
 
-            // Saved offers are shown right away when the planner is opened (and the account known).
-            const load = () => {
-                if (location.hash.startsWith('#/planner') && Alpine.store('sync').user?.verified && navigator.onLine && !this.busy) {
-                    this.loadSavedOffers();
+            // Opened (not when changing the step): saved offers and the state of the server are loaded.
+            const opened = ({ force = false } = {}) => {
+                if (!location.hash.startsWith('#/planner')) {
+                    this.step = null;
+                    return;
                 }
+                const wasOpen = this.step !== null;
+                if (!this.routeStep() || (wasOpen && !force)) return;
+                // Before the offers: their request sets `busy`, which holds the pull back.
+                this.pullState();
+                if (Alpine.store('sync').user?.verified && navigator.onLine && !this.busy) this.loadSavedOffers();
             };
-            window.addEventListener('hashchange', load);
-            // A microtask, so only the user is tracked by the effect.
-            Alpine.effect(() => Alpine.store('sync').user && queueMicrotask(load));
+            window.addEventListener('hashchange', () => opened());
+            opened();
+            // The account is known and the sync started (the device belongs to it): load once.
+            // A microtask, so only the store is tracked by the effect.
+            let ready = false;
+            Alpine.effect(() => {
+                const now = Boolean(Alpine.store('sync').user) && !['starting', 'unverified', 'expired', 'local'].includes(Alpine.store('sync').status);
+                queueMicrotask(() => {
+                    if (now && !ready) opened({ force: true });
+                    ready = now;
+                });
+            });
+            // Back in the app or online again: changes of other devices, own changes not sent yet.
+            const resume = () => {
+                if (document.visibilityState !== 'visible') {
+                    this.pushState();
+                    return;
+                }
+                if (this.step) this.pullState();
+                else this.pushState();
+            };
+            document.addEventListener('visibilitychange', resume);
+            window.addEventListener('online', resume);
+        },
+
+        // ---- steps (#/planner/<step>, the back gesture goes back one step)
+
+        /**
+         * Takes the step of the route; #/planner, unknown steps and steps that cannot be
+         * opened yet are replaced by the last step that can (#/planner: the last used one).
+         *
+         * @returns {boolean} whether the route was a valid step
+         */
+        routeStep() {
+            const requested = location.hash.split('/')[2] ?? null;
+            const step = allowedStep(requested ?? localStorage.getItem(STEP_KEY) ?? STEPS[0], this);
+            if (step !== requested) {
+                navigate(`#/planner/${step}`, { replace: true });
+                return false;
+            }
+            this.step = step;
+            localStorage.setItem(STEP_KEY, step);
+
+            return true;
+        },
+
+        canOpen(step) {
+            return stepAllowed(step, this);
+        },
+
+        get stepIndex() {
+            return STEPS.indexOf(this.step);
+        },
+
+        get nextStep() {
+            return STEPS[this.stepIndex + 1] ?? null;
+        },
+
+        /** Why "Next" is disabled (shown next to it). */
+        get nextBlocked() {
+            if (!this.nextStep || this.canOpen(this.nextStep)) return null;
+
+            return this.nextStep === 'recipes' ? this.$t('Take offers or add what is at home first.') : this.$t('Select at least one recipe.');
+        },
+
+        /** Earlier steps go back in the history, later ones push the skipped steps first. */
+        goStep(step) {
+            if (!step || step === this.step || !this.canOpen(step)) return;
+            const target = `#/planner/${step}`;
+            if (STEPS.indexOf(step) < this.stepIndex) {
+                navigate(target, { replace: true });
+            } else {
+                navigate(target, { trail: stepTrail(this.step, step).map((each) => `#/planner/${each}`) });
+            }
+        },
+
+        startOver() {
+            if (!confirm(this.$t('Start over?'))) return;
+            this.reset();
+            this.goStep(STEPS[0]);
+        },
+
+        // ---- state on the server (PUT/GET /planner/state)
+
+        /** Synced only for the account this device belongs to (not before a switch is detected). */
+        canSync() {
+            const user = Alpine.store('sync').user;
+
+            return Boolean(user?.verified && user.assistant && navigator.onLine && localStorage.getItem(OWNER_KEY) === user.email);
+        },
+
+        setSyncMeta(meta) {
+            this.syncMeta = meta;
+            localStorage.setItem(SYNC_KEY, JSON.stringify(meta));
+        },
+
+        /** A synced part changed: remember the time and send it a moment later. */
+        stateChanged() {
+            const json = JSON.stringify(syncedState(this));
+            if (json === syncedJson) return;
+            syncedJson = json;
+            this.setSyncMeta({ updated_at: Math.max(Date.now(), this.syncMeta.updated_at + 1), pending: true });
+            clearTimeout(pushTimer);
+            pushTimer = setTimeout(() => this.pushState(), PUSH_DELAY);
+        },
+
+        /** Sends the state not sent yet; offline it stays pending until the next foreground or reconnect. */
+        async pushState() {
+            clearTimeout(pushTimer);
+            if (!this.syncMeta.pending || !this.canSync()) return;
+            if (pushing) {
+                pushTimer = setTimeout(() => this.pushState(), PUSH_DELAY);
+                return;
+            }
+            pushing = true;
+            const sentAt = this.syncMeta.updated_at;
+            try {
+                const remote = await api.put('/planner/state', { state: JSON.parse(syncedJson), updated_at: sentAt });
+                // Changed again meanwhile: that change is sent next.
+                if (this.syncMeta.updated_at !== sentAt) return;
+                if (remote.accepted) this.setSyncMeta({ updated_at: remote.updated_at, pending: false });
+                else this.applyRemote(remote);
+            } catch (error) {
+                // Rejected (too large): retrying does not help.
+                if (error instanceof HttpError && error.status === 422) this.setSyncMeta({ ...this.syncMeta, pending: false });
+            } finally {
+                pushing = false;
+            }
+            if (this.syncMeta.pending && this.syncMeta.updated_at !== sentAt) pushTimer = setTimeout(() => this.pushState(), PUSH_DELAY);
+        },
+
+        /** Takes the server's state if it is newer, then sends own changes not sent yet. */
+        async pullState() {
+            if (!this.canSync() || pulling || this.busy) return;
+            pulling = true;
+            try {
+                const remote = await api.get('/planner/state');
+                if (remoteIsNewer(this.syncMeta, remote)) this.applyRemote(remote);
+            } catch {
+                // Offline or server error: the local state stays, retried later.
+            } finally {
+                pulling = false;
+            }
+            await this.pushState();
+        },
+
+        applyRemote(remote) {
+            const defaults = initialState();
+            const values = remote.state && !Array.isArray(remote.state) ? remote.state : {};
+            const state = Object.fromEntries(SYNCED_KEYS.map((key) => [key, values[key] ?? defaults[key]]));
+            syncedJson = JSON.stringify(syncedState(state));
+            Object.assign(this, state);
+            this.mergeCount = null;
+            this.setSyncMeta({ updated_at: remote.updated_at, pending: false });
+            // The current step may not be possible anymore (e.g. the offers were removed there).
+            if (this.step && !this.canOpen(this.step)) this.goStep(allowedStep(this.step, this));
         },
 
         get recipes() {

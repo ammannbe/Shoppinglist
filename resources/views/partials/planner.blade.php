@@ -1,10 +1,35 @@
 {{--
-    Week planner (#/planner, resources/js/planner.js): offers and pantry read by the AI,
-    recipe suggestions (recipe app and AI ideas), shopping list. Needs a connection.
+    Week planner (#/planner/<step>, resources/js/planner.js): offers and pantry read by the AI,
+    recipe suggestions (recipe app and AI ideas), shopping list, one step per page with a step
+    indicator on top and "Back"/"Next" at the bottom. Needs a connection.
 --}}
-<section x-show="route.view === 'planner'" class="space-y-4"
-    x-data="planner({ addItems: (target, name, items, merge) => addPlannedItems(target, name, items, merge), merges: (target, items) => plannedMerges(target, items).size, lists: () => lists, open: (hash) => openFromLists(hash) })">
-    <div x-show="recipes && !recipes.connected" class="notice flex flex-wrap items-center justify-between gap-3">
+<section x-show="route.view === 'planner'" class="space-y-4 pb-20"
+    x-data="planner({ addItems: (target, name, items, merge) => addPlannedItems(target, name, items, merge), merges: (target, items) => plannedMerges(target, items).size, lists: () => lists, open: (hash) => openFromLists(hash), navigate: (hash, options) => navigate(hash, options) })">
+    {{-- Steps: done and possible ones can be opened directly; "Start over" clears everything --}}
+    <nav class="flex items-start gap-2" :aria-label="$t('Steps')">
+        <ol class="grid min-w-0 flex-1 grid-cols-4 gap-1">
+            <template x-for="(each, index) in steps" :key="each">
+                <li>
+                    <button type="button" class="flex w-full flex-col items-center gap-1 rounded-lg px-1 py-1 text-xs disabled:opacity-40"
+                        :disabled="!canOpen(each)" :aria-current="step === each && 'step'" @click="goStep(each)">
+                        <span class="grid size-7 place-items-center rounded-full text-sm font-semibold"
+                            :class="step === each ? 'bg-emerald-700 text-white' : (index < stepIndex ? 'bg-emerald-100 text-emerald-800' : 'border border-stone-300 bg-white text-stone-600')"
+                            x-text="index + 1"></span>
+                        <span class="w-full truncate text-center" :class="step === each ? 'font-semibold text-stone-900' : 'text-stone-600'"
+                            x-text="{ offers: $t('Offers'), pantry: $t('At home'), recipes: $t('Recipes'), list: $t('List') }[each]"></span>
+                    </button>
+                </li>
+            </template>
+        </ol>
+        <button type="button" x-show="offers.length || pantry.length || suggestions.length || items.length"
+            class="button-secondary mt-0.5 flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 text-sm min-[480px]:px-3" :disabled="busy" @click="startOver()"
+            :title="$t('Start over')" :aria-label="$t('Start over')">
+            <svg viewBox="0 0 24 24" class="size-5 min-[480px]:size-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.3-5.6M4 4v5h5"/></svg>
+            <span class="hidden min-[480px]:inline" x-text="$t('Start over')"></span>
+        </button>
+    </nav>
+
+    <div x-show="step === 'recipes' && recipes && !recipes.connected" class="notice flex flex-wrap items-center justify-between gap-3">
         <span x-text="$t('Connect :name to get your own recipes suggested and to save new ones there.', { name: recipes?.name })"></span>
         <a href="/recipes/connect?from=planner" data-online class="button-secondary shrink-0 text-sm" x-text="$t('Connect')"></a>
     </div>
@@ -13,7 +38,7 @@
     <p class="sr-only" role="status" x-text="busy ?? ''"></p>
 
     {{-- 1. Offers: saved ones of the pool are offered per shop, new ones can be read --}}
-    <x-planner-step number="1" title="$t('Offers')">
+    <x-planner-step number="1" title="$t('Offers')" x-show="step === 'offers'">
         <x-slot:actions>
             <a href="#/offers" class="shrink-0 text-sm text-stone-500 underline" x-text="$t('Manage')"></a>
         </x-slot:actions>
@@ -92,7 +117,7 @@
     </x-planner-step>
 
     {{-- 2. Pantry --}}
-    <x-planner-step number="2" title="$t('At home (optional)')">
+    <x-planner-step number="2" title="$t('At home (optional)')" x-show="step === 'pantry'">
         <x-slot:actions>
             <button type="button" x-show="pantry.length" class="shrink-0 text-sm text-stone-500 underline" @click="clearPantry()" x-text="$t('Remove all')"></button>
         </x-slot:actions>
@@ -121,26 +146,38 @@
     </x-planner-step>
 
     {{-- 3. Recipes --}}
-    <x-planner-step number="3" title="$t('Recipes')">
-        <div class="grid grid-cols-2 gap-3">
-            <label class="block">
-                <span class="label" x-text="$t('Servings')"></span>
-                <input x-model.number="servings" type="number" min="1" max="20" inputmode="numeric" class="field w-full">
-            </label>
-            <label class="block">
-                <span class="label" x-text="$t('Number of recipes')"></span>
-                <input x-model.number="count" type="number" min="1" max="10" inputmode="numeric" class="field w-full">
-            </label>
-        </div>
-        <input x-model="wishes" class="field w-full" maxlength="500" :placeholder="$t('Wishes, e.g. vegetarian, quick, no fish')">
-        <label x-show="recipes?.connected" class="flex items-center gap-2 text-sm">
-            <input type="checkbox" class="size-4 accent-emerald-700" x-model="ideas">
-            <span x-text="$t('Also new recipe ideas of the AI')"></span>
-        </label>
-        <button type="button" class="button flex w-full items-center justify-center gap-2" :disabled="busy || (!selectedOffers.length && !selectedPantry.length)" @click="suggest()">
+    <x-planner-step number="3" title="$t('Recipes')" x-show="step === 'recipes'">
+        <button type="button" class="button flex w-full items-center justify-center gap-2 py-3 text-lg" :disabled="busy || (!selectedOffers.length && !selectedPantry.length)" @click="suggest()">
             <x-spinner x-show="busyKey === 'suggest'" />
             <span x-text="label('suggest', $t('Suggest recipes'))"></span>
         </button>
+        {{-- Rarely changed: servings, number, wishes and AI ideas --}}
+        <details class="group/options rounded-lg border border-stone-200">
+            <summary class="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-sm text-stone-600">
+                <span class="min-w-0 truncate">
+                    <span class="font-medium" x-text="$t('Options')"></span>
+                    <span class="text-stone-500" x-text="' · ' + [$t(':count servings', { count: servings }), $t(count === 1 ? ':count recipe' : ':count recipes', { count }), wishes.trim()].filter(Boolean).join(' · ')"></span>
+                </span>
+                <span class="transition-transform group-open/options:rotate-90" aria-hidden="true">›</span>
+            </summary>
+            <div class="space-y-3 border-t border-stone-200 p-3">
+                <div class="grid grid-cols-2 gap-3">
+                    <label class="block">
+                        <span class="label" x-text="$t('Servings')"></span>
+                        <input x-model.number="servings" type="number" min="1" max="20" inputmode="numeric" class="field w-full">
+                    </label>
+                    <label class="block">
+                        <span class="label" x-text="$t('Number of recipes')"></span>
+                        <input x-model.number="count" type="number" min="1" max="10" inputmode="numeric" class="field w-full">
+                    </label>
+                </div>
+                <input x-model="wishes" class="field w-full" maxlength="500" :placeholder="$t('Wishes, e.g. vegetarian, quick, no fish')" :aria-label="$t('Wishes')">
+                <label x-show="recipes?.connected" class="flex items-center gap-2 text-sm">
+                    <input type="checkbox" class="size-4 accent-emerald-700" x-model="ideas">
+                    <span x-text="$t('Also new recipe ideas of the AI')"></span>
+                </label>
+            </div>
+        </details>
         <x-planner-error key="suggest" />
         <p x-show="warning && !warningMore" class="notice" x-text="warning"></p>
 
@@ -217,7 +254,7 @@
     </x-planner-step>
 
     {{-- 4. Shopping list --}}
-    <x-planner-step number="4" title="$t('Shopping list')" x-show="suggestions.length">
+    <x-planner-step number="4" title="$t('Shopping list')" x-show="step === 'list'">
         <button type="button" class="button flex w-full items-center justify-center gap-2" :disabled="busy || !selectedSuggestions.length" @click="buildList()">
             <x-spinner x-show="busyKey === 'list'" />
             <span x-text="label('list', $t('Create shopping list'))"></span>
@@ -264,6 +301,12 @@
         </template>
     </x-planner-step>
 
-    <button type="button" x-show="offers.length || pantry.length || suggestions.length" class="text-sm text-stone-500 underline"
-        @click="confirm($t('Start over?')) && reset()" x-text="$t('Start over')"></button>
+    {{-- Back and next (the back gesture also goes back one step); "Next" waits for what the next step needs --}}
+    <div x-show="route.view === 'planner' && step" class="fixed inset-x-0 bottom-0 z-20 border-t border-stone-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
+        <div class="mx-auto flex max-w-xl items-center gap-3 px-3 py-2">
+            <button type="button" class="button-secondary shrink-0" :disabled="stepIndex <= 0" @click="goStep(steps[stepIndex - 1])" x-text="$t('Back')"></button>
+            <p class="min-w-0 flex-1 text-center text-xs text-stone-500" x-text="nextBlocked ?? ''"></p>
+            <button type="button" x-show="nextStep" class="button shrink-0" :disabled="!nextStep || !canOpen(nextStep)" @click="goStep(nextStep)" x-text="$t('Next')"></button>
+        </div>
+    </div>
 </section>

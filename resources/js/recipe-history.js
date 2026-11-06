@@ -40,7 +40,7 @@ export function recipeHistory({ open: openTab }) {
 
         plan(recipe) {
             planRecipe(recipe);
-            openTab('#/planner');
+            openTab('#/planner/recipes');
         },
 
         async remove(recipe) {

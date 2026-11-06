@@ -8,6 +8,7 @@ use App\Http\Controllers\MemberController;
 use App\Http\Controllers\OfferController;
 use App\Http\Controllers\PlannedRecipeController;
 use App\Http\Controllers\PlannerController;
+use App\Http\Controllers\PlannerStateController;
 use App\Http\Controllers\PreferenceController;
 use App\Http\Controllers\RecipesConnectionController;
 use App\Http\Controllers\SyncController;
@@ -78,6 +79,10 @@ Route::middleware('auth')->group(function () {
             Route::post('list', [PlannerController::class, 'list'])->name('list');
             Route::post('recipes', [PlannerController::class, 'saveRecipe'])->name('recipes');
         });
+
+        // Planner state across devices (no AI request, not rate limited like the planner).
+        Route::get('planner/state', [PlannerStateController::class, 'show'])->name('planner.state.show');
+        Route::put('planner/state', [PlannerStateController::class, 'update'])->name('planner.state.update');
 
         Route::get('planned-recipes', [PlannedRecipeController::class, 'index'])->name('planned-recipes.index');
         Route::delete('planned-recipes', [PlannedRecipeController::class, 'destroyAll'])->name('planned-recipes.destroy-all');

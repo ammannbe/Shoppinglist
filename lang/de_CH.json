@@ -597,5 +597,15 @@
     "No :provider account yet?": "Noch kein :provider-Konto?",
     "Create one": "Jetzt erstellen",
     "Your account has no password yet. You can set one with \"Forgot your password?\" on the login page.": "Dein Konto hat noch kein Passwort. Du kannst eines mit «Passwort vergessen?» auf der Anmeldeseite setzen.",
-    "Overview": "Übersicht"
+    "Overview": "Übersicht",
+    "Steps": "Schritte",
+    "List": "Liste",
+    "Next": "Weiter",
+    "Options": "Optionen",
+    "Wishes": "Wünsche",
+    ":count recipe": ":count Rezept",
+    ":count recipes": ":count Rezepte",
+    "Take offers or add what is at home first.": "Übernimm zuerst Aktionen oder füge hinzu, was du zu Hause hast.",
+    "Select at least one recipe.": "Wähle mindestens ein Rezept aus.",
+    "The planner state is too large.": "Der Stand der Wochenplanung ist zu gross."
 }

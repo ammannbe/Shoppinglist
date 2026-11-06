@@ -11,7 +11,7 @@ import { closeLayersOnBack } from './layers.js';
 import { createLightboxStore } from './lightbox.js';
 import { createPrefsStore } from './prefs.js';
 import { offersPool } from './offers.js';
-import { planner } from './planner.js';
+import { clearPlannerState, planner } from './planner.js';
 import { recipeHistory } from './recipe-history.js';
 import { deviceCountry, inCountry, storeIconUrl, storeUsage } from './stores.js';
 import { suggestField } from './suggest.js';
@@ -522,7 +522,7 @@ Alpine.data('shoppinglist', () => ({
 
     get backLink() {
         if (['products', 'units', 'stores', 'install'].includes(this.route.view)) return '#/settings';
-        if (this.route.view === 'offers') return '#/planner';
+        if (this.route.view === 'offers') return '#/planner/offers';
 
         return this.route.view === 'settings' ? this.settingsBack : '#/';
     },
@@ -1154,6 +1154,7 @@ async function wipeLocalData() {
     await db?.remove();
     localStorage.removeItem(OWNER_KEY);
     localStorage.removeItem(USER_KEY);
+    clearPlannerState();
 }
 
 async function boot() {
