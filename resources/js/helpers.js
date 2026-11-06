@@ -250,3 +250,11 @@ export function formatAmount(amount, locale) {
 
     return new Intl.NumberFormat(locale.replace('_', '-'), { maximumFractionDigits: 3 }).format(amount);
 }
+
+/** Day and month of a date or ISO time ("6.11."), empty without a value. */
+export function shortDate(value, locale) {
+    if (!value) return '';
+    const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00` : value);
+
+    return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString(locale.replace('_', '-'), { day: 'numeric', month: 'numeric' });
+}

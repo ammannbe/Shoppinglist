@@ -6,21 +6,25 @@ export const STEPS = ['offers', 'pantry', 'recipes', 'list'];
 
 /**
  * Parts of the planner state kept on the server (cross-device). Busy flags, errors, warnings
- * and the current step stay on the device.
+ * and the current step stay on the device. The planned recipes are saved recipes on the server
+ * (planned_recipes), not part of the state.
  */
-export const SYNCED_KEYS = ['offers', 'pantry', 'servings', 'count', 'ideas', 'wishes', 'suggestions', 'items', 'target', 'listName'];
+export const SYNCED_KEYS = ['offerIds', 'pantry', 'servings', 'count', 'ideas', 'wishes', 'suggestions', 'items', 'builtRecipes', 'target', 'listName'];
 
 /**
- * Whether a step can be opened: recipes need selected offers or pantry items (or recipes
- * already there, e.g. planned again from the history), the list needs selected recipes.
+ * Whether a step can be opened: recipes need selected offers, pantry items or planned recipes,
+ * the list needs planned recipes (or a list built already).
+ *
+ * @param {string} step
+ * @param {{ offerIds?: string[], pantry?: object[], planned?: object[], items?: object[] }} state
  */
 export function stepAllowed(step, state) {
-    const selected = (list) => (list ?? []).some((each) => each.selected);
+    const planned = (state.planned ?? []).length > 0;
     switch (step) {
         case 'recipes':
-            return selected(state.offers) || selected(state.pantry) || (state.suggestions ?? []).length > 0;
+            return (state.offerIds ?? []).length > 0 || (state.pantry ?? []).some((item) => item.selected) || planned;
         case 'list':
-            return selected(state.suggestions) || (state.items ?? []).length > 0;
+            return planned || (state.items ?? []).length > 0;
         default:
             return STEPS.includes(step);
     }
@@ -47,6 +51,36 @@ export function stepTrail(from, to) {
 }
 
 /**
+ * State of an older version in the current shape (stored on the device or on the server):
+ * - the taken offers (`offers`, each with `selected`) become the selection of offer ids;
+ * - suggestions lose their selection (planning saves them now);
+ * - a list built from the selected suggestions keeps their links (`builtRecipes`).
+ */
+export function migrateState(state) {
+    if (!state || typeof state !== 'object' || Array.isArray(state)) return {};
+    const { offers, ...migrated } = state;
+    if (!Array.isArray(migrated.offerIds)) {
+        migrated.offerIds = (Array.isArray(offers) ? offers : []).filter((offer) => offer?.id && offer.selected !== false).map((offer) => offer.id);
+    }
+    const suggestions = Array.isArray(migrated.suggestions) ? migrated.suggestions : [];
+    if (!Array.isArray(migrated.builtRecipes)) {
+        migrated.builtRecipes = (migrated.items ?? []).length
+            ? suggestions.filter((suggestion) => suggestion.selected).map((suggestion) => builtRecipe(suggestion, suggestion.planned_id))
+            : [];
+    }
+    if (Array.isArray(migrated.suggestions)) {
+        migrated.suggestions = suggestions.map(({ selected, saved, planned_id: plannedId, ...suggestion }) => suggestion);
+    }
+
+    return migrated;
+}
+
+/** A recipe the list was built from: the items link to it (`items.recipes`, recipe-links.js). */
+export function builtRecipe(recipe, key = null) {
+    return { name: recipe.name, url: recipe.url ?? null, key: key ?? null };
+}
+
+/**
  * Plain copy of the synced parts (Alpine proxies become plain values). Data URLs (photos) are
  * not synced, they stay on the device.
  */
@@ -57,14 +91,24 @@ export function syncedState(state) {
 }
 
 /**
- * Suggestions after a new search: the new ones replace the shown ones, only the recipes picked
- * for the list stay (on top, still selected), so the list step keeps what it was built from.
+ * The selected offer ids still available: offers removed from the pool or expired drop out
+ * (all are kept while the pool is not loaded).
+ *
+ * @param {string[]} ids
+ * @param {object[]|null} pool offers of GET /offers
  */
-export function replaceSuggestions(current, added) {
-    const kept = (current ?? []).filter((suggestion) => suggestion.selected);
-    const keys = new Set(kept.map((suggestion) => suggestion.key));
+export function selectedOfferIds(ids, pool) {
+    if (!pool) return ids ?? [];
+    const known = new Set(pool.map((offer) => offer.id));
 
-    return [...kept, ...added.filter((suggestion) => !keys.has(suggestion.key))];
+    return (ids ?? []).filter((id) => known.has(id));
+}
+
+/** Suggestions without the recipes planned already (same key; own recipes are "recipe-<id>"). */
+export function withoutPlanned(suggestions, planned) {
+    const keys = new Set((planned ?? []).map((recipe) => recipe.key));
+
+    return suggestions.filter((suggestion) => !keys.has(suggestion.key));
 }
 
 /** Recipes not to suggest again (`exclude` of POST /planner/suggestions). */
@@ -84,6 +128,19 @@ export function recipePayload(suggestion) {
     if (picked.servings != null) picked.servings = Number(picked.servings) || 1;
 
     return JSON.parse(JSON.stringify(picked));
+}
+
+/**
+ * The planner's selection a recipe planned again is matched with (POST /planned-recipes/{id}/plan),
+ * from the stored planner state.
+ */
+export function plannerSelection(state) {
+    const migrated = migrateState(state);
+
+    return {
+        offer_ids: migrated.offerIds ?? [],
+        pantry: (migrated.pantry ?? []).filter((item) => item.selected).map((item) => item.name),
+    };
 }
 
 /**

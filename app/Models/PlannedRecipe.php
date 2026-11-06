@@ -2,15 +2,20 @@
 
 namespace App\Models;
 
+use App\Support\FoodNames;
+use App\Support\Seasons;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * A planner suggestion the user saved or put on a shopping list (Recipes tab), see PlannedRecipeController.
+ * A planner suggestion the user planned or put on a shopping list (Recipes tab), see PlannedRecipeController.
+ * `planned`: planned, not on a list yet (the planner's list step builds the list from these);
+ * `planned_at`: when it was planned, the date of the offers in `uses_offers`; `used_at`: last
+ * time it went into a shopping list.
  */
-#[Fillable(['key', 'source', 'recipe_id', 'name', 'url', 'servings', 'data', 'draft_url', 'used_at'])]
+#[Fillable(['key', 'source', 'recipe_id', 'name', 'url', 'servings', 'data', 'draft_url', 'planned', 'planned_at', 'used_at'])]
 class PlannedRecipe extends Model
 {
     use HasUuids;
@@ -23,7 +28,7 @@ class PlannedRecipe extends Model
 
     protected function casts(): array
     {
-        return ['data' => 'array', 'used_at' => 'datetime'];
+        return ['data' => 'array', 'planned' => 'boolean', 'planned_at' => 'datetime', 'used_at' => 'datetime'];
     }
 
     public function user(): BelongsTo
@@ -32,14 +37,15 @@ class PlannedRecipe extends Model
     }
 
     /**
-     * Saves planner suggestions (on "Save" and when they go into a shopping list): own recipes
-     * once per recipe id (moved to the top again), AI ideas by their key. Fields not sent keep
-     * their saved value.
+     * Saves planner suggestions (when planned, imported into the recipe app or put on a shopping
+     * list): own recipes once per recipe id (moved to the top again), AI ideas by their key.
+     * Fields not sent keep their saved value. `planned` plans them (now), `used` marks them as
+     * on a list (no longer planned).
      *
      * @param  list<array<string, mixed>>  $suggestions  validated by StorePlannedRecipeRequest::recipe()
      * @return list<self>
      */
-    public static function remember(User $user, array $suggestions, bool $used = false): array
+    public static function remember(User $user, array $suggestions, bool $used = false, bool $planned = false): array
     {
         $saved = [];
         foreach ($suggestions as $suggestion) {
@@ -53,20 +59,51 @@ class PlannedRecipe extends Model
                 'servings' => isset($suggestion['servings']) ? (int) round($suggestion['servings']) : $recipe->servings,
                 'data' => [...$recipe->data ?? [], ...array_intersect_key($suggestion, array_flip(self::DATA))],
             ]);
+            if ($planned) {
+                $recipe->planned = true;
+                $recipe->planned_at = now();
+            }
             if ($used) {
                 $recipe->used_at = now();
+                $recipe->planned = false;
+                $recipe->planned_at ??= now();
             }
             $recipe->user()->associate($user);
             $recipe->touch();
             $saved[] = $recipe;
         }
 
-        $old = self::where('user_id', $user->id)->latest('updated_at')->skip(self::LIMIT)->take(PHP_INT_MAX)->pluck('id');
+        // Planned recipes are kept, the oldest others make room.
+        $planned = self::where('user_id', $user->id)->where('planned', true)->count();
+        $old = self::where('user_id', $user->id)->where('planned', false)->latest('updated_at')
+            ->skip(max(0, self::LIMIT - $planned))->take(PHP_INT_MAX)->pluck('id');
         if ($old->isNotEmpty()) {
             self::whereIn('id', $old)->delete();
         }
 
         return $saved;
+    }
+
+    /**
+     * Plans the recipe again (Recipes tab): the offers, pantry items and foods in season it uses
+     * are taken from the current ones by the ingredient names (FoodNames, Seasons::among, no AI).
+     *
+     * @param  list<string>  $offers  names of the selected offers
+     * @param  list<string>  $pantry  names of the selected pantry items
+     * @param  list<string>  $seasonal  foods in season this month
+     */
+    public function planAgain(array $offers, array $pantry, array $seasonal): void
+    {
+        $ingredients = array_column($this->data['ingredients'] ?? [], 'name');
+        $this->data = [
+            ...$this->data,
+            'uses_offers' => FoodNames::used($ingredients, $offers),
+            'uses_pantry' => FoodNames::used($ingredients, $pantry),
+            'uses_season' => Seasons::among($ingredients, $seasonal),
+        ];
+        $this->planned = true;
+        $this->planned_at = now();
+        $this->save();
     }
 
     /**
@@ -117,6 +154,8 @@ class PlannedRecipe extends Model
             'url' => $this->url,
             'servings' => $this->servings,
             'draft_url' => $this->draft_url,
+            'planned' => (bool) $this->planned,
+            'planned_at' => $this->planned_at?->toIso8601String(),
             'used_at' => $this->used_at?->toIso8601String(),
             'created_at' => $this->created_at->toIso8601String(),
             'updated_at' => $this->updated_at->toIso8601String(),
@@ -130,6 +169,6 @@ class PlannedRecipe extends Model
      */
     public function toShared(): array
     {
-        return [...collect($this->toClient())->except(['draft_url', 'used_at'])->all(), 'shared' => true];
+        return [...collect($this->toClient())->except(['draft_url', 'planned', 'used_at'])->all(), 'shared' => true];
     }
 }

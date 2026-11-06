@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { csvFirstColumn, csvValue, mergedAmount, normalizeName, parseItemInput, sameName, seasonalFood, splitItemInput, suggestNames } from '../../resources/js/helpers.js';
+import { csvFirstColumn, csvValue, mergedAmount, normalizeName, parseItemInput, sameName, seasonalFood, shortDate, splitItemInput, suggestNames } from '../../resources/js/helpers.js';
 
 const UNITS = ['l', 'kg', 'g', 'Stk.'];
 
@@ -77,5 +77,14 @@ describe('seasonalFood', () => {
         expect(seasonalFood('Knoblauch', foods)).toBe('Knoblauch');
         expect(seasonalFood('Milch', foods)).toBeNull();
         expect(seasonalFood('Tomaten', [])).toBeNull();
+    });
+});
+
+describe('shortDate', () => {
+    it('shows day and month of a date or a time', () => {
+        expect(shortDate('2026-11-06', 'de_CH')).toBe('6.11.');
+        expect(shortDate('2026-11-06T10:00:00+01:00', 'de_CH')).toBe('6.11.');
+        expect(shortDate(null, 'de_CH')).toBe('');
+        expect(shortDate('nonsense', 'de_CH')).toBe('');
     });
 });

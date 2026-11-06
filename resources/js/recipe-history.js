@@ -1,13 +1,16 @@
 import Alpine from 'alpinejs';
 import { createApi } from './api.js';
+import { shortDate } from './helpers.js';
 import { closeDialogThen } from './layers.js';
+import { currentSelection } from './planner.js';
 import { linkedItems, recipeProgress, unavailableRecipe } from './recipe-links.js';
 import { requests } from './requests.js';
 
-// Recipes tab (#/recipes, PlannedRecipeController): planner suggestions the user saved or put on
-// a shopping list. A tap opens the details in a dialog: cook one again (ingredients and
-// preparation of AI ideas are kept), plan it again (adds it to the planner's recipes) or import
-// an AI idea into the recipe app afterwards. Loading needs a connection, the last loaded recipes
+// Recipes tab (#/recipes, PlannedRecipeController): planner suggestions the user planned or put
+// on a shopping list, in two groups: planned (the planner builds the next list from them) and on
+// a list / earlier. A tap opens the details in a dialog: cook one again (ingredients and
+// preparation of AI ideas are kept), plan it again (matched with the planner's current offers
+// and pantry), take it out of the plan or import an AI idea into the recipe app afterwards. Loading needs a connection, the last loaded recipes
 // are kept on the device; the items linked to a recipe come from the local database.
 // `#/recipes/<id>` (recipe links of items) opens the dialog of that recipe.
 
@@ -15,9 +18,9 @@ const api = createApi();
 // Last loaded recipes (offline), removed with the local data.
 const CACHE_KEY = 'shoppinglist.recipes';
 
-/** Takes a saved recipe into the week planner (planner.js listens). */
-export function planRecipe(recipe) {
-    window.dispatchEvent(new CustomEvent('plan-recipe', { detail: recipe }));
+/** A saved recipe was planned again or taken out of the plan (planner.js listens). */
+function plannedChanged(recipe) {
+    window.dispatchEvent(new CustomEvent('planned-recipe', { detail: recipe }));
 }
 
 export function clearRecipeCache() {
@@ -128,10 +131,38 @@ export function recipeHistory({ open: openTab, replace }) {
             closeDialogThen(this.$refs.recipeDialog, () => openTab(`#/list/${listId}`));
         },
 
-        /** Into the planner's recipes; the dialog's history entry has to be gone before navigating. */
-        plan(recipe) {
-            planRecipe(recipe);
-            closeDialogThen(this.$refs.recipeDialog, () => openTab('#/planner/recipes'));
+        get plannedRecipes() {
+            return this.recipes.filter((recipe) => recipe.planned);
+        },
+
+        get earlierRecipes() {
+            return this.recipes.filter((recipe) => !recipe.planned);
+        },
+
+        /** Replaces a recipe with the server's answer (and tells the planner). */
+        updated(recipe) {
+            this.store(this.recipes.map((each) => (each.id === recipe.id ? recipe : each)));
+            plannedChanged(recipe);
+        },
+
+        /**
+         * Plans it again with the planner's current offers and pantry, then opens the planner's
+         * recipes; the dialog's history entry has to be gone before navigating.
+         */
+        async plan(recipe) {
+            await this.run(`plan:${recipe.id}`, this.$t('Planning …'), async () => {
+                const { recipe: planned } = await api.post(`/planned-recipes/${recipe.id}/plan`, currentSelection());
+                this.updated(planned);
+                closeDialogThen(this.$refs.recipeDialog, () => openTab('#/planner/recipes'));
+            });
+        },
+
+        async unplan(recipe) {
+            await this.run(`unplan:${recipe.id}`, this.$t('Removing …'), async () => {
+                const { recipe: saved } = await api.delete(`/planned-recipes/${recipe.id}/plan`);
+                this.updated(saved);
+                if (this.detail?.id === saved.id) this.detail = saved;
+            });
         },
 
         async remove(recipe) {
@@ -139,6 +170,7 @@ export function recipeHistory({ open: openTab, replace }) {
                 await api.delete(`/planned-recipes/${recipe.id}`);
                 closeDialogThen(this.$refs.recipeDialog, () => {
                     this.store(this.recipes.filter((each) => each.id !== recipe.id));
+                    if (recipe.planned) plannedChanged({ ...recipe, planned: false });
                 });
             });
         },
@@ -147,6 +179,7 @@ export function recipeHistory({ open: openTab, replace }) {
             if (!confirm(this.$t('Remove all recipes from the history?'))) return;
             await this.run('clear', this.$t('Removing …'), async () => {
                 await api.delete('/planned-recipes');
+                this.plannedRecipes.forEach((recipe) => plannedChanged({ ...recipe, planned: false }));
                 this.store([]);
             });
         },
@@ -171,6 +204,10 @@ export function recipeHistory({ open: openTab, replace }) {
             } else {
                 tab?.close();
             }
+        },
+
+        shortDate(value) {
+            return shortDate(value, Alpine.store('i18n').locale);
         },
 
         date(value) {

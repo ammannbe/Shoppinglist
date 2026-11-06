@@ -38,9 +38,9 @@ describe('recipe links', () => {
         expect(joinRecipes([{ name: 'Salat', key: 'r2' }], [{ name: 'Salat', key: 'r4' }]).map((recipe) => recipe.key)).toEqual(['r2', 'r4']);
     });
 
-    it('link planned items to the saved recipe of the suggestion', () => {
-        const suggestions = [{ name: 'Lasagne', url: 'https://recipes.test/5', planned_id: 'r1' }, { name: 'Omelette' }];
-        expect(listRecipes(['Lasagne', 'Omelette', 'Unbekannt'], suggestions)).toEqual([
+    it('link planned items to the saved recipe the list was built from', () => {
+        const built = [{ name: 'Lasagne', url: 'https://recipes.test/5', key: 'r1' }, { name: 'Omelette', url: null, key: null }];
+        expect(listRecipes(['Lasagne', 'Omelette', 'Unbekannt'], built)).toEqual([
             { name: 'Lasagne', url: 'https://recipes.test/5', key: 'r1' },
             { name: 'Omelette', url: null, key: null },
             { name: 'Unbekannt', url: null, key: null },

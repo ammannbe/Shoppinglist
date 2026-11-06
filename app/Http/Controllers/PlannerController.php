@@ -149,7 +149,7 @@ class PlannerController extends Controller
             $saving = array_filter($data['recipes'], fn (array $recipe) => filled($recipe['key'] ?? null));
             foreach (array_keys($saving) as $index) {
                 if (isset($loaded[$index])) {
-                    $saving[$index]['ingredients'] = $this->savedIngredients($loaded[$index]);
+                    $saving[$index]['ingredients'] = RecipeIngredients::forSaving($loaded[$index]);
                 }
             }
             $saved = PlannedRecipe::remember($user, array_values($saving), used: true);
@@ -160,29 +160,6 @@ class PlannerController extends Controller
                 'recipes' => array_map(fn (array $recipe, PlannedRecipe $planned) => ['key' => $recipe['key'], 'id' => $planned->id], array_values($saving), $saved),
             ];
         });
-    }
-
-    /**
-     * Ingredients of a recipe app recipe as saved with the recipe (amounts for its servings).
-     *
-     * @param  list<array<string, mixed>>  $ingredients  API ingredients
-     * @return list<array{amount: mixed, unit: ?string, name: string}>
-     */
-    private function savedIngredients(array $ingredients): array
-    {
-        $saved = [];
-        foreach (array_slice($ingredients, 0, 100) as $ingredient) {
-            $name = trim((string) ($ingredient['food'] ?? $ingredient['text'] ?? ''));
-            if ($name !== '') {
-                $saved[] = [
-                    'amount' => is_numeric($ingredient['amount'] ?? null) ? $ingredient['amount'] : null,
-                    'unit' => filled($ingredient['unit'] ?? null) ? mb_substr((string) $ingredient['unit'], 0, 50) : null,
-                    'name' => mb_substr($name, 0, 255),
-                ];
-            }
-        }
-
-        return $saved;
     }
 
     /**

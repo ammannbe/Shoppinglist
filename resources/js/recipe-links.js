@@ -32,13 +32,13 @@ export function joinRecipes(known, added) {
 
 /**
  * Recipes of a planned item (names from the planner's list step) with the url and the saved
- * recipe of the suggestion of that name (`planned_id`, set when the list was built).
+ * recipe (`key`) of the recipe of that name the list was built from (planner `builtRecipes`).
  */
-export function listRecipes(names, suggestions) {
+export function listRecipes(names, recipes) {
     return (names ?? []).map((name) => {
-        const suggestion = suggestions.find((each) => sameName(each.name, name));
+        const recipe = recipes.find((each) => sameName(each.name, name));
 
-        return { name, url: suggestion?.url ?? null, key: suggestion?.planned_id ?? null };
+        return { name, url: recipe?.url ?? null, key: recipe?.key ?? null };
     });
 }
 

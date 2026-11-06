@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { allowedStep, recipePayload, remoteIsNewer, replaceSuggestions, stepAllowed, stepTrail, suggestionExclude, syncedState } from '../../resources/js/planner-state.js';
+import {
+    allowedStep, builtRecipe, migrateState, plannerSelection, recipePayload, remoteIsNewer, selectedOfferIds, stepAllowed, stepTrail, suggestionExclude,
+    syncedState, withoutPlanned,
+} from '../../resources/js/planner-state.js';
 
-const empty = { offers: [], pantry: [], suggestions: [], items: [] };
+const empty = { offerIds: [], pantry: [], planned: [], items: [] };
 
 describe('stepAllowed', () => {
     it('always allows offers and pantry', () => {
@@ -10,18 +13,18 @@ describe('stepAllowed', () => {
         expect(stepAllowed('unknown', empty)).toBe(false);
     });
 
-    it('needs selected offers or pantry items for the recipes', () => {
+    it('needs selected offers, pantry items or planned recipes for the recipes', () => {
         expect(stepAllowed('recipes', empty)).toBe(false);
-        expect(stepAllowed('recipes', { ...empty, offers: [{ selected: false }] })).toBe(false);
-        expect(stepAllowed('recipes', { ...empty, offers: [{ selected: true }] })).toBe(true);
+        expect(stepAllowed('recipes', { ...empty, offerIds: ['o1'] })).toBe(true);
+        expect(stepAllowed('recipes', { ...empty, pantry: [{ selected: false }] })).toBe(false);
         expect(stepAllowed('recipes', { ...empty, pantry: [{ selected: true }] })).toBe(true);
-        // A recipe planned again from the history.
-        expect(stepAllowed('recipes', { ...empty, suggestions: [{ selected: true }] })).toBe(true);
+        // A recipe planned again from the Recipes tab.
+        expect(stepAllowed('recipes', { ...empty, planned: [{ id: 'r1' }] })).toBe(true);
     });
 
-    it('needs selected recipes (or a built list) for the list', () => {
-        expect(stepAllowed('list', { ...empty, suggestions: [{ selected: false }] })).toBe(false);
-        expect(stepAllowed('list', { ...empty, suggestions: [{ selected: true }] })).toBe(true);
+    it('needs planned recipes (or a built list) for the list', () => {
+        expect(stepAllowed('list', { ...empty, offerIds: ['o1'] })).toBe(false);
+        expect(stepAllowed('list', { ...empty, planned: [{ id: 'r1' }] })).toBe(true);
         expect(stepAllowed('list', { ...empty, items: [{ name: 'Reis' }] })).toBe(true);
     });
 });
@@ -29,8 +32,8 @@ describe('stepAllowed', () => {
 describe('allowedStep', () => {
     it('falls back to the last step that can be opened', () => {
         expect(allowedStep('list', empty)).toBe('pantry');
-        expect(allowedStep('list', { ...empty, offers: [{ selected: true }] })).toBe('recipes');
-        expect(allowedStep('recipes', { ...empty, offers: [{ selected: true }] })).toBe('recipes');
+        expect(allowedStep('list', { ...empty, offerIds: ['o1'] })).toBe('recipes');
+        expect(allowedStep('recipes', { ...empty, offerIds: ['o1'] })).toBe('recipes');
         expect(allowedStep('offers', empty)).toBe('offers');
         expect(allowedStep(undefined, empty)).toBe('offers');
     });
@@ -47,9 +50,9 @@ describe('stepTrail', () => {
 
 describe('syncedState', () => {
     it('keeps only the synced parts as plain values', () => {
-        const state = { ...empty, offers: [{ id: 'a', selected: true }], busy: 'Loading', error: 'x', warning: 'y', step: 'pantry', wishes: 'quick' };
+        const state = { ...empty, offerIds: ['a'], suggestions: [], busy: 'Loading', error: 'x', warning: 'y', step: 'pantry', wishes: 'quick', savedOffers: [{ id: 'a' }] };
 
-        expect(syncedState(state)).toEqual({ ...empty, offers: [{ id: 'a', selected: true }], wishes: 'quick' });
+        expect(syncedState(state)).toEqual({ offerIds: ['a'], pantry: [], items: [], suggestions: [], wishes: 'quick' });
     });
 
     it('drops data URLs', () => {
@@ -67,19 +70,65 @@ describe('remoteIsNewer', () => {
     });
 });
 
-describe('replaceSuggestions', () => {
-    it('replaces the shown suggestions but keeps the ones picked for the list', () => {
-        const current = [{ key: 'a', selected: false }, { key: 'b', selected: true }, { key: 'c', selected: false }];
-        const added = [{ key: 'd', selected: false }, { key: 'b', selected: false }];
+describe('migrateState', () => {
+    it('turns the taken offers into the selection', () => {
+        const old = { offers: [{ id: 'a', selected: true }, { id: 'b', selected: false }, { name: 'without id', selected: true }, { id: 'c' }], pantry: [] };
 
-        expect(replaceSuggestions(current, added)).toEqual([{ key: 'b', selected: true }, { key: 'd', selected: false }]);
-        expect(replaceSuggestions([], added)).toEqual(added);
+        expect(migrateState(old)).toEqual({ offerIds: ['a', 'c'], pantry: [], builtRecipes: [] });
     });
 
-    it('keeps the list step reachable only with picked recipes', () => {
-        const state = { ...empty, suggestions: replaceSuggestions([{ key: 'a', selected: false }], [{ key: 'b', selected: false }]) };
-        expect(stepAllowed('list', state)).toBe(false);
-        expect(stepAllowed('list', { ...empty, suggestions: replaceSuggestions([{ key: 'a', selected: true }], []) })).toBe(true);
+    it('drops the selection of suggestions and keeps the links of a built list', () => {
+        const old = {
+            suggestions: [
+                { key: 'recipe-5', name: 'Lasagne', url: 'https://recipes.test/5', selected: true, saved: true, planned_id: 'r1' },
+                { key: 'idea-1', name: 'Omelette', selected: false, saved: false },
+            ],
+            items: [{ name: 'Hackfleisch', recipes: ['Lasagne'] }],
+        };
+        const migrated = migrateState(old);
+
+        expect(migrated.suggestions).toEqual([{ key: 'recipe-5', name: 'Lasagne', url: 'https://recipes.test/5' }, { key: 'idea-1', name: 'Omelette' }]);
+        expect(migrated.builtRecipes).toEqual([{ name: 'Lasagne', url: 'https://recipes.test/5', key: 'r1' }]);
+        expect(migrated.offerIds).toEqual([]);
+    });
+
+    it('keeps the current shape and tolerates anything else', () => {
+        const current = { offerIds: ['a'], suggestions: [{ key: 'idea-1', name: 'Omelette' }], items: [], builtRecipes: [] };
+
+        expect(migrateState(current)).toEqual(current);
+        expect(migrateState(null)).toEqual({});
+        expect(migrateState([])).toEqual({});
+    });
+});
+
+describe('selectedOfferIds', () => {
+    it('drops offers no longer in the pool once it is loaded', () => {
+        expect(selectedOfferIds(['a', 'gone'], [{ id: 'a' }, { id: 'b' }])).toEqual(['a']);
+        expect(selectedOfferIds(['a', 'gone'], null)).toEqual(['a', 'gone']);
+        expect(selectedOfferIds(undefined, [])).toEqual([]);
+    });
+});
+
+describe('withoutPlanned', () => {
+    it('leaves out suggestions planned already', () => {
+        expect(withoutPlanned([{ key: 'recipe-5' }, { key: 'idea-1' }], [{ id: 'r1', key: 'recipe-5' }])).toEqual([{ key: 'idea-1' }]);
+        expect(withoutPlanned([{ key: 'idea-1' }], undefined)).toEqual([{ key: 'idea-1' }]);
+    });
+});
+
+describe('builtRecipe', () => {
+    it('keeps name, url and the saved recipe', () => {
+        expect(builtRecipe({ name: 'Omelette', source: 'ai' }, 'r2')).toEqual({ name: 'Omelette', url: null, key: 'r2' });
+        expect(builtRecipe({ name: 'Lasagne', url: 'https://recipes.test/5' })).toEqual({ name: 'Lasagne', url: 'https://recipes.test/5', key: null });
+    });
+});
+
+describe('plannerSelection', () => {
+    it('sends the selected offers and pantry items, also of an older state', () => {
+        expect(plannerSelection({ offerIds: ['a'], pantry: [{ name: 'Reis', selected: true }, { name: 'Milch', selected: false }] }))
+            .toEqual({ offer_ids: ['a'], pantry: ['Reis'] });
+        expect(plannerSelection({ offers: [{ id: 'b', selected: true }] })).toEqual({ offer_ids: ['b'], pantry: [] });
+        expect(plannerSelection(null)).toEqual({ offer_ids: [], pantry: [] });
     });
 });
 

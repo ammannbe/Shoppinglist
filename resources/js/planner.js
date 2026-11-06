@@ -3,13 +3,18 @@ import { createApi, HttpError } from './api.js';
 import { prepareForAi } from './image.js';
 import { offerReader } from './offers.js';
 import { closeDialogThen } from './layers.js';
-import { allowedStep, recipePayload, remoteIsNewer, replaceSuggestions, STEPS, stepAllowed, stepTrail, suggestionExclude, SYNCED_KEYS, syncedState } from './planner-state.js';
+import { shortDate } from './helpers.js';
+import {
+    allowedStep, builtRecipe, migrateState, plannerSelection, recipePayload, remoteIsNewer, selectedOfferIds, STEPS, stepAllowed, stepTrail,
+    suggestionExclude, SYNCED_KEYS, syncedState, withoutPlanned,
+} from './planner-state.js';
 import { listRecipes } from './recipe-links.js';
 import { requests } from './requests.js';
 
 // Week planner (#/planner/<step>): offers (screenshots, PDFs, text) and pantry photos are read
-// by the AI on the server, recipes come from the connected recipe app and/or the AI, the result
-// is added to a list. Four steps (planner-state.js STEPS), each its own history entry.
+// by the AI on the server, recipes come from the connected recipe app and/or the AI; planning a
+// suggestion saves it (planned_recipes), the shopping list is built from all planned recipes.
+// Four steps (planner-state.js STEPS), each its own history entry.
 // The state is kept in localStorage, so a reload (Android may kill the browser while the camera
 // is open) does not lose the progress, and on the server (PlannerStateController) to continue
 // on another device: last write wins by the time of the change.
@@ -20,25 +25,41 @@ const SYNC_KEY = 'shoppinglist.planner-sync';
 // Last step opened (device only), #/planner opens it.
 const STEP_KEY = 'shoppinglist.planner-step';
 const OWNER_KEY = 'shoppinglist.owner';
+// Planned recipes as last loaded (the steps can be opened before they are loaded again).
+const PLANNED_KEY = 'shoppinglist.planned';
 const PUSH_DELAY = 1000;
 const api = createApi();
 
 /** Logout or another account: the planner state of this device is removed with the local data. */
 export function clearPlannerState() {
-    [STORAGE_KEY, SYNC_KEY, STEP_KEY].forEach((key) => localStorage.removeItem(key));
+    [STORAGE_KEY, SYNC_KEY, STEP_KEY, PLANNED_KEY].forEach((key) => localStorage.removeItem(key));
+}
+
+function readJson(key, fallback) {
+    try {
+        return JSON.parse(localStorage.getItem(key) ?? 'null') ?? fallback;
+    } catch {
+        return fallback;
+    }
+}
+
+/** Selected offers and pantry items of the planner (a recipe planned again is matched with them). */
+export function currentSelection() {
+    return plannerSelection(readJson(STORAGE_KEY, {}));
 }
 
 function readSyncMeta(stored) {
     const meta = JSON.parse(localStorage.getItem(SYNC_KEY) ?? 'null');
     if (meta) return meta;
     // State of a version without server sync: sent once, unless the server has one already.
-    const started = Boolean(stored.offers?.length || stored.pantry?.length || stored.suggestions?.length);
+    const started = Boolean(stored.offerIds?.length || stored.pantry?.length || stored.suggestions?.length);
 
     return { updated_at: started ? 1 : 0, pending: started };
 }
 function initialState() {
     return {
-        offers: [],
+        // Selected offers of the pool (ids); offers not in it are not selected.
+        offerIds: [],
         pantry: [],
         servings: 4,
         count: 5,
@@ -49,6 +70,8 @@ function initialState() {
         // The warning belongs to "suggest more" (shown below that button).
         warningMore: false,
         items: [],
+        // Recipes the items were built from, { name, url, key } (key: saved recipe).
+        builtRecipes: [],
         target: '',
         listName: '',
     };
@@ -81,7 +104,7 @@ function groupByStore(offers) {
  * @param {(hash: string, options: object) => void} options.navigate shoppinglist.navigate (history aware)
  */
 export function planner({ addItems, merges, lists, open, navigate }) {
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
+    const stored = migrateState(readJson(STORAGE_KEY, {}));
     // Synced state as last sent or received (JSON), to notice real changes.
     let syncedJson = null;
     let pushTimer = null;
@@ -97,8 +120,10 @@ export function planner({ addItems, merges, lists, open, navigate }) {
         syncMeta: readSyncMeta(stored),
         offerText: '',
         newPantryItem: '',
-        // Saved offers (pool) not taken yet, grouped by shop to take them per shop.
+        // Offers of the pool (GET /offers), null until loaded.
         savedOffers: null,
+        // Planned recipes (saved, not on a list yet), the list is built from them.
+        planned: readJson(PLANNED_KEY, []),
         // Ingredients already open on the target list, asked before adding (null: not asked).
         mergeCount: null,
         // Suggestion shown in the recipe dialog (all details and actions).
@@ -115,8 +140,8 @@ export function planner({ addItems, merges, lists, open, navigate }) {
             };
             Object.keys(initialState()).forEach((key) => this.$watch(key, save));
             this.$watch('target', () => { this.mergeCount = null; });
-            // A recipe of the history (#/recipes) planned again.
-            window.addEventListener('plan-recipe', (event) => this.planRecipe(event.detail));
+            // A recipe of the Recipes tab planned again or taken out of the plan.
+            window.addEventListener('planned-recipe', (event) => this.updatePlanned(event.detail));
 
             // Opened (not when changing the step): saved offers and the state of the server are loaded.
             const opened = ({ force = false } = {}) => {
@@ -128,6 +153,7 @@ export function planner({ addItems, merges, lists, open, navigate }) {
                 if (!this.routeStep() || (wasOpen && !force)) return;
                 // Before the offers: their request sets `busy`, which holds the pull back.
                 this.pullState();
+                if (Alpine.store('sync').user?.verified && navigator.onLine) this.loadPlanned();
                 if (Alpine.store('sync').user?.verified && navigator.onLine && !this.busy) this.loadSavedOffers();
             };
             window.addEventListener('hashchange', () => opened());
@@ -165,7 +191,7 @@ export function planner({ addItems, merges, lists, open, navigate }) {
          */
         routeStep() {
             const requested = location.hash.split('/')[2] ?? null;
-            const step = allowedStep(requested ?? localStorage.getItem(STEP_KEY) ?? STEPS[0], this);
+            const step = allowedStep(requested ?? localStorage.getItem(STEP_KEY) ?? STEPS[0], this.gate);
             if (step !== requested) {
                 navigate(`#/planner/${step}`, { replace: true });
                 return false;
@@ -177,7 +203,12 @@ export function planner({ addItems, merges, lists, open, navigate }) {
         },
 
         canOpen(step) {
-            return stepAllowed(step, this);
+            return stepAllowed(step, this.gate);
+        },
+
+        /** What the steps depend on (planner-state.js stepAllowed). */
+        get gate() {
+            return { offerIds: this.selectedIds, pantry: this.pantry, planned: this.planned, items: this.items };
         },
 
         get stepIndex() {
@@ -192,7 +223,7 @@ export function planner({ addItems, merges, lists, open, navigate }) {
         get nextBlocked() {
             if (!this.nextStep || this.canOpen(this.nextStep)) return null;
 
-            return this.nextStep === 'recipes' ? this.$t('Take offers or add what is at home first.') : this.$t('Select at least one recipe.');
+            return this.nextStep === 'recipes' ? this.$t('Select offers or add what is at home first.') : this.$t('Plan at least one recipe.');
         },
 
         /** Earlier steps go back in the history, later ones push the skipped steps first. */
@@ -207,7 +238,8 @@ export function planner({ addItems, merges, lists, open, navigate }) {
         },
 
         startOver() {
-            if (!confirm(this.$t('Start over?'))) return;
+            // Planned recipes stay planned (they are saved, step 3 and 4 show them).
+            if (!confirm(this.$t(this.planned.length ? 'Start over? The planned recipes stay planned.' : 'Start over?'))) return;
             this.reset();
             this.goStep(STEPS[0]);
         },
@@ -279,29 +311,33 @@ export function planner({ addItems, merges, lists, open, navigate }) {
         applyRemote(remote) {
             const defaults = initialState();
             const values = remote.state && !Array.isArray(remote.state) ? remote.state : {};
-            const state = Object.fromEntries(SYNCED_KEYS.map((key) => [key, values[key] ?? defaults[key]]));
+            const migrated = migrateState(values);
+            const state = Object.fromEntries(SYNCED_KEYS.map((key) => [key, migrated[key] ?? defaults[key]]));
             syncedJson = JSON.stringify(syncedState(state));
             Object.assign(this, state);
             this.mergeCount = null;
             this.setSyncMeta({ updated_at: remote.updated_at, pending: false });
             // The current step may not be possible anymore (e.g. the offers were removed there).
-            if (this.step && !this.canOpen(this.step)) this.goStep(allowedStep(this.step, this));
+            if (this.step && !this.canOpen(this.step)) this.goStep(allowedStep(this.step, this.gate));
         },
 
         get recipes() {
             return Alpine.store('sync').user?.recipes ?? null;
         },
 
+        /** Selected offer ids still in the pool (expired or removed ones drop out). */
+        get selectedIds() {
+            return selectedOfferIds(this.offerIds, this.savedOffers);
+        },
+
         get selectedOffers() {
-            return this.offers.filter((offer) => offer.selected);
+            const ids = new Set(this.selectedIds);
+
+            return (this.savedOffers ?? []).filter((offer) => ids.has(offer.id));
         },
 
         get selectedPantry() {
             return this.pantry.filter((item) => item.selected);
-        },
-
-        get selectedSuggestions() {
-            return this.suggestions.filter((suggestion) => suggestion.selected);
         },
 
         get selectedItems() {
@@ -315,46 +351,40 @@ export function planner({ addItems, merges, lists, open, navigate }) {
         },
 
 
-        // ---- 1. offers
+        // ---- 1. offers: all offers of the pool by shop, ticked ones are used
 
-
+        /** Offers read in the planner: into the pool and selected. */
         addOffers(offers) {
-            const known = new Set(this.offers.map((offer) => offer.id).filter(Boolean));
-            this.offers = [...this.offers, ...offers.filter((offer) => !known.has(offer.id)).map((offer) => ({ ...offer, selected: true }))];
+            const known = new Set((this.savedOffers ?? []).map((offer) => offer.id));
+            this.savedOffers = [...(this.savedOffers ?? []), ...offers.filter((offer) => !known.has(offer.id))];
+            this.selectOffers(offers, true);
         },
 
-        removeOfferItem(offer) {
-            this.offers = this.offers.filter((each) => each !== offer);
+        isSelected(offer) {
+            return this.offerIds.includes(offer.id);
         },
 
-        /** Offers of the planner by shop (no shop last). */
+        /** (De)selects offers; ids no longer in the pool are dropped with it. */
+        selectOffers(offers, selected) {
+            const ids = new Set(this.selectedIds);
+            offers.forEach((offer) => (selected ? ids.add(offer.id) : ids.delete(offer.id)));
+            this.offerIds = [...ids];
+        },
+
+        /** Offers of the pool by shop (no shop last). */
         get offerGroups() {
-            return groupByStore(this.offers);
+            return groupByStore(this.savedOffers ?? []);
         },
 
-        /** Selects or clears all offers of a shop. */
-        selectGroup(group, selected) {
-            group.offers.forEach((offer) => { offer.selected = selected; });
+        selectedIn(group) {
+            return group.offers.filter((offer) => this.isSelected(offer)).length;
         },
 
-        /** Offers of the pool (#/offers) that are not taken yet: own and shared, not expired. */
+        /** Offers of the pool (#/offers): own and shared, not expired. */
         async loadSavedOffers() {
             await this.run('saved', this.$t('Loading offers …'), async () => {
                 this.savedOffers = (await api.get('/offers')).offers;
             });
-        },
-
-        /** Saved offers not taken into the planner yet. */
-        get availableOffers() {
-            const taken = new Set(this.offers.map((offer) => offer.id).filter(Boolean));
-
-            return (this.savedOffers ?? []).filter((offer) => !taken.has(offer.id));
-        },
-
-        /** Removes the offers of one shop group, or all. */
-        removeOffers(offers = this.offers) {
-            const removed = new Set(offers);
-            this.offers = this.offers.filter((offer) => !removed.has(offer));
         },
 
         clearPantry() {
@@ -364,19 +394,12 @@ export function planner({ addItems, merges, lists, open, navigate }) {
         /** "until 4.11." for a group: the latest end date of its offers. */
         groupValidity(offers) {
             const last = offers.map((offer) => offer.valid_until).filter(Boolean).sort().at(-1);
-            if (!last) return null;
-            const date = new Date(`${last}T12:00:00`).toLocaleDateString(Alpine.store('i18n').locale.replace('_', '-'), { day: 'numeric', month: 'numeric' });
 
-            return this.$t('until :date', { date });
+            return last ? this.$t('until :date', { date: this.shortDate(last) }) : null;
         },
 
-        get savedGroups() {
-            return groupByStore(this.availableOffers);
-        },
-
-        /** Takes saved offers (one shop or all) into the planner. */
-        takeSaved(offers) {
-            this.addOffers(offers);
+        shortDate(value) {
+            return shortDate(value, Alpine.store('i18n').locale);
         },
 
 
@@ -416,12 +439,13 @@ export function planner({ addItems, merges, lists, open, navigate }) {
         },
 
         /**
-         * New suggestions replace the shown ones (the recipes picked for the list stay); with
-         * `more` they are added to the shown ones, which are left out.
+         * New suggestions replace the shown ones (planning saves the ones to keep); with `more`
+         * they are added to the shown ones, which are left out. Planned recipes are left out.
          */
         async suggest(more = false) {
             await this.run(more ? 'more' : 'suggest', this.$t('Looking for recipes …'), async () => {
-                const kept = more ? this.suggestions : this.selectedSuggestions;
+                const kept = more ? this.suggestions : [];
+                const excluded = [...this.planned, ...kept];
                 const result = await api.post('/planner/suggestions', {
                     offers: this.offerPayload(),
                     pantry: this.pantryPayload(),
@@ -429,38 +453,76 @@ export function planner({ addItems, merges, lists, open, navigate }) {
                     count: Number(this.count) || 5,
                     ideas: this.ideas,
                     wishes: this.wishes.trim() || null,
-                    exclude: kept.length ? suggestionExclude(kept) : undefined,
+                    exclude: excluded.length ? suggestionExclude(excluded) : undefined,
                 });
                 const known = new Set(kept.map((suggestion) => suggestion.key));
-                // Nothing is selected, the user picks. Not saved until "Save" or the list.
-                const added = result.suggestions.filter((suggestion) => !known.has(suggestion.key)).map((suggestion) => ({
-                    ...suggestion, selected: false, servings: Number(this.servings) || 4, savedUrl: null, saved: false,
+                // Not saved until planned (or imported into the recipe app).
+                const added = withoutPlanned(result.suggestions, this.planned).filter((suggestion) => !known.has(suggestion.key)).map((suggestion) => ({
+                    ...suggestion, servings: Number(this.servings) || 4, savedUrl: null,
                 }));
-                this.suggestions = more ? [...this.suggestions, ...added] : replaceSuggestions(this.suggestions, added);
+                this.suggestions = [...kept, ...added];
                 this.warning = more && !added.length ? this.$t('No further recipes found.') : result.warning;
                 this.warningMore = more;
             });
         },
 
-        /**
-         * Saves a suggestion into the recipes (Recipes tab). It leaves the suggestions, unless it
-         * is picked for the list: then it stays there, marked as saved.
-         */
-        async saveSuggestion(suggestion) {
-            await this.run(`save:${suggestion.key}`, this.$t('Saving …'), async () => {
-                await api.post('/planned-recipes', recipePayload(suggestion));
-                Alpine.store('notice').show(this.$t('“:name” saved in the recipes.', { name: suggestion.name }));
-                const remove = () => {
-                    if (suggestion.selected) suggestion.saved = true;
-                    else this.suggestions = this.suggestions.filter((each) => each.key !== suggestion.key);
-                };
-                if (this.detail?.key === suggestion.key && !suggestion.selected) closeDialogThen(this.$refs.recipeDialog, remove);
-                else remove();
+        // ---- planned recipes (saved, planned_recipes; the list is built from them)
+
+        /** Planned recipes of the server (other devices, the Recipes tab). */
+        async loadPlanned() {
+            try {
+                this.setPlanned((await api.get('/planned-recipes')).recipes.filter((recipe) => recipe.planned));
+            } catch {
+                // Offline or server error: the last loaded ones stay.
+            }
+        },
+
+        setPlanned(recipes) {
+            // Oldest first: the order they were planned in.
+            this.planned = [...recipes].sort((a, b) => String(a.planned_at ?? '').localeCompare(String(b.planned_at ?? '')));
+            try {
+                localStorage.setItem(PLANNED_KEY, JSON.stringify(this.planned));
+            } catch {
+                localStorage.removeItem(PLANNED_KEY);
+            }
+        },
+
+        /** A saved recipe changed (planned or not): updates the planned ones and the suggestions. */
+        updatePlanned(recipe) {
+            const others = this.planned.filter((each) => each.id !== recipe.id);
+            this.setPlanned(recipe.planned ? [...others, recipe] : others);
+            if (recipe.planned) this.suggestions = withoutPlanned(this.suggestions, [recipe]);
+        },
+
+        /** Plans a suggestion: saved into the recipes (Recipes tab), it leaves the suggestions. */
+        async plan(suggestion) {
+            await this.run(`plan:${suggestion.key}`, this.$t('Planning …'), async () => {
+                const { recipe } = await api.post('/planned-recipes', recipePayload(suggestion));
+                const done = () => this.updatePlanned({ ...recipe, draft_url: recipe.draft_url ?? suggestion.savedUrl ?? null });
+                if (this.detail?.key === suggestion.key) closeDialogThen(this.$refs.recipeDialog, done);
+                else done();
             });
         },
 
-        openDetail(suggestion) {
-            this.detail = suggestion;
+        /** Takes a recipe out of the plan (stays saved); in step 3 it is offered as suggestion again. */
+        async unplan(recipe) {
+            await this.run(`unplan:${recipe.id}`, this.$t('Removing …'), async () => {
+                const { recipe: saved } = await api.delete(`/planned-recipes/${recipe.id}/plan`);
+                const done = () => {
+                    this.updatePlanned(saved);
+                    if (this.step === 'recipes' && !this.suggestions.some((each) => each.key === saved.key)) {
+                        const { id, draft_url: draftUrl, planned, planned_at: plannedAt, used_at: usedAt, created_at: createdAt, updated_at: updatedAt, ...suggestion } = saved;
+                        this.suggestions = [{ uses_offers: [], uses_pantry: [], uses_season: [], ...suggestion, servings: saved.servings || Number(this.servings) || 4, savedUrl: draftUrl ?? null }, ...this.suggestions];
+                    }
+                    if (this.step && !this.canOpen(this.step)) this.goStep(allowedStep(this.step, this.gate));
+                };
+                if (this.detail?.id === recipe.id) closeDialogThen(this.$refs.recipeDialog, done);
+                else done();
+            });
+        },
+
+        openDetail(recipe) {
+            this.detail = recipe;
             this.$nextTick(() => this.$refs.recipeDialog.showModal());
         },
 
@@ -469,54 +531,44 @@ export function planner({ addItems, merges, lists, open, navigate }) {
         async saveIdea(suggestion) {
             // Open the tab while still in the click, otherwise browsers block it as a pop-up.
             const tab = navigator.onLine ? window.open('', '_blank') : null;
+            let url = null;
             await this.run(`idea:${suggestion.key}`, this.$t('Handing over …'), async () => {
                 // With all details: an idea not saved yet is saved first (Recipes tab keeps the import link).
-                const { url, recipe } = await api.post('/planner/recipes', {
+                ({ url } = await api.post('/planner/recipes', {
                     ...recipePayload(suggestion),
-                    servings: suggestion.servings,
+                    servings: Number(suggestion.servings) || 4,
                     category: suggestion.category ?? null,
                     complexity: suggestion.complexity ?? null,
-                });
-                suggestion.savedUrl = url;
-                if (recipe) suggestion.saved = true;
+                }));
+                if (suggestion.id) suggestion.draft_url = url;
+                else suggestion.savedUrl = url;
             });
-            if (tab && suggestion.savedUrl) {
-                tab.location.href = suggestion.savedUrl;
+            if (tab && url) {
+                tab.location.href = url;
             } else {
                 tab?.close();
             }
         },
 
-        /** Saved recipe (Recipes tab): shown on top and selected (again). */
-        async planRecipe(recipe) {
-            // The planner may not have pulled yet (opened from the Recipes tab): otherwise this
-            // newer change would replace the suggestions of another device.
-            await this.pullState();
-            const { id, draft_url: draftUrl, used_at: usedAt, created_at: createdAt, updated_at: updatedAt, ...suggestion } = recipe;
-            const others = this.suggestions.filter((each) => each.key !== recipe.key);
-            this.suggestions = [{
-                uses_offers: [], uses_pantry: [], uses_season: [], ...suggestion, servings: recipe.servings || Number(this.servings) || 4, selected: true, savedUrl: draftUrl ?? null, saved: true,
-            }, ...others];
-            this.items = [];
-        },
-
         // ---- 4. shopping list
 
         async buildList() {
+            const built = [...this.planned];
+            if (!built.length) return;
             await this.run('list', this.$t('Creating the shopping list …'), async () => {
                 const { items, recipes = [] } = await api.post('/planner/list', {
                     offers: this.offerPayload(),
                     pantry: this.pantryPayload(),
                     // With all details: the server saves them (Recipes tab), the items link to them.
-                    recipes: this.selectedSuggestions.map((suggestion) => recipePayload(suggestion)),
+                    recipes: built.map((recipe) => recipePayload({ ...recipe, servings: recipe.servings || Number(this.servings) || 4 })),
                 });
-                this.items = items.map((item) => ({ ...item, selected: !item.at_home }));
-                // Saved recipe of each suggestion: the items link to it (recipes[].key).
-                const planned = new Map(recipes.map(({ key, id }) => [key, id]));
-                this.selectedSuggestions.forEach((suggestion) => {
-                    suggestion.saved = true;
-                    suggestion.planned_id = planned.get(suggestion.key) ?? suggestion.planned_id ?? null;
-                });
+                // A list built before (not added yet) gets the new items.
+                this.items = [...this.items, ...items.map((item) => ({ ...item, selected: !item.at_home }))];
+                // Saved recipe of each one: the items link to it (recipes[].key). They are on a list now, no longer planned.
+                const ids = new Map(recipes.map(({ key, id }) => [key, id]));
+                this.builtRecipes = [...this.builtRecipes, ...built.map((recipe) => builtRecipe(recipe, ids.get(recipe.key) ?? recipe.id))];
+                const done = new Set(built.map((recipe) => recipe.id));
+                this.setPlanned(this.planned.filter((recipe) => !done.has(recipe.id)));
                 if (!this.listName) this.listName = this.$t('Weekly shopping :date', { date: new Date().toLocaleDateString(Alpine.store('i18n').locale.replace('_', '-')) });
             });
         },
@@ -530,7 +582,7 @@ export function planner({ addItems, merges, lists, open, navigate }) {
             const items = this.selectedItems.map(({ name, amount, unit, store, note, recipes }) => ({
                 name, amount, unit, note,
                 stores: store ? [store] : [],
-                recipes: listRecipes(recipes, this.suggestions),
+                recipes: listRecipes(recipes, this.builtRecipes),
             }));
             if (!items.length) return;
             if (merge === null && this.target) {

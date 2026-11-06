@@ -1,6 +1,6 @@
 {{--
     Recipe details as dialog (week planner suggestions, Recipes tab): the Alpine component has
-    `detail` (the recipe, null when closed) and opens `$refs.recipeDialog`. Back closes it
+    `detail` (the recipe, null when closed) and `shortDate()` and opens `$refs.recipeDialog`. Back closes it
     (resources/js/layers.js). The slot holds the actions, `meta` optional lines below the title,
     `linked` optional content above the details (Recipes tab: the items linked to the recipe).
 --}}
@@ -26,7 +26,9 @@
                 {{ $linked ?? '' }}
                 <p x-show="detail.reason" class="text-stone-600" x-text="detail.reason"></p>
                 <div x-show="detail.uses_offers?.length || detail.uses_pantry?.length || detail.uses_season?.length" class="space-y-1 text-xs">
-                    <p x-show="detail.uses_offers?.length" class="text-orange-800" x-text="$t('Offers') + ': ' + (detail.uses_offers ?? []).join(', ')"></p>
+                    {{-- Saved recipes: the offers of the day it was planned --}}
+                    <p x-show="detail.uses_offers?.length" class="text-orange-800"
+                        x-text="(detail.planned_at ? $t('Offers of :date', { date: shortDate(detail.planned_at) }) : $t('Offers')) + ': ' + (detail.uses_offers ?? []).join(', ')"></p>
                     <p x-show="detail.uses_pantry?.length" class="text-emerald-800" x-text="$t('At home') + ': ' + (detail.uses_pantry ?? []).join(', ')"></p>
                     <p x-show="detail.uses_season?.length" class="text-lime-800" x-text="$t('In season') + ': ' + (detail.uses_season ?? []).join(', ')"></p>
                 </div>
