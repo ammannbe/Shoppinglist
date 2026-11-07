@@ -1,6 +1,7 @@
 <?php
 
 use App\Ai\OpenAiClient;
+use App\Entitlements\Entitlements;
 use App\Http\Controllers\Auth\OidcController;
 use App\Http\Controllers\HouseholdController;
 use App\Http\Controllers\HouseholdInvitationController;
@@ -16,6 +17,7 @@ use App\Http\Controllers\PlannerStateController;
 use App\Http\Controllers\PreferenceController;
 use App\Http\Controllers\RecipesConnectionController;
 use App\Http\Controllers\SyncController;
+use App\Http\Middleware\EnsureAiFeature;
 use App\Models\Household;
 use App\Recipes\RecipesClient;
 use App\Support\Seasons;
@@ -55,8 +57,12 @@ Route::middleware('auth')->group(function () {
         'regions' => ShopRegions::ALL,
         // Foods in season this month (for the product suggestions and the week planner).
         'season' => ['month' => Seasons::month(), 'foods' => collect(Seasons::names(Seasons::month()))->sort(fn ($a, $b) => strcoll($a, $b))->values()->all()],
-        // Week planner (AI) and the connected recipe app, null when not configured.
-        'assistant' => OpenAiClient::enabled(),
+        // Unlocked features (App\Entitlements\Entitlements: local setting or the AccountManager).
+        'features' => Entitlements::features($request->user()),
+        // Week planner (AI): configured and unlocked for the user; locked: configured, but not for this account.
+        'assistant' => OpenAiClient::enabledFor($request->user()),
+        'assistant_locked' => OpenAiClient::enabled() && ! OpenAiClient::enabledFor($request->user()),
+        // The connected recipe app, null when not configured.
         'recipes' => RecipesClient::enabled() ? [
             'name' => config('services.recipes.name'),
             'url' => config('services.recipes.url'),
@@ -92,7 +98,7 @@ Route::middleware('auth')->group(function () {
         Route::get('recipes/callback', [RecipesConnectionController::class, 'callback'])->name('recipes.callback');
         Route::delete('recipes/connection', [RecipesConnectionController::class, 'destroy'])->name('recipes.disconnect');
 
-        Route::middleware('throttle:ai')->prefix('planner')->name('planner.')->group(function () {
+        Route::middleware(['throttle:ai', EnsureAiFeature::class])->prefix('planner')->name('planner.')->group(function () {
             Route::post('offers', [PlannerController::class, 'offers'])->name('offers');
             Route::post('pantry', [PlannerController::class, 'pantry'])->name('pantry');
             Route::post('suggestions', [PlannerController::class, 'suggestions'])->name('suggestions');

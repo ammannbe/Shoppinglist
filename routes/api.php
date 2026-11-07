@@ -3,5 +3,5 @@
 use App\Http\Controllers\Api\AccountManagerWebhookController;
 use Illuminate\Support\Facades\Route;
 
-// Household events of the AccountManager (HOUSEHOLDS_DRIVER=account-manager), signed, no session or CSRF.
+// Events of the AccountManager (households, entitlements, user.deleted), signed, no session or CSRF.
 Route::post('account-manager/webhook', AccountManagerWebhookController::class)->middleware('throttle:120,1')->name('account-manager.webhook');

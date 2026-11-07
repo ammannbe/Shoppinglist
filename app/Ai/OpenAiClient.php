@@ -2,6 +2,8 @@
 
 namespace App\Ai;
 
+use App\Entitlements\Entitlements;
+use App\Models\User;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
@@ -14,9 +16,20 @@ use RuntimeException;
  */
 class OpenAiClient
 {
+    public const FEATURE = 'shoppinglist.ai';
+
     public static function enabled(): bool
     {
         return filled(config('services.openai.key'));
+    }
+
+    /**
+     * The AI features (week planner, recipes) for this user: configured and unlocked
+     * (Entitlements: local setting or the AccountManager).
+     */
+    public static function enabledFor(?User $user): bool
+    {
+        return self::enabled() && Entitlements::has($user, self::FEATURE);
     }
 
     /**

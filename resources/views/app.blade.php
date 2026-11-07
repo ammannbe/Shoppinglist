@@ -56,7 +56,7 @@
                         'bg-emerald-500': $store.sync.status === 'synced',
                         'bg-amber-400 animate-pulse': ['starting', 'syncing'].includes($store.sync.status),
                         'bg-stone-400': ['offline', 'local'].includes($store.sync.status),
-                        'bg-red-500': ['error', 'expired', 'unverified', 'broken'].includes($store.sync.status),
+                        'bg-red-500': ['error', 'expired', 'blocked', 'unverified', 'broken'].includes($store.sync.status),
                     }"></span>
                 <span class="hidden min-[400px]:inline" x-text="{
                     starting: $t('Starting …'),
@@ -65,6 +65,7 @@
                     offline: $t('Offline'),
                     local: $t('Only on this device'),
                     expired: $t('Not synced'),
+                    blocked: $t('Not synced'),
                     unverified: $t('Not synced'),
                     error: $t('Sync error'),
                     broken: $t('Error'),
@@ -100,6 +101,7 @@
             <span x-text="$t('Your session has expired. Please log in again.')"></span>
             <a href="/login" data-online class="font-medium underline" x-text="$t('Log in')"></a>
         </p>
+        <p x-show="$store.sync.status === 'blocked'" class="notice mt-3" role="alert" x-text="$store.sync.blocked"></p>
         <p x-show="$store.sync.status === 'unverified'" class="notice mt-3">
             <span x-text="$t('Please verify your email address to sync.')"></span>
             <a href="/email/verify" data-online class="font-medium underline" x-text="$t('Resend Verification Email')"></a>

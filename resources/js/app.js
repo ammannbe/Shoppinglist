@@ -37,10 +37,12 @@ let replication = null;
 // ---------------------------------------------------------------- stores
 
 Alpine.store('i18n', { locale: initialLocale(), locales: LOCALES });
-// status: starting | local (not logged in) | unverified | expired | offline | syncing | synced | error | broken (local database)
+// status: starting | local (not logged in) | unverified | expired | blocked (access blocked in the AccountManager) | offline | syncing | synced | error | broken (local database)
 Alpine.store('sync', {
     status: 'starting',
     user: null,
+    // Message of the server when the access is blocked (status 'blocked').
+    blocked: null,
     online: navigator.onLine,
 
     /**
@@ -1245,7 +1247,9 @@ async function connect() {
     try {
         sync.user = await api.get('/me');
     } catch (error) {
-        if (error instanceof HttpError && error.status === 401) {
+        if (isBlocked(error)) {
+            block(error.message);
+        } else if (error instanceof HttpError && error.status === 401) {
             localStorage.removeItem(USER_KEY);
             sync.user = null;
             sync.status = localStorage.getItem(OWNER_KEY) ? 'expired' : 'local';
@@ -1286,6 +1290,20 @@ async function connect() {
     if (!replication) startSync();
 }
 
+/** 403 with `access`: the AccountManager blocked the access (EnsureEntitlementAccess). */
+function isBlocked(error) {
+    return error instanceof HttpError && error.status === 403 && Boolean(error.body?.access);
+}
+
+/** Local data stays on the device; nothing is synced until the access is enabled again. */
+function block(message) {
+    const sync = Alpine.store('sync');
+    localStorage.removeItem(USER_KEY);
+    sync.user = null;
+    sync.blocked = message;
+    sync.status = 'blocked';
+}
+
 function startSync() {
     const sync = Alpine.store('sync');
     replication = startReplication(db, api);
@@ -1295,8 +1313,10 @@ function startSync() {
             if (active) sync.status = 'syncing';
         });
         state.error$.subscribe((error) => {
-            const status = error?.parameters?.errors?.[0]?.status ?? error?.parameters?.error?.status;
-            if (status === 401 || status === 419) sync.status = 'expired';
+            const failure = error?.parameters?.errors?.[0] ?? error?.parameters?.error;
+            const status = failure?.status;
+            if (isBlocked(failure)) block(failure.message);
+            else if (status === 401 || status === 419) sync.status = 'expired';
             else sync.status = navigator.onLine ? 'error' : 'offline';
         });
     });

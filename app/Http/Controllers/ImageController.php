@@ -18,7 +18,7 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class ImageController extends Controller
 {
-    private const DIRECTORY = 'images';
+    public const DIRECTORY = 'images';
 
     /**
      * Upload (or replace) the image of an own product. Unknown products are created,

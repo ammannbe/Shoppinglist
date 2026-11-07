@@ -5,6 +5,9 @@
 --}}
 <section x-show="route.view === 'planner'" class="space-y-4 pb-20"
     x-data="planner({ addItems: (target, name, items, merge) => addPlannedItems(target, name, items, merge), merges: (target, items) => plannedMerges(target, items).size, lists: () => lists, open: (hash) => openFromLists(hash), navigate: (hash, options) => navigate(hash, options) })">
+    {{-- Opened without the feature (e.g. an old link): the requests would be refused (EnsureAiFeature) --}}
+    <p x-show="$store.sync.user?.assistant_locked" class="notice" role="alert" x-text="$t('The AI features are not enabled for your account.')"></p>
+
     {{-- Steps: done and possible ones can be opened directly; "Start over" clears everything --}}
     <nav class="flex items-start gap-2" :aria-label="$t('Steps')">
         <ol class="grid min-w-0 flex-1 grid-cols-4 gap-1">
