@@ -8,6 +8,7 @@ use App\Http\Controllers\MemberController;
 use App\Http\Controllers\OfferController;
 use App\Http\Controllers\PlannedRecipeController;
 use App\Http\Controllers\PlannerController;
+use App\Http\Controllers\PlannerStateController;
 use App\Http\Controllers\PreferenceController;
 use App\Http\Controllers\RecipesConnectionController;
 use App\Http\Controllers\SyncController;
@@ -79,7 +80,16 @@ Route::middleware('auth')->group(function () {
             Route::post('recipes', [PlannerController::class, 'saveRecipe'])->name('recipes');
         });
 
+        // Planner state across devices (no AI request, not rate limited like the planner).
+        Route::get('planner/state', [PlannerStateController::class, 'show'])->name('planner.state.show');
+        Route::put('planner/state', [PlannerStateController::class, 'update'])->name('planner.state.update');
+
         Route::get('planned-recipes', [PlannedRecipeController::class, 'index'])->name('planned-recipes.index');
+        Route::post('planned-recipes', [PlannedRecipeController::class, 'store'])->name('planned-recipes.store');
+        Route::post('planned-recipes/used', [PlannedRecipeController::class, 'used'])->name('planned-recipes.used');
+        Route::get('planned-recipes/{plannedRecipe}', [PlannedRecipeController::class, 'show'])->name('planned-recipes.show');
+        Route::post('planned-recipes/{plannedRecipe}/plan', [PlannedRecipeController::class, 'plan'])->name('planned-recipes.plan');
+        Route::delete('planned-recipes/{plannedRecipe}/plan', [PlannedRecipeController::class, 'unplan'])->name('planned-recipes.unplan');
         Route::delete('planned-recipes', [PlannedRecipeController::class, 'destroyAll'])->name('planned-recipes.destroy-all');
         Route::delete('planned-recipes/{plannedRecipe}', [PlannedRecipeController::class, 'destroy'])->name('planned-recipes.destroy');
 

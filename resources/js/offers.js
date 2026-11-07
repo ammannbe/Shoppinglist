@@ -1,6 +1,6 @@
 import Alpine from 'alpinejs';
 import { createApi } from './api.js';
-import { normalizeName } from './helpers.js';
+import { offerMatches } from './helpers.js';
 import { prepareForAi } from './image.js';
 import { requests } from './requests.js';
 
@@ -173,10 +173,8 @@ export function offersPool({ storeLabel }) {
         },
 
         get shown() {
-            const search = normalizeName(this.search);
-
             return this.offers.filter((offer) => (!this.storeFilter.length || this.storeFilter.includes(offer.store ?? ''))
-                && (!search || normalizeName(`${offer.name} ${offer.brand ?? ''}`).includes(search)));
+                && offerMatches(offer, this.search));
         },
 
         /** Shown offers grouped by shop, in the order of the shop chips. */

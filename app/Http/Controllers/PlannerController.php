@@ -102,9 +102,7 @@ class PlannerController extends Controller
                 ], $result['ideas']),
             ];
 
-            // History (#/recipes): plan or cook them later, import AI ideas afterwards.
-            PlannedRecipe::remember($user, array_map(fn (array $suggestion) => ['servings' => (int) $data['servings'], ...$suggestion], $suggestions));
-
+            // Not saved: the user saves the ones to keep (POST /planned-recipes), the ones a list is built from are saved then.
             return ['suggestions' => $suggestions, 'warning' => $warning];
         });
     }
@@ -134,25 +132,47 @@ class PlannerController extends Controller
             foreach (RecipeIngredients::unify($loaded) as $index => $ingredients) {
                 $recipes[$index]['ingredients'] = $ingredients;
             }
-            $recipes = array_values($recipes);
 
-            $items = $this->assistant->shoppingList($recipes, $data['offers'] ?? [], $data['pantry'] ?? [], $this->language());
-            PlannedRecipe::where('user_id', $user->id)->whereIn('key', array_filter(array_column($data['recipes'], 'key')))
-                ->update(['used_at' => now()]);
+            // The items name the recipes as the AI got them: the suggestion's name again (the
+            // client links the items to the saved recipes by it).
+            $names = [];
+            foreach ($recipes as $index => $recipe) {
+                $names[mb_strtolower($recipe['name'])] = $data['recipes'][$index]['name'];
+            }
+            $items = array_map(fn (array $item) => [
+                ...$item,
+                'recipes' => array_values(array_unique(array_map(fn (string $name) => $names[mb_strtolower($name)] ?? $name, $item['recipes'] ?? []))),
+            ], $this->assistant->shoppingList(array_values($recipes), $data['offers'] ?? [], $data['pantry'] ?? [], $this->language()));
 
-            return ['items' => $items];
+            // The recipes are saved (Recipes tab), own recipes with the ingredients loaded above.
+            // They stay planned: they are on a list once the client added the items (POST
+            // /planned-recipes/used). Recipes without key (older clients) are not saved.
+            $saving = array_filter($data['recipes'], fn (array $recipe) => filled($recipe['key'] ?? null));
+            foreach (array_keys($saving) as $index) {
+                if (isset($loaded[$index])) {
+                    $saving[$index]['ingredients'] = RecipeIngredients::forSaving($loaded[$index]);
+                }
+            }
+            $saved = PlannedRecipe::remember($user, array_values($saving));
+
+            return [
+                'items' => $items,
+                // Ids of the saved recipes: the items link to them (`items.recipes[].key`).
+                'recipes' => array_map(fn (array $recipe, PlannedRecipe $planned) => ['key' => $recipe['key'], 'id' => $planned->id], array_values($saving), $saved),
+            ];
         });
     }
 
     /**
      * Hand an AI recipe idea to the recipe app as a draft. The user checks and imports it there
      * (matching foods, units and the category), so nothing is created without a person.
+     * An idea with a key is saved first if it is not yet (Recipes tab), so the import link is kept.
      */
     public function saveRecipe(Request $request): JsonResponse
     {
         $data = $request->validate([
-            // History entry of the idea (gets the import link).
-            'key' => ['nullable', 'string', 'max:100'],
+            // Saved entry of the idea (gets the import link, saved now if it is not yet).
+            'key' => ['nullable', 'string', 'max:100', 'regex:/^idea-[A-Za-z0-9-]+$/'],
             'name' => ['required', 'string', 'max:100'],
             'servings' => ['required', 'integer', 'min:1', 'max:100'],
             'category' => ['nullable', 'string', 'max:50'],
@@ -162,7 +182,14 @@ class PlannerController extends Controller
             'ingredients.*.name' => ['required', 'string', 'max:50'],
             'ingredients.*.amount' => ['nullable', 'numeric', 'min:0'],
             'ingredients.*.unit' => ['nullable', 'string', 'max:20'],
+            // Only kept when the idea is saved here.
+            'reason' => ['nullable', 'string', 'max:1000'],
+            ...collect(['uses_offers', 'uses_pantry', 'uses_season'])->flatMap(fn (string $field) => [
+                $field => ['nullable', 'array', 'max:50'],
+                $field.'.*' => ['string', 'max:255'],
+            ])->all(),
         ]);
+        $user = $request->user();
 
         try {
             $result = $this->recipes->post($request->user(), '/api/recipe-drafts', [
@@ -181,11 +208,14 @@ class PlannerController extends Controller
         }
 
         $url = $result['data']['url'] ?? null;
+        $saved = null;
         if (filled($data['key'] ?? null) && $url !== null) {
-            PlannedRecipe::where('user_id', $request->user()->id)->where('key', $data['key'])->update(['draft_url' => $url]);
+            $saved = PlannedRecipe::where('user_id', $user->id)->where('key', $data['key'])->first()
+                ?? PlannedRecipe::remember($user, [[...$data, 'source' => 'ai']])[0];
+            $saved->update(['draft_url' => $url]);
         }
 
-        return response()->json(['url' => $url]);
+        return response()->json(['url' => $url, 'recipe' => $saved?->toClient()]);
     }
 
     /**

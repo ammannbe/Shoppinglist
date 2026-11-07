@@ -43,6 +43,29 @@ class RecipeIngredients
     }
 
     /**
+     * Ingredients of a recipe app recipe as saved with the recipe (amounts for its servings).
+     *
+     * @param  list<array<string, mixed>>  $ingredients  API ingredients
+     * @return list<array{amount: mixed, unit: ?string, name: string}>
+     */
+    public static function forSaving(array $ingredients): array
+    {
+        $saved = [];
+        foreach (array_slice($ingredients, 0, 100) as $ingredient) {
+            $name = trim((string) ($ingredient['food'] ?? $ingredient['text'] ?? ''));
+            if ($name !== '') {
+                $saved[] = [
+                    'amount' => is_numeric($ingredient['amount'] ?? null) ? $ingredient['amount'] : null,
+                    'unit' => filled($ingredient['unit'] ?? null) ? mb_substr((string) $ingredient['unit'], 0, 50) : null,
+                    'name' => mb_substr($name, 0, 255),
+                ];
+            }
+        }
+
+        return $saved;
+    }
+
+    /**
      * @param  array<string, mixed>  $ingredient
      */
     private static function key(array $ingredient): string

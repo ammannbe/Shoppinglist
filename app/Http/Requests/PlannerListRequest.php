@@ -14,15 +14,12 @@ class PlannerListRequest extends FormRequest
         return [
             ...PlannerSuggestionsRequest::offersAndPantry(),
             'recipes' => ['required', 'array', 'min:1', 'max:15'],
-            'recipes.*.source' => ['required', 'in:recipes,ai'],
-            'recipes.*.key' => ['nullable', 'string', 'max:100'],
-            'recipes.*.recipe_id' => ['required_if:recipes.*.source,recipes', 'nullable', 'integer'],
-            'recipes.*.name' => ['required', 'string', 'max:255'],
+            // With all details of the suggestion: the recipes are saved (Recipes tab).
+            ...StorePlannedRecipeRequest::recipe('recipes.*.'),
+            // Older clients send neither the key of every recipe nor the preparation of AI ideas.
+            'recipes.*.key' => ['nullable', 'string', 'max:100', 'regex:/^(recipe|idea)-[A-Za-z0-9-]+$/'],
+            'recipes.*.instructions' => ['nullable', 'string', 'max:20000'],
             'recipes.*.servings' => ['required', 'numeric', 'min:0.5', 'max:100'],
-            'recipes.*.ingredients' => ['required_if:recipes.*.source,ai', 'array', 'max:100'],
-            'recipes.*.ingredients.*.name' => ['required', 'string', 'max:255'],
-            'recipes.*.ingredients.*.amount' => ['nullable', 'numeric', 'min:0'],
-            'recipes.*.ingredients.*.unit' => ['nullable', 'string', 'max:50'],
         ];
     }
 }

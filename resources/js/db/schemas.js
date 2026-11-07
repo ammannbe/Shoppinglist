@@ -27,7 +27,7 @@ export const lists = {
 };
 
 export const items = {
-    version: 4,
+    version: 5,
     primaryKey: 'id',
     type: 'object',
     properties: {
@@ -39,11 +39,16 @@ export const items = {
         // Shops as shown (code, or the name of a shop without code, see stores) and free note (e.g. the offer).
         stores: { type: 'array', items: { type: 'string' }, default: [] },
         note: { type: ['string', 'null'] },
-        // Recipes the item was planned for (week planner): { name, url|null }.
+        // Recipes the item was planned for (week planner): { name, url|null, key|null }, key: the
+        // saved recipe (planned_recipes id, Recipes tab), missing in older entries.
         recipes: {
             type: 'array',
             default: [],
-            items: { type: 'object', properties: { name: { type: 'string' }, url: { type: ['string', 'null'] } }, required: ['name'] },
+            items: {
+                type: 'object',
+                properties: { name: { type: 'string' }, url: { type: ['string', 'null'] }, key: { type: ['string', 'null'] } },
+                required: ['name'],
+            },
         },
         // Image of the product (copied when added, so members of shared lists see it too).
         image: { type: ['string', 'null'] },
@@ -117,6 +122,8 @@ export const migrations = {
         2: (doc) => ({ ...doc, image: doc.image ?? null }),
         3: (doc) => ({ ...doc, store: null, note: null }),
         4: ({ store, ...doc }) => ({ ...doc, stores: store ? [store] : [], recipes: [] }),
+        // Links to the saved recipes (an old app version may have pulled keys already).
+        5: (doc) => ({ ...doc, recipes: (doc.recipes ?? []).map((recipe) => ({ key: null, ...recipe })) }),
     },
     // Codes became optional.
     stores: { 1: (doc) => doc, 2: (doc) => ({ icon: null, countries: [], ...doc }) },

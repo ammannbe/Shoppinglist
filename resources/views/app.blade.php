@@ -18,17 +18,22 @@
 <body class="min-h-dvh bg-stone-50 text-stone-900 antialiased" :class="$store.sync.online || 'is-offline'" x-data="shoppinglist" x-cloak>
     <header class="sticky top-0 z-10 border-b border-stone-200 bg-white/95 pt-[env(safe-area-inset-top)] backdrop-blur">
         <div class="mx-auto flex h-14 max-w-xl items-center gap-2 px-3">
-            <a :href="backLink" @click.prevent="goBack()" x-show="!['lists', 'offline'].includes(route.view)" class="icon-button" :aria-label="$t('Back')">
+            <a :href="backLink" @click.prevent="goBack()" x-show="(!tab || (!showTabs && tab !== 'lists')) && route.view !== 'offline'" class="icon-button" :aria-label="$t('Back')">
                 <svg viewBox="0 0 24 24" class="size-6"><path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </a>
 
             <h1 class="min-w-0 flex-1 truncate text-lg font-semibold">
-                <span x-show="route.view === 'lists'" class="block truncate" x-text="$t('Shopping lists')"></span>
+                {{-- With tabs the app name, the tabs name the page --}}
+                <span x-show="showTabs" class="flex items-center gap-2">
+                    <img src="/favicon-96x96.png" alt="" class="size-7 rounded-md">
+                    <span>Shoppinglist</span>
+                </span>
+                <span x-show="route.view === 'lists' && !showTabs" class="block truncate" x-text="$t('Shopping lists')"></span>
                 <span x-show="route.view === 'settings'" class="block truncate" x-text="$t('Settings')"></span>
                 <span x-show="route.view === 'install'" class="block truncate" x-text="$t('Install app')"></span>
-                <span x-show="route.view === 'planner'" class="block truncate" x-text="$t('Week planner')"></span>
+                <span x-show="route.view === 'planner' && !showTabs" class="block truncate" x-text="$t('Week planner')"></span>
                 <span x-show="route.view === 'offers'" class="block truncate" x-text="$t('Offers')"></span>
-                <span x-show="route.view === 'recipes'" class="block truncate" x-text="$t('Recipe history')"></span>
+                <span x-show="route.view === 'recipes' && !showTabs" class="block truncate" x-text="$t('Recipes')"></span>
                 <span x-show="route.view === 'products'" class="block truncate" x-text="$t('Products')"></span>
                 <span x-show="route.view === 'units'" class="block truncate" x-text="$t('Units')"></span>
                 <span x-show="route.view === 'stores'" class="block truncate" x-text="$t('Shops')"></span>
@@ -66,11 +71,17 @@
                 }[$store.sync.status]"></span>
             </span>
 
-            <a href="#/settings" x-show="['lists', 'list'].includes(route.view)" class="icon-button" :aria-label="$t('Settings')">
+            <a href="#/settings" x-show="tab || route.view === 'list'" class="icon-button" :aria-label="$t('Settings')">
                 <svg viewBox="0 0 24 24" class="size-6" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10.3 4.3c.4-1.7 3-1.7 3.4 0a1.7 1.7 0 0 0 2.6 1.1c1.5-.9 3.3.8 2.4 2.4a1.7 1.7 0 0 0 1 2.5c1.8.4 1.8 3 0 3.4a1.7 1.7 0 0 0-1 2.6c.9 1.5-.9 3.3-2.4 2.4a1.7 1.7 0 0 0-2.6 1c-.4 1.8-3 1.8-3.4 0a1.7 1.7 0 0 0-2.5-1c-1.6.9-3.3-.9-2.4-2.4a1.7 1.7 0 0 0-1.1-2.6c-1.7-.4-1.7-3 0-3.4a1.7 1.7 0 0 0 1.1-2.5c-.9-1.6.8-3.3 2.4-2.4a1.7 1.7 0 0 0 2.5-1.1z"/><circle cx="12" cy="12" r="3"/></svg>
             </a>
-
         </div>
+
+        {{-- Overview tabs (week planner and recipes only with the assistant); switching goes via the lists in the history --}}
+        <nav x-show="showTabs" class="mx-auto flex max-w-xl gap-1 px-3 pb-2" :aria-label="$t('Overview')">
+            <template x-for="entry in [{ tab: 'lists', href: '#/', label: $t('Shopping lists') }, { tab: 'planner', href: '#/planner', label: $t('Week planner') }, { tab: 'recipes', href: '#/recipes', label: $t('Recipes') }]" :key="entry.tab">
+                <a :href="entry.href" @click.prevent="openTab(entry.href)" class="tab" :class="tab === entry.tab && 'tab-active'" :aria-current="tab === entry.tab && 'page'" x-text="entry.label"></a>
+            </template>
+        </nav>
     </header>
 
     {{-- Account hints --}}
@@ -125,16 +136,6 @@
                     </x-swipe-row>
                 </template>
             </ul>
-
-            {{-- After the lists, so it does not push them down while they load --}}
-            <a x-show="assistantEnabled" href="#/planner" class="mt-4 flex items-center gap-3 rounded-lg border border-violet-200 bg-violet-50 p-4 hover:bg-violet-100">
-                <span class="text-2xl" aria-hidden="true">✨</span>
-                <span class="min-w-0 flex-1">
-                    <span class="block font-medium" x-text="$t('Week planner')"></span>
-                    <span class="block text-sm text-stone-600" x-text="$t('Offers, what is at home, recipes and the shopping list')"></span>
-                </span>
-                <span aria-hidden="true">›</span>
-            </a>
         </section>
 
         {{-- One list --}}
@@ -215,22 +216,8 @@
                     <ul class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white" x-show="shownOpenItems.length" @row-move="moveRow('items', $event.detail)">
                         <template x-for="item in shownOpenItems" :key="item.id">
                             <x-swipe-row actions="itemActions(item)" x-bind:data-sort-id="item.id">
-                                {{-- Tap marks as done, edit/delete via swipe or "…" --}}
-                                <button type="button" class="flex min-w-0 flex-1 items-center py-3 pr-4 text-left" role="checkbox" aria-checked="false" @click="toggle(item)">
-                                    <span class="check" aria-hidden="true"></span>
-                                    <img x-show="item.image" :src="imageUrl(item.image, 'thumb')" @click.stop="openImage(item.image)" :alt="$t('Show photo')" loading="lazy" decoding="async" class="mr-3 size-8 shrink-0 cursor-zoom-in rounded-md bg-stone-100 object-cover">
-                                    <template x-for="tag in item.stores" :key="tag">
-                                        <x-store-badge tag="tag" />
-                                    </template>
-                                    <span x-show="item.stores.length" class="mr-0.5" aria-hidden="true"></span>
-                                    <span x-show="amount(item)" class="mr-2 shrink-0 tabular-nums text-stone-500" x-text="amount(item)"></span>
-                                    <span class="min-w-0">
-                                        <span class="block truncate" x-text="item.name"></span>
-                                        <span x-show="item.note" class="block whitespace-pre-line break-words text-xs text-stone-500" x-text="item.note"></span>
-                                        {{-- Links to the recipes are in the edit dialog (no links inside the row button) --}}
-                                        <span x-show="item.recipes?.length" class="block truncate text-xs text-violet-700" x-text="$t('For :recipes', { recipes: item.recipes.map((recipe) => recipe.name).join(', ') })"></span>
-                                    </span>
-                                </button>
+                                {{-- Checkbox checks off, tap on the row edits; delete/move via swipe, long press or "…" --}}
+                                <x-item-row />
                             </x-swipe-row>
                         </template>
                     </ul>
@@ -244,17 +231,7 @@
                         <ul x-show="showDone" class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
                             <template x-for="item in doneItems" :key="item.id">
                                 <x-swipe-row actions="itemActions(item)" class="text-stone-400">
-                                    <button type="button" class="flex min-w-0 flex-1 items-center py-3 pr-4 text-left" role="checkbox" aria-checked="true" @click="toggle(item)">
-                                        <span class="check check-done" aria-hidden="true">
-                                            <svg viewBox="0 0 24 24" class="size-4"><path d="M5 12l5 5 9-10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                                        </span>
-                                        <img x-show="item.image" :src="imageUrl(item.image, 'thumb')" @click.stop="openImage(item.image)" :alt="$t('Show photo')" loading="lazy" decoding="async" class="mr-3 opacity-50 size-8 shrink-0 cursor-zoom-in rounded-md bg-stone-100 object-cover">
-                                        <template x-for="tag in item.stores" :key="tag">
-                                            <x-store-badge tag="tag" muted />
-                                        </template>
-                                        <span x-show="amount(item)" class="mr-2 shrink-0 tabular-nums line-through" x-text="amount(item)"></span>
-                                        <span class="truncate line-through" x-text="item.name"></span>
-                                    </button>
+                                    <x-item-row done />
                                 </x-swipe-row>
                             </template>
                         </ul>
@@ -602,8 +579,10 @@
                     <template x-for="(recipe, index) in editing.recipes" :key="index">
                         <span>
                             <span x-show="index > 0">, </span>
-                            <a x-show="recipe.url" :href="recipe.url" target="_blank" rel="noopener" class="font-medium text-violet-700 underline" x-text="recipe.name"></a>
-                            <span x-show="!recipe.url" x-text="recipe.name"></span>
+                            {{-- Saved recipe: Recipes tab with its dialog, otherwise the recipe app (own recipes) or the name --}}
+                            <a x-show="recipeHref(recipe)" :href="recipeHref(recipe)" @click.prevent="openRecipe(recipe)" class="font-medium text-violet-700 underline" x-text="recipe.name"></a>
+                            <a x-show="!recipeHref(recipe) && recipe.url" :href="recipe.url" target="_blank" rel="noopener" class="font-medium text-violet-700 underline" x-text="recipe.name"></a>
+                            <span x-show="!recipeHref(recipe) && !recipe.url" x-text="recipe.name"></span>
                         </span>
                     </template>
                 </p>

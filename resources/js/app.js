@@ -7,12 +7,13 @@ import { byPosition, compareBy, csvFirstColumn, csvValue, formatAmount, mergedAm
 import { hasPendingLocale, htmlLang, initialLocale, LOCALES, storeLocale, translate } from './i18n.js';
 import { registerServiceWorker } from './pwa.js';
 import { shrinkIcon, shrinkImage } from './image.js';
-import { closeLayersOnBack } from './layers.js';
+import { closeDialogThen, closeLayersOnBack } from './layers.js';
 import { createLightboxStore } from './lightbox.js';
 import { createPrefsStore } from './prefs.js';
 import { offersPool } from './offers.js';
-import { planner } from './planner.js';
-import { recipeHistory } from './recipe-history.js';
+import { clearPlannerState, planner } from './planner.js';
+import { clearRecipeCache, recipeHistory } from './recipe-history.js';
+import { joinRecipes, plainRecipes } from './recipe-links.js';
 import { deviceCountry, inCountry, storeIconUrl, storeUsage } from './stores.js';
 import { suggestField } from './suggest.js';
 import { swipeRow } from './swipe.js';
@@ -141,12 +142,22 @@ Alpine.data('shoppinglist', () => ({
     // Hashes visited in this tab, to make "back" go up in the structure (goBack).
     navStack: [],
     navReplacing: false,
+    // Entries history.go() goes back (navigate), and the hash to open after that (openFromLists).
+    navPops: 0,
+    navAfter: null,
 
     init() {
         const layers = closeLayersOnBack({ menuOpen: () => this.menu !== null, closeMenu: () => { this.menu = null; } });
         this.$watch('menu', (menu) => (menu ? layers.opened() : layers.closed()));
         const parse = (event) => {
             this.trackNavigation(Boolean(event));
+            if (this.navAfter) {
+                // Back at the lists on the way to another tab (openFromLists): open it right away.
+                const next = this.navAfter;
+                this.navAfter = null;
+                location.hash = next;
+                return;
+            }
             const [, view, id = null] = location.hash.split('/');
             if (view === 'settings' && event) {
                 const from = new URL(event.oldURL).hash;
@@ -355,16 +366,15 @@ Alpine.data('shoppinglist', () => ({
         const merges = merge ? this.plannedMerges(target, items) : new Map();
         let position = nextPosition(this.itemsOf(listId)) ?? 0;
         for (const [index, item] of items.entries()) {
-            const recipes = (item.recipes ?? []).map(({ name, url }) => ({ name, url: url ?? null }));
+            const recipes = plainRecipes(item.recipes);
             const existing = merges.get(index);
             if (existing) {
-                const known = existing.recipes ?? [];
                 const note = [existing.note, item.note].filter(Boolean);
                 await (await db.items.findOne(existing.id).exec())?.incrementalPatch({
                     amount: item.amount == null && existing.amount == null ? null : mergedAmount(existing, item),
                     unit: existing.unit ?? item.unit ?? null,
                     stores: [...new Set([...(existing.stores ?? []), ...(item.stores ?? [])])],
-                    recipes: [...known.map(({ name, url }) => ({ name, url: url ?? null })), ...recipes.filter((recipe) => !known.some((each) => sameName(each.name, recipe.name)))],
+                    recipes: joinRecipes(existing.recipes, recipes),
                     note: [...new Set(note)].join('\n').slice(0, 255) || null,
                 });
                 continue;
@@ -429,9 +439,71 @@ Alpine.data('shoppinglist', () => ({
         const hash = location.hash || '#/';
         if (!changed) this.navStack = [hash];
         else if (this.navReplacing) this.navStack[this.navStack.length - 1] = hash;
-        else if (this.navStack.at(-2) === hash) this.navStack.pop();
+        else if (this.navPops) {
+            this.navStack.length = Math.max(1, this.navStack.length - this.navPops);
+            this.navStack[this.navStack.length - 1] = hash;
+        } else if (this.navStack.at(-2) === hash) this.navStack.pop();
         else this.navStack.push(hash);
         this.navReplacing = false;
+        this.navPops = 0;
+    },
+
+    /**
+     * Opens a hash: an earlier entry of the history is reached by going back (so the back
+     * gesture does not return to the pages in between), otherwise it is pushed, or with
+     * `replace` replaces the current entry. `trail`: entries pushed before the target
+     * (planner steps skipped when jumping forward).
+     */
+    navigate(target, { replace = false, trail = [] } = {}) {
+        const index = this.navStack.lastIndexOf(target);
+        if (index !== -1 && index < this.navStack.length - 1) {
+            this.navPops = this.navStack.length - 1 - index;
+            history.go(-this.navPops);
+            return;
+        }
+        if (target === (location.hash || '#/')) return;
+        if (replace) {
+            this.navReplacing = true;
+            location.replace(target);
+            return;
+        }
+        for (const hash of trail) {
+            history.pushState(null, '', hash);
+            this.navStack.push(hash);
+        }
+        location.hash = target;
+    },
+
+    /**
+     * Opens a page "next to" the lists (another tab, a list from the planner): the history
+     * goes back to the lists first, so back from there always leads to the lists and then
+     * out of the app instead of through all tabs visited.
+     */
+    openFromLists(target) {
+        const index = this.navStack.lastIndexOf('#/');
+        if (target === '#/' || index === -1 || index === this.navStack.length - 1) {
+            this.navigate(target, { replace: index !== this.navStack.length - 1 });
+            return;
+        }
+        this.navAfter = target;
+        this.navigate('#/');
+    },
+
+    // ---- overview tabs: lists, week planner and recipes (planner and recipes with the assistant)
+
+    get tab() {
+        return { lists: 'lists', planner: 'planner', recipes: 'recipes' }[this.route.view] ?? null;
+    },
+
+    get showTabs() {
+        return this.tab !== null && this.assistantEnabled;
+    },
+
+    /** Tabs are siblings: from the lists a tab is pushed, between the other tabs it goes via the lists. */
+    openTab(target) {
+        if (target.split('/')[1] === (this.tab === 'lists' ? '' : this.tab)) return;
+        if (this.tab === 'lists') this.navigate(target);
+        else this.openFromLists(target);
     },
 
     /**
@@ -450,7 +522,7 @@ Alpine.data('shoppinglist', () => ({
 
     get backLink() {
         if (['products', 'units', 'stores', 'install'].includes(this.route.view)) return '#/settings';
-        if (['offers', 'recipes'].includes(this.route.view)) return '#/planner';
+        if (this.route.view === 'offers') return '#/planner/offers';
 
         return this.route.view === 'settings' ? this.settingsBack : '#/';
     },
@@ -771,6 +843,21 @@ Alpine.data('shoppinglist', () => ({
         this.$nextTick(() => this.$refs.editDialog.showModal());
     },
 
+    /**
+     * Link of an item's recipe to the saved recipe (Recipes tab with its dialog), null for
+     * entries without key (older ones; they show the name or the recipe app link).
+     */
+    recipeHref(recipe) {
+        return recipe.key && this.loggedIn ? `#/recipes/${recipe.key}` : null;
+    },
+
+    /** From the edit dialog: its history entry has to be gone before navigating. */
+    openRecipe(recipe) {
+        const dialog = this.$refs.editDialog;
+        closeDialogThen(dialog, () => this.navigate(this.recipeHref(recipe)));
+        this.editing = null;
+    },
+
     async saveItem() {
         const { id, name, amount, unit, note } = this.editing;
         // A shop typed but not picked yet counts too.
@@ -898,7 +985,7 @@ Alpine.data('shoppinglist', () => ({
         await db.items.insert({
             ...Object.fromEntries(fields.map((field) => [field, item[field] ?? null])),
             stores: [...(item.stores ?? [])],
-            recipes: (item.recipes ?? []).map(({ name, url }) => ({ name, url: url ?? null })),
+            recipes: plainRecipes(item.recipes),
             done: Boolean(item.done),
             id: copyId,
             shopping_list_id: listId,
@@ -1082,6 +1169,8 @@ async function wipeLocalData() {
     await db?.remove();
     localStorage.removeItem(OWNER_KEY);
     localStorage.removeItem(USER_KEY);
+    clearPlannerState();
+    clearRecipeCache();
 }
 
 async function boot() {

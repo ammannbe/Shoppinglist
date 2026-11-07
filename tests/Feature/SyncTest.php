@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Console\Commands\SyncStandardStores;
 use App\Models\Item;
+use App\Models\PlannedRecipe;
 use App\Models\Product;
 use App\Models\ShoppingList;
 use App\Models\Store;
@@ -376,7 +377,7 @@ class SyncTest extends TestCase
         $doc = $this->pull($user, 'items')
             ->assertJsonPath('documents.0.stores', ['M', 'Amazon'])
             ->assertJsonPath('documents.0.note', "Aktion −30 %\nnur Bio")
-            ->assertJsonPath('documents.0.recipes.1', ['name' => 'Omelette', 'url' => null])
+            ->assertJsonPath('documents.0.recipes.1', ['name' => 'Omelette', 'url' => null, 'key' => null])
             ->json('documents.0');
 
         // Clients from before the shops list send one `store` and no recipes.
@@ -387,6 +388,75 @@ class SyncTest extends TestCase
 
         $this->push($user, 'items', [['newDocumentState' => [...$doc, 'recipes' => [['name' => 'x', 'url' => 'javascript:alert(1)']]]]])
             ->assertUnprocessable();
+    }
+
+    private function plannedRecipe(User $user, string $name = 'Lasagne'): PlannedRecipe
+    {
+        return PlannedRecipe::forceCreate(['user_id' => $user->id, 'key' => 'idea-'.Str::uuid(), 'source' => 'ai', 'name' => $name, 'data' => ['ingredients' => []]]);
+    }
+
+    public function test_items_link_to_saved_recipes(): void
+    {
+        $user = User::factory()->create();
+        $other = User::factory()->create();
+        $lasagne = $this->plannedRecipe($user);
+        $foreign = $this->plannedRecipe($other, 'Geheim');
+        $listId = $this->createList($user);
+        $id = $this->createItem($user, $listId, ['recipes' => [
+            ['name' => 'Lasagne', 'url' => null, 'key' => $lasagne->id],
+            // Somebody else's recipe, not linked in the user's lists: the key is dropped.
+            ['name' => 'Geheim', 'url' => null, 'key' => $foreign->id],
+        ]]);
+
+        $doc = $this->pull($user, 'items')
+            ->assertJsonPath('documents.0.recipes', [
+                ['name' => 'Lasagne', 'url' => null, 'key' => $lasagne->id],
+                ['name' => 'Geheim', 'url' => null, 'key' => null],
+            ])->json('documents.0');
+
+        // Clients from before the links send the recipes without key: the item keeps its link.
+        $old = [...$doc, 'recipes' => [['name' => 'Lasagne', 'url' => null], ['name' => 'Omelette', 'url' => null]], 'version' => $doc['version'] + 1];
+        $this->push($user, 'items', [['assumedMasterState' => $doc, 'newDocumentState' => $old]])->assertExactJson([]);
+        $this->assertSame([$lasagne->id, null], array_column(Item::find($id)->recipes, 'key'));
+
+        $this->push($user, 'items', [['newDocumentState' => [...$doc, 'recipes' => [['name' => 'x', 'key' => 'recipe-5']]]]])
+            ->assertUnprocessable();
+    }
+
+    public function test_members_see_recipes_linked_in_shared_lists_only(): void
+    {
+        $owner = User::factory()->create();
+        $member = User::factory()->create();
+        $stranger = User::factory()->create();
+        $lasagne = $this->plannedRecipe($owner);
+        $listId = $this->createList($owner);
+        $this->createItem($owner, $listId, ['recipes' => [['name' => 'Lasagne', 'url' => null, 'key' => $lasagne->id]]]);
+        $lasagne->forceFill(['draft_url' => 'https://recipes.test/import?draft=abc'])->save();
+
+        $this->actingAs($owner)->getJson("/planned-recipes/{$lasagne->id}")->assertOk()
+            ->assertJsonPath('recipe.name', 'Lasagne')->assertJsonPath('recipe.draft_url', 'https://recipes.test/import?draft=abc');
+        $this->actingAs($member)->getJson("/planned-recipes/{$lasagne->id}")->assertNotFound();
+        // Pushing the id into an own list does not give access.
+        $ownList = $this->createList($stranger, 'Eigene');
+        $this->createItem($stranger, $ownList, ['recipes' => [['name' => 'Lasagne', 'url' => null, 'key' => $lasagne->id]]]);
+        $this->assertNull(Item::where('shopping_list_id', $ownList)->first()->recipes[0]['key']);
+        $this->actingAs($stranger)->getJson("/planned-recipes/{$lasagne->id}")->assertNotFound();
+
+        ShoppingList::find($listId)->addMember($member);
+        $this->actingAs($member)->getJson("/planned-recipes/{$lasagne->id}")->assertOk()
+            ->assertJsonPath('recipe.name', 'Lasagne')->assertJsonPath('recipe.shared', true)->assertJsonMissingPath('recipe.draft_url');
+        $this->actingAs($member)->deleteJson("/planned-recipes/{$lasagne->id}")->assertForbidden();
+        $this->actingAs($member)->getJson('/planned-recipes')->assertJsonCount(0, 'recipes');
+
+        // Members may copy the link (moving an item to another list).
+        $memberList = $this->createList($member, 'Kopie');
+        $this->createItem($member, $memberList, ['recipes' => [['name' => 'Lasagne', 'url' => null, 'key' => $lasagne->id]]]);
+        $this->assertSame($lasagne->id, Item::where('shopping_list_id', $memberList)->first()->recipes[0]['key']);
+
+        // Removed recipes: the items keep their entry, the link finds nothing.
+        $this->actingAs($owner)->deleteJson("/planned-recipes/{$lasagne->id}")->assertNoContent();
+        $this->actingAs($member)->getJson("/planned-recipes/{$lasagne->id}")->assertNotFound();
+        $this->assertSame('Lasagne', Item::where('shopping_list_id', $listId)->first()->recipes[0]['name']);
     }
 
     public function test_shop_codes_are_optional_and_keep_their_case(): void
