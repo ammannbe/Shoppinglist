@@ -7,10 +7,12 @@ use App\Http\Controllers\OfferController;
 use App\Models\PlannedRecipe;
 use App\Models\User;
 use App\Support\Seasons;
+use Illuminate\Encryption\Encrypter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -663,6 +665,16 @@ class PlannerTest extends TestCase
             'name' => 'X', 'servings' => 1, 'instructions' => 'y', 'ingredients' => [['name' => 'Eier']],
         ])->assertStatus(502);
         $this->assertNull($user->fresh()->recipes_connection);
+    }
+
+    public function test_a_connection_encrypted_with_another_key_reads_as_not_connected(): void
+    {
+        $user = User::factory()->create();
+        // E.g. after `ddev pull production`: encrypted with the production APP_KEY.
+        $other = new Encrypter(random_bytes(32), 'aes-256-cbc');
+        DB::table('users')->where('id', $user->id)->update(['recipes_connection' => $other->encryptString('{"access_token":"x"}')]);
+
+        $this->actingAs($user->fresh())->getJson('/me')->assertOk()->assertJsonPath('recipes.connected', false);
     }
 
     public function test_connecting_with_the_recipe_app(): void

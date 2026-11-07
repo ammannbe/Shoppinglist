@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\EncryptedArrayOrNull;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Contracts\Translation\HasLocalePreference;
@@ -33,7 +34,7 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'preferences' => 'array',
-            'recipes_connection' => 'encrypted:array',
+            'recipes_connection' => EncryptedArrayOrNull::class,
         ];
     }
 
