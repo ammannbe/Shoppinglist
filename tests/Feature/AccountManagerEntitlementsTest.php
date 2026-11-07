@@ -280,7 +280,7 @@ class AccountManagerEntitlementsTest extends TestCase
         $this->store($this->user, 'none');
         config(['entitlements.driver' => 'local']);
         $this->actingAs($this->user->refresh())->getJson('/me')->assertOk();
-        $this->actingAs($this->user)->get('/account')->assertOk();
+        $this->actingAs($this->user)->get('/account')->assertRedirect('/#/settings');
     }
 
     public function test_the_login_fetches_the_snapshot_and_refuses_blocked_users(): void

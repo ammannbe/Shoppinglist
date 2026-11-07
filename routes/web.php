@@ -2,6 +2,7 @@
 
 use App\Ai\OpenAiClient;
 use App\Entitlements\Entitlements;
+use App\Http\Controllers\AccountController;
 use App\Http\Controllers\Auth\OidcController;
 use App\Http\Controllers\HouseholdController;
 use App\Http\Controllers\HouseholdInvitationController;
@@ -47,6 +48,10 @@ Route::middleware('auth')->group(function () {
         'verified' => $request->user()->hasVerifiedEmail(),
         // Linked to the OIDC login: no password and no passkeys (App\Auth\OidcAccount).
         'linked' => $request->user()->isLinkedToOidc(),
+        // "Manage account" in the settings (AccountController).
+        'account' => AccountController::state($request->user()),
+        // Result of a redirect to the provider (linking, confirming), shown once by the settings.
+        'notice' => $request->session()->pull(AccountController::NOTICE),
         'locale' => $request->user()->locale,
         'preferences' => [...PreferenceController::DEFAULTS, ...($request->user()->preferences ?? [])],
         // For "Share with household", and a hint about open invitations in the settings.
@@ -72,15 +77,12 @@ Route::middleware('auth')->group(function () {
     ])->name('me');
     Route::put('preferences', [PreferenceController::class, 'update'])->name('preferences.update');
 
-    // Server rendered account pages (need a connection).
-    Route::get('account', fn (Request $request) => view('account', [
-        'passkeyCount' => $request->user()->passkeys()->count(),
-    ]))->name('account');
+    // "Manage account" in the settings (JSON, needs a connection); the former account page redirects there.
+    Route::get('account', [AccountController::class, 'show'])->name('account');
+    Route::delete('account', [AccountController::class, 'destroy'])->middleware('throttle:5,1')->name('account.destroy');
+    Route::get('account/passkeys', [AccountController::class, 'passkeys'])->name('account.passkeys');
     Route::post('account/oidc', [OidcController::class, 'link'])->middleware('throttle:5,1')->name('oidc.link');
     Route::delete('account/oidc', [OidcController::class, 'destroy'])->name('oidc.unlink');
-    Route::get('account/passkeys', fn (Request $request) => view('account-passkeys', [
-        'passkeys' => $request->user()->passkeys()->latest()->get(),
-    ]))->middleware('password.confirm')->name('account.passkeys');
 
     // Accepting proves the address (the link came by mail), so unverified users may accept.
     Route::post('households/invitations/{token}', [HouseholdInvitationController::class, 'accept'])

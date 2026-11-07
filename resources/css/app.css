@@ -42,6 +42,15 @@ html.row-held body {
         @apply rounded-lg border border-stone-300 bg-white px-4 py-2 font-medium hover:bg-stone-50 disabled:opacity-50;
     }
 
+    .button-danger {
+        @apply rounded-lg bg-red-700 px-4 py-2 font-medium text-white hover:bg-red-800 disabled:opacity-50;
+    }
+
+    /* Rows of "Manage account" in the settings (buttons, links and <summary>), dimmed offline. */
+    .account-row {
+        @apply flex w-full items-center justify-between gap-3 p-4 text-left hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent;
+    }
+
     .icon-button {
         @apply -m-1 grid size-10 shrink-0 place-items-center rounded-full text-stone-700 hover:bg-stone-100;
     }

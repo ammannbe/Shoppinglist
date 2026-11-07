@@ -13,6 +13,6 @@
     </button>
 
     <p class="mt-6 text-sm">
-        <a class="underline" href="{{ route('account') }}">{{ __('Back') }}</a>
+        <a class="underline" href="/#/settings">{{ __('Back') }}</a>
     </p>
 </x-guest-layout>

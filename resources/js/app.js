@@ -1,4 +1,5 @@
 import Alpine from 'alpinejs';
+import { accountSettings } from './account.js';
 import { addRxPlugin } from 'rxdb/plugins/core';
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
 import { createApi, HttpError } from './api.js';
@@ -103,6 +104,7 @@ Alpine.data('suggestField', suggestField);
 Alpine.data('planner', planner);
 Alpine.data('offersPool', offersPool);
 Alpine.data('recipeHistory', recipeHistory);
+Alpine.data('accountSettings', () => accountSettings({ ownerKey: OWNER_KEY }));
 
 // The products/units/shops view renders this many rows at a time ("Show more" adds as many).
 const CATALOG_PAGE = 200;
@@ -1245,7 +1247,10 @@ async function connect() {
     const sync = Alpine.store('sync');
 
     try {
-        sync.user = await api.get('/me');
+        const { notice, ...user } = await api.get('/me');
+        sync.user = user;
+        // Result of linking or a failed confirmation at the provider (OidcController), shown once.
+        if (notice) Alpine.store('notice').show(notice);
     } catch (error) {
         if (isBlocked(error)) {
             block(error.message);
@@ -1355,5 +1360,18 @@ if (recipesResult) {
     }[recipesResult] ?? 'The connection failed. Please try again.'));
 }
 
-boot();
+// Back from deleting the account (AccountController): remove its data from this device too.
+if (new URLSearchParams(location.search).get('deleted')) {
+    history.replaceState(null, '', `/${location.hash}`);
+    localStorage.removeItem(OWNER_KEY);
+    localStorage.removeItem(USER_KEY);
+    clearPlannerState();
+    clearRecipeCache();
+    removeDatabase({ storage: getRxStorageDexie() }).catch(() => {}).finally(() => {
+        Alpine.store('notice').show(translate(Alpine.store('i18n').locale, 'Your account has been deleted.'));
+        boot();
+    });
+} else {
+    boot();
+}
 registerServiceWorker((apply) => { Alpine.store('update').apply = apply; });

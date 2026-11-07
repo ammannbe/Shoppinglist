@@ -13,13 +13,19 @@ use Laravel\Socialite\AbstractUser as SocialiteUser;
  *
  * Accounts are matched by the provider's subject ("sub"). A local account is only
  * linked through an e-mail address that the provider marks as verified. Linking makes
- * the account SSO-only (App\Auth\OidcAccount::link()).
+ * the account SSO-only (App\Auth\OidcAccount::link()). Linked accounts take the
+ * provider's name on every login (the app has no name form).
  */
 class OidcLogin
 {
     public function __construct(private readonly OidcAccount $accounts) {}
 
     public function resolve(SocialiteUser $identity, ?User $linkTo = null): User
+    {
+        return $this->takeName($this->find($identity, $linkTo), $identity);
+    }
+
+    private function find(SocialiteUser $identity, ?User $linkTo): User
     {
         $sub = $this->subject($identity);
 
@@ -60,6 +66,25 @@ class OidcLogin
         if (! $user->isLinkedToOidc() || ! hash_equals((string) $user->oidc_sub, $this->subject($identity))) {
             throw OidcLoginException::because('This sign-in belongs to another account.');
         }
+    }
+
+    /**
+     * The name others see comes from the provider (kept when it sends none).
+     */
+    private function takeName(User $user, SocialiteUser $identity): User
+    {
+        $name = $this->name($identity);
+
+        if ($name !== null && $name !== $user->name) {
+            $user->forceFill(['name' => $name])->save();
+        }
+
+        return $user;
+    }
+
+    private function name(SocialiteUser $identity): ?string
+    {
+        return Str::limit(trim((string) ($identity->getName() ?: $identity->getNickname())), 255, '') ?: null;
     }
 
     private function subject(SocialiteUser $identity): string
@@ -137,7 +162,7 @@ class OidcLogin
     private function register(SocialiteUser $identity, string $sub, string $email): User
     {
         $user = new User([
-            'name' => Str::limit(trim((string) ($identity->getName() ?: $identity->getNickname())), 255, '') ?: null,
+            'name' => $this->name($identity),
             'email' => $email,
             'locale' => app()->getLocale(),
         ]);
