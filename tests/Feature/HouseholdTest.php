@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Household;
 use App\Models\HouseholdInvitation;
+use App\Models\PlannedRecipe;
 use App\Models\ShoppingList;
 use App\Models\User;
 use App\Notifications\HouseholdInvited;
@@ -262,6 +263,30 @@ class HouseholdTest extends TestCase
         [, $member, $household] = $this->sharedList();
 
         $this->actingAs($member)->getJson('/me')->assertJsonPath('households', [['id' => $household->uuid, 'name' => 'Familie Muster']]);
+    }
+
+    public function test_household_members_see_recipes_linked_in_household_lists(): void
+    {
+        [$owner, $member, $household, $list] = $this->sharedList();
+        $lasagne = PlannedRecipe::forceCreate(['user_id' => $owner->id, 'key' => 'idea-'.Str::uuid(), 'source' => 'ai', 'name' => 'Lasagne', 'data' => ['ingredients' => []]]);
+        $link = ['recipes' => [['name' => 'Lasagne', 'url' => null, 'key' => $lasagne->id]]];
+        $this->push($owner, 'items', [['newDocumentState' => ['id' => (string) Str::uuid(), 'shopping_list_id' => $list->id, 'name' => 'Hackfleisch', ...$link]]])
+            ->assertExactJson([]);
+
+        $this->actingAs($member)->getJson("/planned-recipes/{$lasagne->id}")->assertOk()->assertJsonPath('recipe.shared', true);
+        // Members may copy the link into an own list (moving an item).
+        $ownList = $this->createList($member, 'Eigene');
+        $this->push($member, 'items', [['newDocumentState' => ['id' => (string) Str::uuid(), 'shopping_list_id' => $ownList->id, 'name' => 'Hackfleisch', ...$link]]])
+            ->assertExactJson([]);
+        $this->assertSame($lasagne->id, $ownList->items()->first()->recipes[0]['key']);
+
+        // Removed from the household: no access through the household list anymore, a link pushed afterwards is dropped.
+        $this->actingAs($owner)->delete(route('households.members.destroy', [$household, $member]))->assertRedirect();
+        $ownList->items()->forceDelete();
+        $this->actingAs($member)->getJson("/planned-recipes/{$lasagne->id}")->assertNotFound();
+        $this->push($member, 'items', [['newDocumentState' => ['id' => (string) Str::uuid(), 'shopping_list_id' => $ownList->id, 'name' => 'Hackfleisch', ...$link]]])
+            ->assertExactJson([]);
+        $this->assertNull($ownList->items()->first()->recipes[0]['key']);
     }
 
     // ---- management
