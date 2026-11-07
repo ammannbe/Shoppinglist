@@ -3,7 +3,12 @@
     <p class="mb-6 text-sm text-stone-600">{{ __('Share lists with a household instead of single people: all members see them, new members too, and whoever leaves loses access.') }}</p>
 
     @unless (App\Models\Household::managedLocally())
-        <p class="notice mb-6">{{ __('Households are managed in your account at the provider. Here they can only be viewed.') }}</p>
+        <p class="notice mb-6">
+            {{ __('Households are managed in your account at the provider. Here they can only be viewed.') }}
+            @if ($kontoUrl)
+                <a class="underline" href="{{ $kontoUrl }}">{{ __('Manage households in your account') }}</a>
+            @endif
+        </p>
     @endunless
 
     @if ($households->isNotEmpty())
@@ -17,6 +22,16 @@
                                 {{ trans_choice('{1} :count member|[2,*] :count members', $household->members_count, ['count' => $household->members_count]) }}
                                 @if ($household->pivot->role === 'admin') · {{ __('Admin') }} @endif
                             </span>
+                            @if (! App\Models\Household::managedLocally() && $household->konto_household_uuid === null)
+                                <span class="block text-xs text-stone-500">
+                                    {{ __('Only in this app, not managed in your account.') }}
+                                    @if ($household->konto_import_status === 'pending')
+                                        {{ __('Proposed for your account, waiting for confirmation.') }}
+                                    @elseif ($household->konto_import_status === 'rejected')
+                                        {{ __('Not taken over into your account.') }}
+                                    @endif
+                                </span>
+                            @endif
                         </span>
                         <span aria-hidden="true">›</span>
                     </a>

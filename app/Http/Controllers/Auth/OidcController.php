@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Auth;
 
 use App\Auth\OidcLogin;
 use App\Auth\OidcLoginException;
+use App\Households\KontoHouseholds;
+use App\Households\KontoUnavailable;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
@@ -29,7 +31,7 @@ class OidcController extends Controller
         return $this->provider()->redirect();
     }
 
-    public function callback(Request $request, OidcLogin $login): RedirectResponse
+    public function callback(Request $request, OidcLogin $login, KontoHouseholds $households): RedirectResponse
     {
         abort_unless(config('login.oidc.enabled'), 404);
 
@@ -54,6 +56,8 @@ class OidcController extends Controller
             return $this->failed(__('The login failed. Please try again.'), $linking);
         }
 
+        $this->syncHouseholds($households, $user);
+
         if ($linking) {
             return redirect()->route('account')->with('status', __('The login is linked to your account.'));
         }
@@ -65,7 +69,7 @@ class OidcController extends Controller
         return redirect()->intended(config('fortify.home'));
     }
 
-    public function destroy(Request $request): RedirectResponse
+    public function destroy(Request $request, KontoHouseholds $households): RedirectResponse
     {
         /** @var User $user */
         $user = $request->user();
@@ -73,9 +77,33 @@ class OidcController extends Controller
         // Without a password the account would no longer be reachable.
         abort_if($user->password === null, 403);
 
+        // Mirrored households are matched by the login.
+        if (KontoHouseholds::enabled()) {
+            $households->detachUser($user);
+        }
+
         $user->forceFill(['oidc_sub' => null])->save();
 
         return redirect()->route('account')->with('status', __('The login is unlinked.'));
+    }
+
+    /**
+     * HOUSEHOLDS_DRIVER=konto: pending memberships and the user's households from the AccountManager.
+     * The login works without it (the daily sync catches up).
+     */
+    private function syncHouseholds(KontoHouseholds $households, User $user): void
+    {
+        if (! KontoHouseholds::enabled()) {
+            return;
+        }
+
+        try {
+            $households->syncUser($user);
+        } catch (KontoUnavailable $exception) {
+            KontoHouseholds::logUnavailable($exception, 'syncing the households on login');
+        } catch (Throwable $exception) {
+            report($exception);
+        }
     }
 
     private function provider(): AbstractProvider

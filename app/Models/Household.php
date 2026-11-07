@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 /**
@@ -26,6 +27,22 @@ class Household extends Model
     public static function managedLocally(): bool
     {
         return config('households.driver') === 'local';
+    }
+
+    /**
+     * Mirrored from the AccountManager (HOUSEHOLDS_DRIVER=konto): name and members come from there.
+     * After switching back to "local" mirrored households are ordinary local ones.
+     */
+    public function isMirrored(): bool
+    {
+        return $this->konto_household_uuid !== null && ! self::managedLocally();
+    }
+
+    protected function casts(): array
+    {
+        return [
+            'konto_version' => 'integer',
+        ];
     }
 
     protected static function booted(): void
@@ -53,6 +70,14 @@ class Household extends Model
     public function invitations(): HasMany
     {
         return $this->hasMany(HouseholdInvitation::class);
+    }
+
+    /**
+     * Members of the mirrored household without a user here yet (attached on their first OIDC login).
+     */
+    public function pendingMembers(): HasMany
+    {
+        return $this->hasMany(HouseholdPendingMember::class);
     }
 
     public function shoppingLists(): BelongsToMany
@@ -110,13 +135,25 @@ class Household extends Model
      */
     public function removeMember(User $user): void
     {
-        $own = $this->shoppingLists()->where('owner_id', $user->id)->get();
+        $this->detachMembers([$user->id]);
+        $this->syncListAccess();
+    }
+
+    /**
+     * Removes members without syncing the other shared lists (the caller does, syncListAccess):
+     * their own lists are no longer shared with the household. Returns these lists.
+     *
+     * @param  list<int>  $userIds
+     * @return Collection<int, ShoppingList>
+     */
+    public function detachMembers(array $userIds): Collection
+    {
+        $this->members()->detach($userIds);
+        $own = $this->shoppingLists()->withTrashed()->whereIn('owner_id', $userIds)->get();
         $this->shoppingLists()->detach($own->modelKeys());
-        $shared = $this->shoppingLists()->get();
+        $own->each->syncHouseholdAccess();
 
-        $this->members()->detach($user->id);
-
-        $own->merge($shared)->each->syncHouseholdAccess();
+        return $own;
     }
 
     /**
@@ -135,5 +172,13 @@ class Household extends Model
     public function syncListAccess(): void
     {
         $this->shoppingLists()->get()->each->syncHouseholdAccess();
+    }
+
+    /**
+     * The household names are part of the list documents.
+     */
+    public function touchLists(): void
+    {
+        $this->shoppingLists()->get()->each->touchForMembers();
     }
 }

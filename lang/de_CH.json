@@ -680,5 +680,11 @@
     "On your lists": "Auf deinen Listen",
     "Saved by another member of the list.": "Von einer anderen Person auf der Liste gespeichert.",
     "The details of this recipe are not available (removed, or saved by somebody else).": "Die Details dieses Rezepts sind nicht verfügbar (entfernt oder von jemand anderem gespeichert).",
-    "This recipe is not saved anymore.": "Dieses Rezept ist nicht mehr gespeichert."
+    "This recipe is not saved anymore.": "Dieses Rezept ist nicht mehr gespeichert.",
+    "Manage households in your account": "Haushalte im Konto verwalten",
+    "Only in this app, not managed in your account.": "Nur in dieser App, nicht im Konto verwaltet.",
+    "Proposed for your account, waiting for confirmation.": "Fürs Konto vorgeschlagen, wartet auf Bestätigung.",
+    "Not taken over into your account.": "Nicht ins Konto übernommen.",
+    "1 more member has not used the app yet.": "1 weiteres Mitglied nutzt die App noch nicht.",
+    ":count more members have not used the app yet.": ":count weitere Mitglieder nutzen die App noch nicht."
 }

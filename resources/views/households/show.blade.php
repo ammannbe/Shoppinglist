@@ -3,7 +3,22 @@
     <p class="mb-6 text-sm text-stone-600">{{ $role === 'admin' ? __('You are an admin of this household.') : __('You are a member of this household.') }}</p>
 
     @unless (App\Models\Household::managedLocally())
-        <p class="notice mb-6">{{ __('Households are managed in your account at the provider. Here they can only be viewed.') }}</p>
+        <p class="notice mb-6">
+            {{ __('Households are managed in your account at the provider. Here they can only be viewed.') }}
+            @if ($kontoUrl)
+                <a class="underline" href="{{ $kontoUrl }}">{{ __('Manage households in your account') }}</a>
+            @endif
+        </p>
+        @if ($household->konto_household_uuid === null)
+            <p class="mb-6 text-sm text-stone-500">
+                {{ __('Only in this app, not managed in your account.') }}
+                @if ($household->konto_import_status === 'pending')
+                    {{ __('Proposed for your account, waiting for confirmation.') }}
+                @elseif ($household->konto_import_status === 'rejected')
+                    {{ __('Not taken over into your account.') }}
+                @endif
+            </p>
+        @endif
     @endunless
 
     @can('update', $household)
@@ -65,6 +80,9 @@
                 </li>
             @endforeach
         </ul>
+        @if ($pendingMembers)
+            <p class="mt-2 text-xs text-stone-500">{{ $pendingMembers === 1 ? __('1 more member has not used the app yet.') : __(':count more members have not used the app yet.', ['count' => $pendingMembers]) }}</p>
+        @endif
     </section>
 
     @can('manageMembers', $household)

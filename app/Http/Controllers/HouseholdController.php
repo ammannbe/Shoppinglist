@@ -18,6 +18,7 @@ class HouseholdController extends Controller
     {
         return view('households.index', [
             'households' => $request->user()->households()->withCount('members')->orderBy('name')->get(),
+            'kontoUrl' => self::kontoUrl(),
         ]);
     }
 
@@ -48,15 +49,26 @@ class HouseholdController extends Controller
             'members' => $household->members()->orderBy('email')->get(),
             'invitations' => $household->invitations()->pending()->orderBy('email')->get(),
             'lists' => $household->shoppingLists()->with('owner')->orderBy('name')->get(),
+            'pendingMembers' => Household::managedLocally() ? 0 : $household->pendingMembers()->count(),
+            'kontoUrl' => self::kontoUrl(),
         ]);
+    }
+
+    /**
+     * HOUSEHOLDS_DRIVER=konto: the households are managed in the AccountManager.
+     */
+    private static function kontoUrl(): ?string
+    {
+        return ! Household::managedLocally() && filled(config('households.konto.url'))
+            ? rtrim((string) config('households.konto.url'), '/').'/households'
+            : null;
     }
 
     public function update(Request $request, Household $household): RedirectResponse
     {
         Gate::authorize('update', $household);
         $household->update($request->validate(['name' => ['required', 'string', 'max:255']]));
-        // The household names are part of the list documents.
-        DB::transaction(fn () => $household->shoppingLists()->get()->each->touchForMembers());
+        DB::transaction(fn () => $household->touchLists());
 
         return back()->with('status', __('Saved.'));
     }
