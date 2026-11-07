@@ -299,11 +299,34 @@ class HouseholdTest extends TestCase
         $response = $this->actingAs($user)->post(route('households.store'), ['name' => 'WG Bern']);
 
         $household = Household::firstWhere('name', 'WG Bern');
-        $response->assertRedirect(route('households.show', $household));
+        $response->assertRedirect(route('households.index').'#household-'.$household->uuid);
         $this->assertTrue($household->isAdmin($user));
         $this->assertTrue($household->creator->is($user));
-        $this->actingAs($user)->get(route('households.index'))->assertOk()->assertSee('WG Bern');
-        $this->actingAs($user)->get(route('households.show', $household))->assertOk()->assertSee($user->email);
+        // All households with their details on one page, the new one opened.
+        $this->actingAs($user)->get(route('households.index'))->assertOk()->assertSee('WG Bern')->assertSee($user->email)
+            ->assertSee('id="household-'.$household->uuid.'"', false)
+            ->assertSee(route('households.invitations.store', $household));
+    }
+
+    public function test_the_former_detail_page_opens_the_household_on_the_households_page(): void
+    {
+        [$owner, , $household, $list] = $this->sharedList();
+        $other = $this->household($owner, 'Zweiter Haushalt');
+        $opened = fn (Household $household) => '/<details id="household-'.$household->uuid.'"[^>]*\sopen(="open")?>/';
+
+        $this->actingAs($owner)->get(route('households.show', $household))
+            ->assertRedirect(route('households.index').'#household-'.$household->uuid)
+            ->assertSessionHas('household', $household->uuid);
+        $page = $this->get(route('households.index'))->assertOk()->assertSee($list->name)->getContent();
+        $this->assertMatchesRegularExpression($opened($household), $page);
+        $this->assertDoesNotMatchRegularExpression($opened($other), $page);
+
+        // Actions and failed forms come back to the household.
+        $this->patch(route('households.update', $household), ['name' => 'Neu'])
+            ->assertRedirect(route('households.index').'#household-'.$household->uuid);
+        $this->from(route('households.index'))->post(route('households.invitations.store', $other), ['_household' => $other->uuid, 'email' => 'no-email', 'role' => 'member'])
+            ->assertRedirect(route('households.index'))->assertSessionHasErrors('email');
+        $this->assertMatchesRegularExpression($opened($other), $this->get(route('households.index'))->getContent());
     }
 
     public function test_only_members_see_a_household(): void
@@ -311,6 +334,7 @@ class HouseholdTest extends TestCase
         [, , $household] = $this->sharedList();
 
         $this->actingAs(User::factory()->create())->get(route('households.show', $household))->assertForbidden();
+        $this->actingAs(User::factory()->create())->get(route('households.index'))->assertOk()->assertDontSee($household->name);
     }
 
     public function test_members_cannot_manage_the_household(): void
@@ -322,7 +346,7 @@ class HouseholdTest extends TestCase
         $this->post(route('households.invitations.store', $household), ['email' => 'x@example.com', 'role' => 'member'])->assertForbidden();
         $this->patch(route('households.members.update', [$household, $owner]), ['role' => 'member'])->assertForbidden();
         $this->delete(route('households.members.destroy', [$household, $owner]))->assertForbidden();
-        $this->get(route('households.show', $household))->assertOk()->assertDontSee(__('Delete household'));
+        $this->get(route('households.index'))->assertOk()->assertSee($household->name)->assertDontSee(__('Delete household'));
     }
 
     public function test_admins_rename_and_change_roles(): void
@@ -381,7 +405,7 @@ class HouseholdTest extends TestCase
         $this->assertDatabaseHas('household_invitations', ['email' => 'anna@example.com', 'token_hash' => hash('sha256', $token)]);
 
         $this->actingAs($invitee)->get(route('households.invitations.show', $token))->assertOk()->assertSee(__('Join household'));
-        $this->actingAs($invitee)->post(route('households.invitations.accept', $token))->assertRedirect(route('households.show', $household));
+        $this->actingAs($invitee)->post(route('households.invitations.accept', $token))->assertRedirect(route('households.index').'#household-'.$household->uuid);
 
         $this->assertTrue($household->isAdmin($invitee));
         // The link came by mail to the address.
@@ -482,7 +506,7 @@ class HouseholdTest extends TestCase
         $this->actingAs($anna)->post(route('households.invitations.accept', $token))->assertForbidden();
 
         // Viewing and sharing lists keep working.
-        $this->actingAs($owner)->get(route('households.show', $household))->assertOk()
+        $this->actingAs($owner)->get(route('households.index'))->assertOk()
             ->assertSee(__('Households are managed in “:name”. Here they can only be viewed.', ['name' => AccountManagerLabel::get()]));
         $this->actingAs($owner)->deleteJson("/lists/{$list->id}/households/{$household->uuid}")->assertNoContent();
         $this->actingAs($owner)->postJson("/lists/{$list->id}/households", ['household' => $household->uuid])->assertNoContent();

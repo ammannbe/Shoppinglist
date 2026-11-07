@@ -28,7 +28,7 @@
             @break
         @case ('member')
             <p class="mb-4 text-sm">{{ __('You are already a member of this household.') }}</p>
-            <a href="{{ route('households.show', $invitation->household) }}" class="button flex w-full items-center justify-center">{{ __('Open household') }}</a>
+            <a href="{{ route('households.index') }}#household-{{ $invitation->household->uuid }}" class="button flex w-full items-center justify-center">{{ __('Open household') }}</a>
             @break
         @case ('accepted')
             <p class="notice">{{ __('This invitation has already been accepted.') }}</p>

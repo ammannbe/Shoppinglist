@@ -589,8 +589,8 @@ class AccountManagerHouseholdTest extends TestCase
             ->assertSee('Familie Muster')
             ->assertSee('https://account-manager.test/households')
             ->assertDontSee('Create household');
-        $this->actingAs($this->owner)->get(route('households.show', $household))->assertOk()
-            ->assertSee('https://account-manager.test/households')
+        $this->actingAs($this->owner)->get(route('households.show', $household))->assertRedirect(route('households.index').'#household-'.$household->uuid);
+        $this->actingAs($this->owner)->get('/households')->assertOk()
             ->assertSee('2 more members have not used the app yet.')
             ->assertDontSee(route('households.invitations.store', $household));
         $this->actingAs($this->owner)->post('/households', ['name' => 'Neu'])->assertForbidden();

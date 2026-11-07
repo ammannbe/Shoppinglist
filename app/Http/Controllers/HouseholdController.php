@@ -15,10 +15,23 @@ use Illuminate\View\View;
  */
 class HouseholdController extends Controller
 {
+    /**
+     * All households of the user with their details on one page (each one collapsible).
+     */
     public function index(Request $request): View
     {
         return view('households.index', [
-            'households' => $request->user()->households()->withCount('members')->orderBy('name')->get(),
+            'households' => $request->user()->households()
+                ->with([
+                    'members' => fn ($query) => $query->orderBy('email'),
+                    'invitations' => fn ($query) => $query->pending()->orderBy('email'),
+                    'shoppingLists' => fn ($query) => $query->with('owner')->orderBy('name'),
+                ])
+                ->withCount('pendingMembers')
+                ->orderBy('name')
+                ->get(),
+            // Opened household: after an action, or a form that failed validation.
+            'open' => $request->session()->get('household', $request->old('_household')),
             'accountManagerUrl' => AccountManagerHouseholds::portalUrl(),
         ]);
     }
@@ -37,22 +50,17 @@ class HouseholdController extends Controller
             return $household;
         });
 
-        return redirect()->route('households.show', $household);
+        return $this->toHousehold($household);
     }
 
-    public function show(Request $request, Household $household): View
+    /**
+     * Former detail page (links in mails and bookmarks): the households page with this household opened.
+     */
+    public function show(Household $household): RedirectResponse
     {
         Gate::authorize('view', $household);
 
-        return view('households.show', [
-            'household' => $household,
-            'role' => $household->roleOf($request->user()),
-            'members' => $household->members()->orderBy('email')->get(),
-            'invitations' => $household->invitations()->pending()->orderBy('email')->get(),
-            'lists' => $household->shoppingLists()->with('owner')->orderBy('name')->get(),
-            'pendingMembers' => Household::managedLocally() ? 0 : $household->pendingMembers()->count(),
-            'accountManagerUrl' => AccountManagerHouseholds::portalUrl(),
-        ]);
+        return $this->toHousehold($household);
     }
 
     public function update(Request $request, Household $household): RedirectResponse
@@ -61,7 +69,7 @@ class HouseholdController extends Controller
         $household->update($request->validate(['name' => ['required', 'string', 'max:255']]));
         DB::transaction(fn () => $household->touchLists());
 
-        return back()->with('status', __('Saved.'));
+        return $this->toHousehold($household, __('Saved.'));
     }
 
     public function destroy(Household $household): RedirectResponse

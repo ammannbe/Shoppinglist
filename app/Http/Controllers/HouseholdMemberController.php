@@ -28,7 +28,7 @@ class HouseholdMemberController extends Controller
 
         $household->changeRole($member, $role);
 
-        return back()->with('status', __('Saved.'));
+        return $this->toHousehold($household, __('Saved.'));
     }
 
     /**
@@ -50,6 +50,6 @@ class HouseholdMemberController extends Controller
 
         return $leaving
             ? redirect()->route('households.index')->with('status', __('You left the household.'))
-            : back()->with('status', __('Member removed.'));
+            : $this->toHousehold($household, __('Member removed.'));
     }
 }

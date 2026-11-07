@@ -45,7 +45,7 @@ class HouseholdInvitationController extends Controller
             Notification::route('mail', $email)->notify($notification->locale($request->user()->locale ?? app()->getLocale()));
         }
 
-        return back()->with('status', __('Invitation sent to :email.', ['email' => $email]));
+        return $this->toHousehold($household, __('Invitation sent to :email.', ['email' => $email]));
     }
 
     public function destroy(Household $household, HouseholdInvitation $invitation): RedirectResponse
@@ -53,7 +53,7 @@ class HouseholdInvitationController extends Controller
         Gate::authorize('manageMembers', $household);
         $invitation->delete();
 
-        return back()->with('status', __('Invitation withdrawn.'));
+        return $this->toHousehold($household, __('Invitation withdrawn.'));
     }
 
     /**
@@ -91,7 +91,7 @@ class HouseholdInvitationController extends Controller
             }
         });
 
-        return redirect()->route('households.show', $invitation->household)->with('status', __('Welcome to the household.'));
+        return $this->toHousehold($invitation->household, __('Welcome to the household.'));
     }
 
     /**
