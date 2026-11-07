@@ -486,6 +486,57 @@ class HouseholdTest extends TestCase
         $this->assertSame(1, $household->invitations()->count());
     }
 
+    public function test_open_invitations_are_accepted_or_declined_on_the_households_page(): void
+    {
+        [$owner, , $household, $list] = $this->sharedList();
+        $anna = User::factory()->create(['email' => 'anna@example.com']);
+        [$invitation] = HouseholdInvitation::issue($household, $owner, 'anna@example.com', 'admin');
+
+        $this->actingAs($anna)->getJson('/me')->assertJsonPath('household_invitations', 1);
+        $this->get(route('households.index'))->assertOk()->assertSee(__('Invitations for you'))->assertSee($household->name)
+            ->assertSee(route('households.invitations.accept-open', $invitation));
+
+        // Somebody else cannot accept or decline it.
+        $other = User::factory()->create();
+        $this->actingAs($other)->getJson('/me')->assertJsonPath('household_invitations', 0);
+        $this->post(route('households.invitations.accept-open', $invitation))->assertSessionHasErrors('household');
+        $this->delete(route('households.invitations.decline', $invitation))->assertNotFound();
+        $this->assertFalse($household->hasMember($other));
+
+        $this->actingAs($anna)->post(route('households.invitations.accept-open', $invitation))
+            ->assertRedirect(route('households.index').'#household-'.$household->uuid);
+        $this->assertTrue($household->isAdmin($anna));
+        $this->assertFalse($this->listDocument($anna, $list)['_deleted']);
+        $this->getJson('/me')->assertJsonPath('household_invitations', 0);
+        // Used up.
+        $this->post(route('households.invitations.accept-open', $invitation))->assertSessionHasErrors('household');
+
+        $ben = User::factory()->create(['email' => 'ben@example.com']);
+        [$declined] = HouseholdInvitation::issue($household, $owner, 'ben@example.com', 'member');
+        $this->actingAs($ben)->delete(route('households.invitations.decline', $declined))->assertRedirect(route('households.index'));
+        $this->assertNull(HouseholdInvitation::find($declined->id));
+        $this->assertFalse($household->hasMember($ben));
+    }
+
+    public function test_open_invitations_need_a_verified_address_and_expire(): void
+    {
+        [$owner, , $household] = $this->sharedList();
+        $unverified = User::factory()->unverified()->create(['email' => 'anna@example.com']);
+        [$invitation] = HouseholdInvitation::issue($household, $owner, 'anna@example.com', 'member');
+
+        $this->actingAs($unverified)->getJson('/me')->assertJsonPath('household_invitations', 0);
+        $this->post(route('households.invitations.accept-open', $invitation))->assertRedirect(route('verification.notice'));
+        $this->assertFalse($household->hasMember($unverified));
+
+        $ben = User::factory()->create(['email' => 'ben@example.com']);
+        [$expired] = HouseholdInvitation::issue($household, $owner, 'ben@example.com', 'member');
+        $this->travel(config('households.invitation_days') + 1)->days();
+        $this->actingAs($ben)->getJson('/me')->assertJsonPath('household_invitations', 0);
+        $this->get(route('households.index'))->assertOk()->assertDontSee(__('Invitations for you'));
+        $this->post(route('households.invitations.accept-open', $expired))->assertSessionHasErrors('household');
+        $this->assertFalse($household->hasMember($ben));
+    }
+
     // ---- HOUSEHOLDS_DRIVER=account-manager
 
     public function test_the_account_manager_driver_makes_the_local_management_read_only(): void
@@ -504,6 +555,11 @@ class HouseholdTest extends TestCase
         $this->delete(route('households.members.destroy', [$household, $member]))->assertForbidden();
         $this->actingAs($member)->delete(route('households.members.destroy', [$household, $member]))->assertForbidden();
         $this->actingAs($anna)->post(route('households.invitations.accept', $token))->assertForbidden();
+        $this->actingAs($anna)->getJson('/me')->assertJsonPath('household_invitations', 0);
+        $this->get(route('households.index'))->assertOk()->assertDontSee(__('Invitations for you'));
+        $openInvitation = HouseholdInvitation::firstWhere('email', 'anna@example.com');
+        $this->post(route('households.invitations.accept-open', $openInvitation))->assertForbidden();
+        $this->delete(route('households.invitations.decline', $openInvitation))->assertForbidden();
 
         // Viewing and sharing lists keep working.
         $this->actingAs($owner)->get(route('households.index'))->assertOk()

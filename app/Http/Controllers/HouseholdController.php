@@ -30,6 +30,7 @@ class HouseholdController extends Controller
                 ->withCount('pendingMembers')
                 ->orderBy('name')
                 ->get(),
+            'invitations' => $request->user()->householdInvitations()->with(['household', 'inviter'])->orderBy('created_at')->get(),
             // Opened household: after an action, or a form that failed validation.
             'open' => $request->session()->get('household', $request->old('_household')),
             'accountManagerUrl' => AccountManagerHouseholds::portalUrl(),

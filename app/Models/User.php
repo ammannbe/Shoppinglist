@@ -58,6 +58,18 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
     }
 
     /**
+     * Open household invitations for the user's verified address (accepted or declined on the households page).
+     * None with HOUSEHOLDS_DRIVER=account-manager, households are managed there.
+     */
+    public function householdInvitations(): Builder
+    {
+        return HouseholdInvitation::pending()
+            ->where('email', mb_strtolower($this->email))
+            ->unless($this->hasVerifiedEmail() && Household::managedLocally(), fn (Builder $query) => $query->whereRaw('1 = 0'))
+            ->whereNotIn('household_id', $this->households()->select('households.id'));
+    }
+
+    /**
      * IDs of all non-deleted lists the user can access: shared by email (or own), or shared
      * with a household the user is a member of. Resolved at runtime, so it does not depend on
      * the sync rows of household members.

@@ -70,6 +70,14 @@ class HouseholdInvitation extends Model
         return $query->whereNull('accepted_at')->where('expires_at', '>', now());
     }
 
+    /**
+     * The invitation is for this user: their verified address.
+     */
+    public function isFor(User $user): bool
+    {
+        return $user->hasVerifiedEmail() && Str::lower($user->email) === $this->email;
+    }
+
     public function isPending(): bool
     {
         return $this->accepted_at === null && $this->expires_at->isFuture();

@@ -24,7 +24,11 @@
         {{-- Households page is server rendered (needs a connection) --}}
         <a x-show="loggedIn" href="/households" data-online class="flex items-center justify-between gap-3 p-4 hover:bg-stone-50">
             <span>
-                <span class="block" x-text="`🏠 ${$t('Households')}`"></span>
+                <span class="block">
+                    <span x-text="`🏠 ${$t('Households')}`"></span>
+                    <span x-show="$store.sync.user?.household_invitations" class="ml-1 rounded-full bg-emerald-700 px-2 py-0.5 text-xs text-white"
+                        x-text="$store.sync.user?.household_invitations === 1 ? $t('1 invitation') : $t(':count invitations', { count: $store.sync.user?.household_invitations })"></span>
+                </span>
                 <span class="block text-sm text-stone-500" x-text="households.length
                     ? households.map((household) => household.name).join(', ')
                     : $t('Share lists with your family or flat in one go')"></span>

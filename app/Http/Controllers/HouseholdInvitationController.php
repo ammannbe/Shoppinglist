@@ -81,11 +81,42 @@ class HouseholdInvitationController extends Controller
         $invitation = HouseholdInvitation::findByToken($token);
         abort_unless($this->state($user, $invitation) === 'acceptable', 403);
 
+        return $this->join($user, $invitation);
+    }
+
+    /**
+     * Accepting an open invitation on the households page (needs the verified invited address).
+     */
+    public function acceptOpen(Request $request, HouseholdInvitation $invitation): RedirectResponse
+    {
+        abort_unless(Household::managedLocally(), 403);
+        $invitation = HouseholdInvitation::pending()->find($invitation->id);
+        if ($invitation === null) {
+            return redirect()->route('households.index')->withErrors(['household' => __('This invitation is invalid or has expired.')]);
+        }
+        if (! $invitation->isFor($request->user())) {
+            return redirect()->route('households.index')->withErrors(['household' => __('This invitation is for :email. Log out and log in with this address to accept it.', ['email' => $invitation->email])]);
+        }
+
+        return $this->join($request->user(), $invitation);
+    }
+
+    public function decline(Request $request, HouseholdInvitation $invitation): RedirectResponse
+    {
+        abort_unless(Household::managedLocally(), 403);
+        abort_unless($invitation->isFor($request->user()), 404);
+        $invitation->delete();
+
+        return redirect()->route('households.index')->with('status', __('Invitation declined.'));
+    }
+
+    private function join(User $user, HouseholdInvitation $invitation): RedirectResponse
+    {
         DB::transaction(function () use ($user, $invitation) {
             $invitation->household->addMember($user, $invitation->role);
             $invitation->forceFill(['accepted_at' => now()])->save();
 
-            // The link came by mail to this address.
+            // The link came by mail to this address (on the households page it is verified already).
             if (! $user->hasVerifiedEmail()) {
                 $user->markEmailAsVerified();
             }

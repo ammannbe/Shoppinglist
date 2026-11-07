@@ -11,6 +11,30 @@
         </p>
     @endunless
 
+    @if ($invitations->isNotEmpty())
+        <section class="mb-8">
+            <h2 class="mb-2 text-lg font-semibold">{{ __('Invitations for you') }}</h2>
+            <ul class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
+                @foreach ($invitations as $invitation)
+                    <li class="space-y-3 px-4 py-3 text-sm">
+                        <p>{{ __(':name invites you to the household ":household".', ['name' => $invitation->inviter?->email ?? '?', 'household' => $invitation->household->name]) }}</p>
+                        <div class="flex gap-2">
+                            <form method="POST" action="{{ route('households.invitations.accept-open', $invitation) }}" class="flex-1">
+                                @csrf
+                                <x-button>{{ __('Join household') }}</x-button>
+                            </form>
+                            <form method="POST" action="{{ route('households.invitations.decline', $invitation) }}">
+                                @csrf
+                                @method('DELETE')
+                                <button class="button-secondary">{{ __('Decline') }}</button>
+                            </form>
+                        </div>
+                    </li>
+                @endforeach
+            </ul>
+        </section>
+    @endif
+
     @if ($households->isNotEmpty())
         <div class="mb-8 space-y-3">
             @foreach ($households as $household)

@@ -45,9 +45,10 @@ Route::middleware('auth')->group(function () {
         'verified' => $request->user()->hasVerifiedEmail(),
         'locale' => $request->user()->locale,
         'preferences' => [...PreferenceController::DEFAULTS, ...($request->user()->preferences ?? [])],
-        // For "Share with household".
+        // For "Share with household", and a hint about open invitations in the settings.
         'households' => $request->user()->households()->orderBy('name')->get()
             ->map(fn (Household $household) => ['id' => $household->uuid, 'name' => $household->name])->all(),
+        'household_invitations' => $request->user()->householdInvitations()->count(),
         // Shops with regional offers and their regions (for the settings and the offers).
         'regions' => ShopRegions::ALL,
         // Foods in season this month (for the product suggestions and the week planner).
@@ -129,6 +130,11 @@ Route::middleware('auth')->group(function () {
         Route::post('households/{household}/invitations', [HouseholdInvitationController::class, 'store'])->name('households.invitations.store');
         Route::delete('households/{household}/invitations/{invitation}', [HouseholdInvitationController::class, 'destroy'])
             ->scopeBindings()->name('households.invitations.destroy');
+        // Open invitations for the user, on the households page.
+        Route::post('households/invitations/{invitation}/accept', [HouseholdInvitationController::class, 'acceptOpen'])
+            ->whereNumber('invitation')->middleware('throttle:30,1')->name('households.invitations.accept-open');
+        Route::delete('households/invitations/{invitation}', [HouseholdInvitationController::class, 'decline'])
+            ->whereNumber('invitation')->name('households.invitations.decline');
         Route::patch('households/{household}/members/{member}', [HouseholdMemberController::class, 'update'])->name('households.members.update');
         Route::delete('households/{household}/members/{member}', [HouseholdMemberController::class, 'destroy'])->name('households.members.destroy');
     });
