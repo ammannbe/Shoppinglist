@@ -95,6 +95,17 @@ export function normalizeName(name) {
 }
 
 /**
+ * Whether an offer matches a search (offers page, planner step 1): every word of the search is
+ * found in its name or brand, case and accents ignored. An empty search matches all.
+ */
+export function offerMatches(offer, query) {
+    const words = normalizeName(query).split(' ').filter(Boolean);
+    const text = normalizeName(`${offer?.name ?? ''} ${offer?.brand ?? ''}`);
+
+    return words.every((word) => text.includes(word));
+}
+
+/**
  * Same product: case and spaces are ignored, accents not ("Apfel" is not "Äpfel").
  */
 export function sameName(a, b) {

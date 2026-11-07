@@ -49,10 +49,20 @@
         </p>
         <x-planner-error key="saved" />
 
-        {{-- All offers of the pool per shop: collapsible, tick the ones to use (new ones are not ticked) --}}
-        <div x-show="offerGroups.length" class="space-y-2">
+        {{-- All offers of the pool per shop: collapsible, tick the ones to use (new ones are not ticked).
+            The search (device only) shows the matching offers, their shops open; "All"/"None" apply to the shown ones. --}}
+        <div x-show="savedOffers?.length" class="space-y-2">
+            <div class="relative">
+                <input x-model="offerSearch" type="search" class="field w-full pr-10 [&::-webkit-search-cancel-button]:hidden" autocomplete="off"
+                    :placeholder="$t('Search offers')" :aria-label="$t('Search offers')" @keydown.escape="offerSearch = ''">
+                <button type="button" x-show="offerSearch" class="absolute inset-y-0 right-0 grid w-10 place-items-center text-stone-400 hover:text-stone-700"
+                    @click="offerSearch = ''; $el.previousElementSibling.focus()" :aria-label="$t('Clear search')" :title="$t('Clear search')">✕</button>
+            </div>
+            <p x-show="searchingOffers && !offerGroups.length" class="text-sm text-stone-500" x-text="$t('No offers found.')"></p>
             <template x-for="group in offerGroups" :key="group.store">
-                <details class="group/shop overflow-hidden rounded-lg border border-stone-200" x-init="$el.open = offerGroups.length === 1 || selectedIn(group) > 0">
+                <details class="group/shop overflow-hidden rounded-lg border border-stone-200" x-data="{ searched: false }"
+                    x-init="$el.open = searchingOffers || offerGroups.length === 1 || selectedIn(group) > 0"
+                    x-effect="if (searchingOffers) { $el.open = true; searched = true } else if (searched) { searched = false; $el.open = offerGroups.length === 1 || selectedIn(group) > 0 }">
                     <summary class="flex cursor-pointer list-none items-center gap-3 bg-stone-50 px-3 py-2">
                         <span class="min-w-0 flex-1">
                             <span class="block truncate font-medium" x-text="group.store ? storeLabel(group.store) : $t('Other shops')"></span>

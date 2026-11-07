@@ -3,7 +3,7 @@ import { createApi, HttpError } from './api.js';
 import { prepareForAi } from './image.js';
 import { offerReader } from './offers.js';
 import { closeDialogThen } from './layers.js';
-import { shortDate } from './helpers.js';
+import { offerMatches, shortDate } from './helpers.js';
 import {
     allowedStep, builtRecipe, migrateState, plannerSelection, recipePayload, remoteIsNewer, selectedOfferIds, STEPS, stepAllowed, stepTrail,
     suggestionExclude, SYNCED_KEYS, syncedState, withoutPlanned,
@@ -122,6 +122,8 @@ export function planner({ addItems, merges, lists, open, navigate }) {
         newPantryItem: '',
         // Offers of the pool (GET /offers), null until loaded.
         savedOffers: null,
+        // Search in step 1 (device only, not synced): filters the offers by name and brand.
+        offerSearch: '',
         // Planned recipes (saved, not on a list yet), the list is built from them.
         planned: readJson(PLANNED_KEY, []),
         // Ingredients already open on the target list, asked before adding (null: not asked).
@@ -371,9 +373,16 @@ export function planner({ addItems, merges, lists, open, navigate }) {
             this.offerIds = [...ids];
         },
 
-        /** Offers of the pool by shop (no shop last). */
+        get searchingOffers() {
+            return this.offerSearch.trim() !== '';
+        },
+
+        /**
+         * Offers of the pool by shop (no shop last); while searching only the matching ones, so
+         * "All"/"None" of a shop apply to the shown offers.
+         */
         get offerGroups() {
-            return groupByStore(this.savedOffers ?? []);
+            return groupByStore((this.savedOffers ?? []).filter((offer) => offerMatches(offer, this.offerSearch)));
         },
 
         selectedIn(group) {
