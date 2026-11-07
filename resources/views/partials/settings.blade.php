@@ -60,7 +60,7 @@
         <a href="#/install" class="flex items-center justify-between gap-3 p-4 hover:bg-stone-50">
             <span>
                 <span class="block" x-text="`📲 ${$t('Install app')}`"></span>
-                <span class="block text-sm text-stone-500" x-text="$store.install.installed ? $t('The app is installed on this device.') : $t('How to add Shoppinglist to your home screen or dock')"></span>
+                <span class="block text-sm text-stone-500" x-text="$store.install.installed ? $t('The app is installed on this device.') : $t('How to add :app to your home screen or dock')"></span>
             </span>
             <span aria-hidden="true">›</span>
         </a>
@@ -144,7 +144,7 @@
 
 {{-- Install instructions (offline available, part of the app shell) --}}
 <section x-show="route.view === 'install'" class="space-y-6">
-    <p class="text-stone-600" x-text="$t('Installed, Shoppinglist starts like an app from the home screen, in full screen and without a connection.')"></p>
+    <p class="text-stone-600" x-text="$t('Installed, :app starts like an app from the home screen, in full screen and without a connection.')"></p>
 
     <div class="rounded-lg border border-stone-200 bg-white p-4">
         <h2 class="mb-3 font-semibold" x-text="`${$t('This device')}: ${$store.install.current.name}`"></h2>

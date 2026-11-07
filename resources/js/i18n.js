@@ -14,9 +14,12 @@ export function initialLocale() {
     return (navigator.language ?? '').startsWith('en') ? 'en' : 'de_CH';
 }
 
+/** APP_NAME (meta tag of the app shell), available as :app in every text. */
+export const APP_NAME = globalThis.document?.querySelector('meta[name="application-name"]')?.content || 'Shoppinglist';
+
 export function translate(locale, key, replace = {}) {
     let text = DICTIONARIES[locale]?.[key] ?? key;
-    for (const [name, value] of Object.entries(replace)) {
+    for (const [name, value] of Object.entries({ app: APP_NAME, ...replace })) {
         text = text.replaceAll(`:${name}`, value);
     }
 

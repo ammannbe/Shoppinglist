@@ -413,7 +413,7 @@ Alpine.data('shoppinglist', () => ({
 
     listActions(list) {
         return [
-            { label: this.$t('Rename'), icon: 'edit', run: () => this.openRename(list, 'lists') },
+            { label: this.$t('Edit'), icon: 'edit', run: () => this.openRename(list, 'lists') },
             ...(this.loggedIn && list.is_owner !== false ? [{ label: this.$t('Share'), icon: 'share', online: true, run: () => this.openShare(list.id) }] : []),
             // Shared with a household of the member: leaving the household ends the access, not leaving the list.
             ...(list.is_owner === false && list.households?.length ? [] : [list.is_owner === false

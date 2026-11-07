@@ -4,6 +4,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>{{ config('app.name') }}</title>
+    {{-- APP_NAME for the client translations (:app), resources/js/i18n.js --}}
+    <meta name="application-name" content="{{ config('app.name') }}">
     <meta name="theme-color" content="#047857">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -26,7 +28,7 @@
                 {{-- With tabs the app name, the tabs name the page --}}
                 <span x-show="showTabs" class="flex items-center gap-2">
                     <img src="/favicon-96x96.png" alt="" class="size-7 rounded-md">
-                    <span>Shoppinglist</span>
+                    <span>{{ config('app.name') }}</span>
                 </span>
                 <span x-show="route.view === 'lists' && !showTabs" class="block truncate" x-text="$t('Shopping lists')"></span>
                 <span x-show="route.view === 'settings'" class="block truncate" x-text="$t('Settings')"></span>
@@ -348,7 +350,7 @@
     {{-- First visit: install hint for the current platform --}}
     <div x-show="$store.install.showHint && route.view === 'lists' && !$store.undo.toast && !$store.notice.text" x-transition
         class="fixed inset-x-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-20 mx-auto max-w-xl rounded-lg bg-stone-900 p-4 text-sm text-white shadow-lg">
-        <p class="mb-1 font-semibold" x-text="$t('Install Shoppinglist as an app')"></p>
+        <p class="mb-1 font-semibold" x-text="$t('Install :app as an app')"></p>
         <p x-show="$store.install.prompt" x-text="$t('Works offline and starts from your home screen.')"></p>
         <p x-show="!$store.install.prompt" x-text="$t($store.install.current.steps[0]) + ' ' + ($store.install.current.steps[1] ? $t($store.install.current.steps[1]) : '')"></p>
         <p class="mt-2 text-xs text-stone-300" x-text="$t('You can find these instructions in the settings at any time.')"></p>
