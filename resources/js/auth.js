@@ -1,4 +1,4 @@
-// Passkeys on the server rendered account pages (login, confirm password, manage passkeys).
+// Passkeys on the server rendered pages (login, confirm password). Managing them: resources/js/account.js.
 import { Passkeys, UserCancelledError } from '@laravel/passkeys';
 
 const t = (element, key) => element.dataset[key] ?? '';
@@ -28,24 +28,8 @@ function init() {
     // Confirm the password with a passkey
     const confirm = document.querySelector('[data-passkey-confirm]');
     confirm?.addEventListener('click', () => Passkeys.verify({ routes: { options: '/passkeys/confirm/options', submit: '/passkeys/confirm' } })
-        .then((response) => location.assign(response.redirect ?? '/account'))
+        .then((response) => location.assign(response.redirect ?? '/#/settings'))
         .catch((error) => showError(confirm, error)));
-
-    // Register a new passkey
-    const register = document.querySelector('[data-passkey-register]');
-    register?.addEventListener('submit', (event) => {
-        event.preventDefault();
-        const name = new FormData(register).get('name')?.toString().trim() || deviceName();
-        Passkeys.register({ name }).then(() => location.reload()).catch((error) => showError(register, error));
-    });
-}
-
-function deviceName() {
-    const ua = navigator.userAgent;
-    const device = [/iPhone/, /iPad/, /Android/, /Mac/, /Windows/, /Linux/].map((re) => ua.match(re)?.[0]).find(Boolean) ?? 'Passkey';
-    const browser = [/Edg/, /Firefox/, /Chrome/, /Safari/].map((re) => ua.match(re)?.[0]).find(Boolean);
-
-    return [device, browser === 'Edg' ? 'Edge' : browser].filter(Boolean).join(' · ');
 }
 
 init();

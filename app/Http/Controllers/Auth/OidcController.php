@@ -10,8 +10,10 @@ use App\Entitlements\AccountManagerEntitlements;
 use App\Entitlements\Entitlements;
 use App\Households\AccountManagerHouseholds;
 use App\Households\AccountManagerUnavailable;
+use App\Http\Controllers\AccountController;
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -24,8 +26,8 @@ use Throwable;
 use UnexpectedValueException;
 
 /**
- * OIDC login, linking from the account page and the confirmation before unlinking or deleting
- * a linked account (App\Auth\OidcAccount).
+ * OIDC login, linking from the settings ("Manage account") and the confirmation before unlinking or
+ * deleting a linked account (App\Auth\OidcAccount). Link and unlink answer JSON for the settings.
  */
 class OidcController extends Controller
 {
@@ -34,12 +36,12 @@ class OidcController extends Controller
     private const INTENT = 'oidc.intent';
 
     /**
-     * What the confirmation is for: the account page opens at that section afterwards.
+     * What the confirmation is for: the settings open its dialog afterwards (?account=unlink|delete).
      */
     private const CONFIRM_FOR = 'oidc.confirm_for';
 
     /**
-     * "?link=1" links the logged in user (account page, after confirming the password), "?confirm=1"
+     * "?link=1" links the logged in user (settings, after confirming the password), "?confirm=1"
      * confirms a linked user's login before unlinking ("&for=delete": deleting the account);
      * otherwise a normal login.
      */
@@ -91,8 +93,8 @@ class OidcController extends Controller
                 $login->confirm($identity, $current);
                 $accounts->rememberSignIn();
 
-                // Opens the account page at the unlink (or delete) form.
-                return redirect()->to(route('account').($confirmFor === 'delete' ? '#delete-account' : '#oidc'));
+                // The settings open the unlink (or delete) dialog again.
+                return redirect('/?account='.($confirmFor === 'delete' ? 'delete' : 'unlink').'#/settings');
             }
 
             $user = $login->resolve($identity, $intent === 'link' ? $current : null);
@@ -126,17 +128,17 @@ class OidcController extends Controller
         $accounts->rememberSignIn();
 
         if ($intent === 'link') {
-            return redirect()->route('account')->with('status', __('The login is linked to your account.'));
+            return $this->toSettings(__('The login is linked to your account.'));
         }
 
         return redirect()->intended(config('fortify.home'));
     }
 
     /**
-     * "Link …" on the account page: the current password first (accounts without one skip it),
+     * "Link …" in the settings: the current password first (accounts without one skip it),
      * then the provider (redirect "?link=1", within OidcAccount::PASSWORD_TIMEOUT, used once).
      */
-    public function link(Request $request, OidcAccount $accounts): RedirectResponse
+    public function link(Request $request, OidcAccount $accounts): JsonResponse|RedirectResponse
     {
         abort_unless(config('login.oidc.enabled'), 404);
 
@@ -153,15 +155,17 @@ class OidcController extends Controller
 
         $accounts->rememberPasswordConfirmation();
 
-        return redirect()->route('oidc.redirect', ['link' => 1]);
+        $redirect = route('oidc.redirect', ['link' => 1]);
+
+        return $request->wantsJson() ? response()->json(['redirect' => $redirect]) : redirect($redirect);
     }
 
     /**
      * Unlinking needs an OIDC login within OidcAccount::SIGN_IN_TIMEOUT (otherwise the
-     * confirmation at the provider first) and a new password. Without the OIDC login there is
-     * nothing to confirm with; users:unlink-oidc is the way back then.
+     * confirmation at the provider first: 409 with its address) and a new password. Without the
+     * OIDC login there is nothing to confirm with; users:unlink-oidc is the way back then.
      */
-    public function destroy(Request $request, OidcAccount $accounts): RedirectResponse
+    public function destroy(Request $request, OidcAccount $accounts): JsonResponse|RedirectResponse
     {
         abort_unless(config('login.oidc.enabled'), 404);
 
@@ -171,7 +175,9 @@ class OidcController extends Controller
         abort_unless($user->isLinkedToOidc(), 403);
 
         if (! $accounts->hasRecentSignIn()) {
-            return redirect()->route('oidc.redirect', ['confirm' => 1]);
+            $redirect = route('oidc.redirect', ['confirm' => 1]);
+
+            return $request->wantsJson() ? response()->json(['redirect' => $redirect], 409) : redirect($redirect);
         }
 
         $input = $request->validateWithBag('unlinkOidc', [
@@ -180,7 +186,9 @@ class OidcController extends Controller
 
         $accounts->unlink($user, $input['password']);
 
-        return redirect()->route('account')->with('status', __('The sign-in is unlinked. You now sign in with your e-mail address and password.'));
+        $message = __('The sign-in is unlinked. You now sign in with your e-mail address and password.');
+
+        return $request->wantsJson() ? response()->json(['message' => $message]) : $this->toSettings($message);
     }
 
     /**
@@ -218,6 +226,18 @@ class OidcController extends Controller
 
     private function failed(string $message, string $intent): RedirectResponse
     {
-        return redirect()->route($intent === 'login' ? 'login' : 'account')->withErrors(['oidc' => $message]);
+        return $intent === 'login'
+            ? redirect()->route('login')->withErrors(['oidc' => $message])
+            : $this->toSettings($message);
+    }
+
+    /**
+     * Back to the settings of the app shell, which cannot render the session: /me hands out the message once.
+     */
+    private function toSettings(string $message): RedirectResponse
+    {
+        session()->put(AccountController::NOTICE, $message);
+
+        return redirect(AccountController::SETTINGS);
     }
 }

@@ -125,26 +125,27 @@ class OidcLinkedAccountTest extends TestCase
         $this->assertDatabaseMissing('password_reset_tokens', ['email' => 'shopper@example.com']);
     }
 
-    public function test_linking_from_the_account_page_needs_the_password(): void
+    public function test_linking_from_the_settings_needs_the_password(): void
     {
         $user = $this->localUser(['email' => 'different@example.com']);
         $this->passkey($user);
         $this->provider()->shouldReceive('user')->andReturn($this->identity());
         $this->actingAs($user);
 
-        // A session alone does not link (and does not go to the provider).
-        $this->get(route('oidc.redirect', ['link' => 1]))->assertRedirect(route('account'))->assertSessionHasErrors('oidc');
+        // A session alone does not link (and does not go to the provider): back to the settings with the message.
+        $this->get(route('oidc.redirect', ['link' => 1]))->assertRedirect('/#/settings');
         $this->assertFalse(session()->has('oidc.intent'));
+        $this->getJson('/me')->assertJsonPath('notice', 'Please confirm your password first.');
+        $this->getJson('/me')->assertJsonPath('notice', null);
 
-        $this->from(route('account'))->post(route('oidc.link'), ['password' => 'wrong-password'])
-            ->assertRedirect(route('account'))
-            ->assertSessionHasErrorsIn('linkOidc', 'password');
+        $this->postJson(route('oidc.link'), ['password' => 'wrong-password'])->assertUnprocessable()->assertJsonValidationErrors('password');
 
-        $this->post(route('oidc.link'), ['password' => self::PASSWORD])->assertRedirect(route('oidc.redirect', ['link' => 1]));
+        $this->postJson(route('oidc.link'), ['password' => self::PASSWORD])->assertOk()->assertExactJson(['redirect' => route('oidc.redirect', ['link' => 1])]);
 
         $this->get(route('oidc.redirect', ['link' => 1]))->assertRedirect('https://login.example.com/authorize');
         $this->foreignSession($user);
-        $this->get(route('oidc.callback'))->assertRedirect(route('account'));
+        $this->get(route('oidc.callback'))->assertRedirect('/#/settings');
+        $this->getJson('/me')->assertJsonPath('notice', 'The login is linked to your account.')->assertJsonPath('linked', true);
 
         $user->refresh();
         $this->assertSame('sub-123', $user->oidc_sub);
@@ -161,13 +162,13 @@ class OidcLinkedAccountTest extends TestCase
         $this->provider();
         $this->actingAs($user);
 
-        $this->post(route('oidc.link'), ['password' => self::PASSWORD]);
+        $this->postJson(route('oidc.link'), ['password' => self::PASSWORD]);
         $this->get(route('oidc.redirect', ['link' => 1]))->assertRedirect('https://login.example.com/authorize');
-        $this->get(route('oidc.redirect', ['link' => 1]))->assertRedirect(route('account'));
+        $this->get(route('oidc.redirect', ['link' => 1]))->assertRedirect('/#/settings');
 
-        $this->post(route('oidc.link'), ['password' => self::PASSWORD]);
+        $this->postJson(route('oidc.link'), ['password' => self::PASSWORD]);
         $this->travel(OidcAccount::PASSWORD_TIMEOUT + 1)->seconds();
-        $this->get(route('oidc.redirect', ['link' => 1]))->assertRedirect(route('account'));
+        $this->get(route('oidc.redirect', ['link' => 1]))->assertRedirect('/#/settings');
     }
 
     public function test_a_linked_account_cannot_log_in_with_a_password(): void
@@ -311,25 +312,26 @@ class OidcLinkedAccountTest extends TestCase
         $this->provider()->shouldReceive('user')->andReturn($this->identity(['sub' => 'someone-else']), $this->identity());
         $this->actingAs($user);
 
-        $this->get(route('account'))->assertOk()
-            ->assertSee('For your security, confirm with Pocket ID first.')
-            ->assertSee(route('oidc.redirect', ['confirm' => 1]), false)
-            ->assertDontSee('new-password', false);
-        $this->delete(route('oidc.unlink'), ['password' => self::NEW_PASSWORD, 'password_confirmation' => self::NEW_PASSWORD])
-            ->assertRedirect(route('oidc.redirect', ['confirm' => 1]));
+        // The settings send the user to the provider first (and the server refuses without it).
+        $this->getJson('/me')->assertJsonPath('account.oidc.confirmed', false);
+        $this->deleteJson(route('oidc.unlink'), ['password' => self::NEW_PASSWORD, 'password_confirmation' => self::NEW_PASSWORD])
+            ->assertStatus(409)
+            ->assertJsonPath('redirect', route('oidc.redirect', ['confirm' => 1]));
         $this->assertNotNull($user->fresh()->oidc_sub);
 
         $this->get(route('oidc.redirect', ['confirm' => 1]))->assertRedirect('https://login.example.com/authorize');
 
         // Another provider account does not confirm.
-        $this->get(route('oidc.callback'))->assertRedirect(route('account'))->assertSessionHasErrors(['oidc' => 'This sign-in belongs to another account.']);
+        $this->get(route('oidc.callback'))->assertRedirect('/#/settings');
+        $this->getJson('/me')->assertJsonPath('notice', 'This sign-in belongs to another account.');
         $this->assertFalse(app(OidcAccount::class)->hasRecentSignIn());
         $this->assertAuthenticatedAs($user);
 
+        // Back in the settings with the unlink dialog open again.
         $this->get(route('oidc.redirect', ['confirm' => 1]));
-        $this->get(route('oidc.callback'))->assertRedirect(route('account').'#oidc');
+        $this->get(route('oidc.callback'))->assertRedirect('/?account=unlink#/settings');
         $this->assertTrue(app(OidcAccount::class)->hasRecentSignIn());
-        $this->get(route('account'))->assertSee('new-password', false);
+        $this->getJson('/me')->assertJsonPath('account.oidc.confirmed', true);
 
         $this->travel(OidcAccount::SIGN_IN_TIMEOUT + 1)->seconds();
         $this->assertFalse(app(OidcAccount::class)->hasRecentSignIn());
@@ -342,15 +344,15 @@ class OidcLinkedAccountTest extends TestCase
         $this->foreignSession($user);
 
         foreach ([['short', 'short'], [self::NEW_PASSWORD, 'something-else'], ['', '']] as [$password, $confirmation]) {
-            $this->from(route('account'))->delete(route('oidc.unlink'), ['password' => $password, 'password_confirmation' => $confirmation])
-                ->assertRedirect(route('account'))
-                ->assertSessionHasErrorsIn('unlinkOidc', 'password');
+            $this->deleteJson(route('oidc.unlink'), ['password' => $password, 'password_confirmation' => $confirmation])
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors('password');
         }
         $this->assertSame('sub-123', $user->fresh()->oidc_sub);
 
-        $this->delete(route('oidc.unlink'), ['password' => self::NEW_PASSWORD, 'password_confirmation' => self::NEW_PASSWORD])
-            ->assertRedirect(route('account'))
-            ->assertSessionHasNoErrors();
+        $this->deleteJson(route('oidc.unlink'), ['password' => self::NEW_PASSWORD, 'password_confirmation' => self::NEW_PASSWORD])
+            ->assertOk()
+            ->assertJsonPath('message', 'The sign-in is unlinked. You now sign in with your e-mail address and password.');
 
         $user->refresh();
         $this->assertNull($user->oidc_sub);
@@ -363,38 +365,41 @@ class OidcLinkedAccountTest extends TestCase
         $this->assertAuthenticatedAs($user);
     }
 
-    public function test_the_account_page_of_a_linked_account_has_no_password_or_passkeys(): void
+    public function test_the_settings_of_a_linked_account_have_no_password_or_passkeys(): void
     {
         $user = User::factory()->linked()->create();
 
-        $this->actingAs($user)->get(route('account'))->assertOk()
-            ->assertSee('Connected with Pocket ID')
-            ->assertDontSee('current-password', false)
-            ->assertDontSee(route('account.passkeys'), false)
-            ->assertDontSee(route('oidc.link'), false);
-
-        $this->getJson('/me')->assertJsonPath('linked', true);
+        $this->actingAs($user)->getJson('/me')
+            ->assertJsonPath('linked', true)
+            ->assertJsonPath('account.has_password', false)
+            ->assertJsonPath('account.oidc', ['enabled' => true, 'provider' => 'Pocket ID', 'signup_url' => null, 'confirmed' => false])
+            ->assertJsonPath('account.passkeys', 0);
+        $this->getJson(route('account.passkeys'))->assertForbidden();
+        $this->postJson(route('oidc.link'))->assertForbidden();
     }
 
-    public function test_the_account_page_of_an_unlinked_account_keeps_password_and_passkeys(): void
+    public function test_the_settings_of_an_unlinked_account_keep_password_and_passkeys(): void
     {
-        $this->actingAs($this->localUser())->get(route('account'))->assertOk()
-            ->assertDontSee('Connected with Pocket ID')
-            ->assertSee('current-password', false)
-            ->assertSee(route('account.passkeys'), false)
-            ->assertSee(route('oidc.link'), false);
+        $user = $this->localUser();
+        $this->passkey($user);
 
-        $this->getJson('/me')->assertJsonPath('linked', false);
+        $this->actingAs($user)->getJson('/me')
+            ->assertJsonPath('linked', false)
+            ->assertJsonPath('account.has_password', true)
+            ->assertJsonPath('account.oidc.confirmed', false)
+            ->assertJsonPath('account.manager', null)
+            ->assertJsonPath('account.passkeys', 1);
+        $this->deleteJson(route('oidc.unlink'))->assertForbidden();
     }
 
-    public function test_a_linked_account_keeps_its_email_address(): void
+    public function test_a_linked_account_keeps_its_email_address_and_name(): void
     {
-        $user = User::factory()->linked()->create(['email' => 'shopper@example.com']);
+        $user = User::factory()->linked()->create(['email' => 'shopper@example.com', 'name' => 'Vom Anbieter']);
 
-        $this->actingAs($user)->put(route('user-profile-information.update'), ['name' => 'Neuer Name', 'email' => 'other@example.com'])
-            ->assertSessionHasNoErrors();
+        $this->actingAs($user)->putJson(route('user-profile-information.update'), ['name' => 'Neuer Name', 'email' => 'other@example.com'])
+            ->assertOk();
 
-        $this->assertSame('Neuer Name', $user->fresh()->name);
+        $this->assertSame('Vom Anbieter', $user->fresh()->name);
         $this->assertSame('shopper@example.com', $user->fresh()->email);
         $this->assertTrue($user->fresh()->hasVerifiedEmail());
     }
