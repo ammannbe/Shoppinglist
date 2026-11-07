@@ -4,18 +4,18 @@
 
     @unless (App\Models\Household::managedLocally())
         <p class="notice mb-6">
-            {{ __('Households are managed in your account at the provider. Here they can only be viewed.') }}
+            {{ __('Households are managed in “:name”. Here they can only be viewed.', ['name' => App\Households\AccountManagerLabel::get()]) }}
             @if ($accountManagerUrl)
-                <a class="underline" href="{{ $accountManagerUrl }}">{{ __('Manage households in your account') }}</a>
+                <a class="underline" href="{{ $accountManagerUrl }}">{{ __('Manage households in “:name”', ['name' => App\Households\AccountManagerLabel::get()]) }}</a>
             @endif
         </p>
         @if ($household->account_manager_household_uuid === null)
             <p class="mb-6 text-sm text-stone-500">
-                {{ __('Only in this app, not managed in your account.') }}
+                {{ __('Only in this app, not managed in “:name”.', ['name' => App\Households\AccountManagerLabel::get()]) }}
                 @if ($household->account_manager_import_status === 'pending')
-                    {{ __('Proposed for your account, waiting for confirmation.') }}
+                    {{ __('Proposed for “:name”, waiting for confirmation.', ['name' => App\Households\AccountManagerLabel::get()]) }}
                 @elseif ($household->account_manager_import_status === 'rejected')
-                    {{ __('Not taken over into your account.') }}
+                    {{ __('Not taken over into “:name”.', ['name' => App\Households\AccountManagerLabel::get()]) }}
                 @endif
             </p>
         @endif

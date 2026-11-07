@@ -29,6 +29,21 @@ class AccountManagerHouseholds
     }
 
     /**
+     * Households page of the AccountManager's portal (as its /api/info names it, otherwise ACCOUNT_MANAGER_URL/households),
+     * null with the local driver.
+     */
+    public static function portalUrl(): ?string
+    {
+        $url = config('households.account_manager.url');
+
+        if (config('households.driver') !== 'account-manager' || blank($url)) {
+            return null;
+        }
+
+        return AccountManagerLabel::householdsUrl() ?? rtrim((string) $url, '/').'/households';
+    }
+
+    /**
      * Applies a webhook event (any type, the snapshot counts). Events of unknown households are
      * confirmed through the API, so stale events after a deletion create nothing.
      *

@@ -205,7 +205,7 @@
     "Home": "Heim",
     "Household deleted.": "Haushalt gelöscht.",
     "Households": "Haushalte",
-    "Households are managed in your account at the provider. Here they can only be viewed.": "Haushalte werden in deinem Konto beim Anbieter verwaltet. Hier kannst du sie nur ansehen.",
+    "Households are managed in “:name”. Here they can only be viewed.": "Haushalte werden im «:name» verwaltet. Hier kannst du sie nur ansehen.",
     "How to add Shoppinglist to your home screen or dock": "So legst du Shoppinglist auf den Home-Bildschirm oder ins Dock",
     "HTTP Version Not Supported": "HTTP Version nicht unterstützt",
     "I'm a teapot": "Ich bin eine Teekanne",
@@ -681,10 +681,10 @@
     "Saved by another member of the list.": "Von einer anderen Person auf der Liste gespeichert.",
     "The details of this recipe are not available (removed, or saved by somebody else).": "Die Details dieses Rezepts sind nicht verfügbar (entfernt oder von jemand anderem gespeichert).",
     "This recipe is not saved anymore.": "Dieses Rezept ist nicht mehr gespeichert.",
-    "Manage households in your account": "Haushalte im Konto verwalten",
-    "Only in this app, not managed in your account.": "Nur in dieser App, nicht im Konto verwaltet.",
-    "Proposed for your account, waiting for confirmation.": "Fürs Konto vorgeschlagen, wartet auf Bestätigung.",
-    "Not taken over into your account.": "Nicht ins Konto übernommen.",
+    "Manage households in “:name”": "Haushalte im «:name» verwalten",
+    "Only in this app, not managed in “:name”.": "Nur in dieser App, nicht im «:name» verwaltet.",
+    "Proposed for “:name”, waiting for confirmation.": "Fürs «:name» vorgeschlagen, wartet auf Bestätigung.",
+    "Not taken over into “:name”.": "Nicht ins «:name» übernommen.",
     "1 more member has not used the app yet.": "1 weiteres Mitglied nutzt die App noch nicht.",
     ":count more members have not used the app yet.": ":count weitere Mitglieder nutzen die App noch nicht."
 }

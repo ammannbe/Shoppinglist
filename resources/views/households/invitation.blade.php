@@ -37,7 +37,7 @@
             <p class="notice">{{ __('This invitation has expired. Ask for a new one.') }}</p>
             @break
         @case ('read_only')
-            <p class="notice">{{ __('Households are managed in your account at the provider. Here they can only be viewed.') }}</p>
+            <p class="notice">{{ __('Households are managed in “:name”. Here they can only be viewed.', ['name' => App\Households\AccountManagerLabel::get()]) }}</p>
             @break
         @default
             <p class="notice">{{ __('This invitation is not valid.') }}</p>

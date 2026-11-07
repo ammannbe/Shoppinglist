@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Households\AccountManagerHouseholds;
 use App\Models\Household;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -18,7 +19,7 @@ class HouseholdController extends Controller
     {
         return view('households.index', [
             'households' => $request->user()->households()->withCount('members')->orderBy('name')->get(),
-            'accountManagerUrl' => self::accountManagerUrl(),
+            'accountManagerUrl' => AccountManagerHouseholds::portalUrl(),
         ]);
     }
 
@@ -50,18 +51,8 @@ class HouseholdController extends Controller
             'invitations' => $household->invitations()->pending()->orderBy('email')->get(),
             'lists' => $household->shoppingLists()->with('owner')->orderBy('name')->get(),
             'pendingMembers' => Household::managedLocally() ? 0 : $household->pendingMembers()->count(),
-            'accountManagerUrl' => self::accountManagerUrl(),
+            'accountManagerUrl' => AccountManagerHouseholds::portalUrl(),
         ]);
-    }
-
-    /**
-     * HOUSEHOLDS_DRIVER=account-manager: the households are managed in the AccountManager.
-     */
-    private static function accountManagerUrl(): ?string
-    {
-        return ! Household::managedLocally() && filled(config('households.account_manager.url'))
-            ? rtrim((string) config('households.account_manager.url'), '/').'/households'
-            : null;
     }
 
     public function update(Request $request, Household $household): RedirectResponse

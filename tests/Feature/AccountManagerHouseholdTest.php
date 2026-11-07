@@ -487,7 +487,7 @@ class AccountManagerHouseholdTest extends TestCase
         ]]);
         $this->assertSame('pending', $family->fresh()->account_manager_import_status);
         $this->assertNull($nobody->fresh()->account_manager_import_status);
-        $this->actingAs($this->owner)->get('/households')->assertOk()->assertSee('Proposed for your account, waiting for confirmation.');
+        $this->actingAs($this->owner)->get('/households')->assertOk()->assertSee(__('Proposed for “:name”, waiting for confirmation.', ['name' => __('Account')]));
 
         // The admin of the AccountManager confirmed both.
         $this->accountManager['GET households/import'] = [200, ['data' => [
@@ -535,8 +535,9 @@ class AccountManagerHouseholdTest extends TestCase
         $this->assertNull($family->fresh()->account_manager_household_uuid);
         $this->assertFalse($this->listDoc($this->member, $listId)['_deleted']);
         $this->actingAs($this->owner)->get('/households')->assertOk()
-            ->assertSee('Only in this app, not managed in your account.')
-            ->assertSee('Not taken over into your account.');
+            // The fake AccountManager has no /api/info: the generic name.
+            ->assertSee(__('Only in this app, not managed in “:name”.', ['name' => __('Account')]))
+            ->assertSee(__('Not taken over into “:name”.', ['name' => __('Account')]));
     }
 
     public function test_shares_are_reported_to_the_account_manager(): void

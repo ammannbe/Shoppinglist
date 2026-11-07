@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Households\AccountManagerLabel;
 use App\Models\Household;
 use App\Models\HouseholdInvitation;
 use App\Models\PlannedRecipe;
@@ -482,7 +483,7 @@ class HouseholdTest extends TestCase
 
         // Viewing and sharing lists keep working.
         $this->actingAs($owner)->get(route('households.show', $household))->assertOk()
-            ->assertSee(__('Households are managed in your account at the provider. Here they can only be viewed.'));
+            ->assertSee(__('Households are managed in “:name”. Here they can only be viewed.', ['name' => AccountManagerLabel::get()]));
         $this->actingAs($owner)->deleteJson("/lists/{$list->id}/households/{$household->uuid}")->assertNoContent();
         $this->actingAs($owner)->postJson("/lists/{$list->id}/households", ['household' => $household->uuid])->assertNoContent();
         $this->assertSame(2, $household->members()->count());
