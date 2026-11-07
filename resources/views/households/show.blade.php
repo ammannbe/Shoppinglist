@@ -50,7 +50,7 @@
                                     <button class="underline">{{ $member->pivot->role === 'admin' ? __('Make member') : __('Make admin') }}</button>
                                 </form>
                                 <form method="POST" action="{{ route('households.members.destroy', [$household, $member]) }}"
-                                    onsubmit="return confirm(@js(__('Remove :email from the household?', ['email' => $member->email])))">
+                                    onsubmit="return confirm(@js(__('Remove :email from the household? They lose access to everything shared with the household, and their own lists are no longer shared with it (the lists stay with them).', ['email' => $member->email])))">
                                     @csrf
                                     @method('DELETE')
                                     <button class="text-red-700 underline">{{ __('Remove') }}</button>
@@ -69,7 +69,7 @@
                             @endcan
                             @can('leave', $household)
                                 <form method="POST" action="{{ route('households.members.destroy', [$household, $member]) }}"
-                                    onsubmit="return confirm(@js(__('Leave this household? You lose access to the lists shared with it.')))">
+                                    onsubmit="return confirm(@js(__('Leave this household? You lose access to everything shared with it, and your own lists are no longer shared with it (the lists stay with you).')))">
                                     @csrf
                                     @method('DELETE')
                                     <button class="text-red-700 underline">{{ __('Leave household') }}</button>
