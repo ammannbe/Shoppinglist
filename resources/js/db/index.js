@@ -14,7 +14,8 @@ export const SYNCED_COLLECTIONS = ['lists', 'items', 'products', 'units', 'store
 // moves past them. When a schema version adds fields the server already fills, increase the
 // collection's number here as well, so every client pulls the collection once more.
 // stores 2: icon and countries (schema version 2). items 2: recipes[].key (schema version 5).
-const REPLICATION_RUNS = { stores: 2, items: 2 };
+// lists 2: households (schema version 3).
+const REPLICATION_RUNS = { stores: 2, items: 2, lists: 2 };
 
 /**
  * Local database. Everything the UI shows is read from here, the

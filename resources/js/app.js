@@ -135,6 +135,8 @@ Alpine.data('shoppinglist', () => ({
     shareListId: null,
     shareEmail: '',
     shareError: null,
+    // Household shares changed in the open share dialog, until the sync brings them: { id: shared }.
+    shareHouseholds: {},
     busy: false,
     menu: null,
     // Where the back button of the settings leads (the list they were opened from).
@@ -411,9 +413,10 @@ Alpine.data('shoppinglist', () => ({
         return [
             { label: this.$t('Rename'), icon: 'edit', run: () => this.openRename(list, 'lists') },
             ...(this.loggedIn && list.is_owner !== false ? [{ label: this.$t('Share'), icon: 'share', online: true, run: () => this.openShare(list.id) }] : []),
-            list.is_owner === false
+            // Shared with a household of the member: leaving the household ends the access, not leaving the list.
+            ...(list.is_owner === false && list.households?.length ? [] : [list.is_owner === false
                 ? { label: this.$t('Leave list'), icon: 'leave', danger: true, online: true, run: () => this.leaveList(list.id) }
-                : { label: this.$t('Delete'), icon: 'delete', danger: true, run: () => this.deleteList(list.id) },
+                : { label: this.$t('Delete'), icon: 'delete', danger: true, run: () => this.deleteList(list.id) }]),
         ];
     },
 
@@ -1079,6 +1082,7 @@ Alpine.data('shoppinglist', () => ({
         this.shareListId = id;
         this.shareEmail = '';
         this.shareError = null;
+        this.shareHouseholds = {};
         this.$nextTick(() => this.$refs.shareDialog.showModal());
     },
 
@@ -1096,6 +1100,25 @@ Alpine.data('shoppinglist', () => ({
     async removeMember(email) {
         await this.online(async () => {
             await api.delete(`/lists/${this.shareListId}/members/${encodeURIComponent(email)}`);
+            replication?.resync();
+        }, (error) => { this.shareError = error; });
+    },
+
+    /** Households of the user (from /me), for "Share with household". */
+    get households() {
+        return Alpine.store('sync').user?.households ?? [];
+    },
+    sharedWithHousehold(household) {
+        return this.shareHouseholds[household.id] ?? (this.shareList?.households ?? []).some((shared) => shared.id === household.id);
+    },
+
+    async toggleHousehold(household) {
+        const shared = this.sharedWithHousehold(household);
+        this.shareError = null;
+        await this.online(async () => {
+            if (shared) await api.delete(`/lists/${this.shareListId}/households/${household.id}`);
+            else await api.post(`/lists/${this.shareListId}/households`, { household: household.id });
+            this.shareHouseholds = { ...this.shareHouseholds, [household.id]: !shared };
             replication?.resync();
         }, (error) => { this.shareError = error; });
     },

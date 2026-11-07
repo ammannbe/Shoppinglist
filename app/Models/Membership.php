@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Table('shopping_list_user')]
-#[Fillable(['shopping_list_id', 'user_id', 'position'])]
+#[Fillable(['shopping_list_id', 'user_id', 'direct', 'position'])]
 class Membership extends Model
 {
     use Syncable;
@@ -18,6 +18,7 @@ class Membership extends Model
     {
         return [
             'position' => 'float',
+            'direct' => 'boolean',
         ];
     }
 

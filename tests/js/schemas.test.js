@@ -14,6 +14,9 @@ describe('local migrations', () => {
         const store = { id: 'x', name: 'Migros', icon: 'migros', countries: ['CH'] };
         expect(schemas.migrations.stores[2](store)).toMatchObject({ icon: 'migros', countries: ['CH'] });
         expect(schemas.migrations.stores[2]({ id: 'y', name: 'Eigener' })).toMatchObject({ icon: null, countries: [] });
+        const household = { id: 'h', name: 'Familie Muster' };
+        expect(schemas.migrations.lists[3]({ id: 'l', name: 'Coop', households: [household] })).toMatchObject({ households: [household] });
+        expect(schemas.migrations.lists[3]({ id: 'l', name: 'Coop' })).toMatchObject({ households: [] });
     });
 
     it('turn the single shop of an item into a list', () => {

@@ -1,0 +1,71 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Household;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\View\View;
+
+/**
+ * Server rendered household pages (need a connection, like the account page).
+ */
+class HouseholdController extends Controller
+{
+    public function index(Request $request): View
+    {
+        return view('households.index', [
+            'households' => $request->user()->households()->withCount('members')->orderBy('name')->get(),
+        ]);
+    }
+
+    public function store(Request $request): RedirectResponse
+    {
+        Gate::authorize('create', Household::class);
+        $name = $request->validate(['name' => ['required', 'string', 'max:255']])['name'];
+
+        $household = DB::transaction(function () use ($request, $name) {
+            $household = new Household(['name' => $name]);
+            $household->creator()->associate($request->user());
+            $household->save();
+            $household->addMember($request->user(), 'admin');
+
+            return $household;
+        });
+
+        return redirect()->route('households.show', $household);
+    }
+
+    public function show(Request $request, Household $household): View
+    {
+        Gate::authorize('view', $household);
+
+        return view('households.show', [
+            'household' => $household,
+            'role' => $household->roleOf($request->user()),
+            'members' => $household->members()->orderBy('email')->get(),
+            'invitations' => $household->invitations()->pending()->orderBy('email')->get(),
+            'lists' => $household->shoppingLists()->with('owner')->orderBy('name')->get(),
+        ]);
+    }
+
+    public function update(Request $request, Household $household): RedirectResponse
+    {
+        Gate::authorize('update', $household);
+        $household->update($request->validate(['name' => ['required', 'string', 'max:255']]));
+        // The household names are part of the list documents.
+        DB::transaction(fn () => $household->shoppingLists()->get()->each->touchForMembers());
+
+        return back()->with('status', __('Saved.'));
+    }
+
+    public function destroy(Household $household): RedirectResponse
+    {
+        Gate::authorize('delete', $household);
+        DB::transaction(fn () => $household->deleteWithShares());
+
+        return redirect()->route('households.index')->with('status', __('Household deleted.'));
+    }
+}

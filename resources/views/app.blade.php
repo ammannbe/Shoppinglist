@@ -128,8 +128,10 @@
                         <a :href="`#/list/${item.id}`" class="flex min-w-0 flex-1 items-center gap-3 py-3 pl-4 pointer-coarse:pr-4 pointer-fine:pr-3" draggable="false">
                             <span class="min-w-0 flex-1">
                                 <span class="block truncate font-medium" x-text="item.name"></span>
-                                <span x-show="item.is_owner === false" class="block truncate text-xs text-stone-500" x-text="$t('Shared by :email', { email: item.owner_email })"></span>
-                                <span x-show="item.is_owner !== false && item.members?.length" class="block truncate text-xs text-stone-500" x-text="$t('Shared with :emails', { emails: item.members?.join(', ') })"></span>
+                                <span x-show="item.is_owner === false" class="block truncate text-xs text-stone-500"
+                                    x-text="item.households?.length ? $t('Shared by :email via :household', { email: item.owner_email, household: item.households.map((household) => household.name).join(', ') }) : $t('Shared by :email', { email: item.owner_email })"></span>
+                                <span x-show="item.is_owner !== false && (item.members?.length || item.households?.length)" class="block truncate text-xs text-stone-500"
+                                    x-text="$t('Shared with :emails', { emails: [...(item.households ?? []).map((household) => household.name), ...(item.members ?? [])].join(', ') })"></span>
                             </span>
                             <span class="rounded-full bg-stone-100 px-2 py-0.5 text-sm tabular-nums text-stone-600" x-text="openCount(item.id)"></span>
                         </a>
@@ -282,6 +284,7 @@
                             <span class="min-w-0 break-all" x-text="$t('Logged in as :email', { email: $store.sync.user.email })"></span>
                             <button type="button" class="button-secondary shrink-0 whitespace-nowrap" @click="logout()" :disabled="busy" x-text="$t('Log Out')"></button>
                             <a href="/account" data-online class="w-full text-sm font-medium underline" x-text="$t('Change password and passkeys')"></a>
+                            <a href="/households" data-online class="w-full text-sm font-medium underline" x-text="$t('Households')"></a>
                         </div>
                     </template>
                     <template x-if="!loggedIn">
@@ -633,6 +636,25 @@
                         </li>
                     </template>
                 </ul>
+
+                {{-- Share with household: all members get access, also later ones --}}
+                <div>
+                    <span class="label" x-text="$t('Share with household')"></span>
+                    <ul x-show="households.length" class="divide-y divide-stone-200 rounded-lg border border-stone-200">
+                        <template x-for="household in households" :key="household.id">
+                            <li>
+                                <label class="flex cursor-pointer items-center gap-3 px-3 py-2">
+                                    <input type="checkbox" class="accent-emerald-700" :checked="sharedWithHousehold(household)" :disabled="busy" @change="toggleHousehold(household)">
+                                    <span class="min-w-0 truncate" x-text="household.name"></span>
+                                </label>
+                            </li>
+                        </template>
+                    </ul>
+                    <p x-show="!households.length" class="text-sm text-stone-600">
+                        <span x-text="$t('You are not a member of a household yet.')"></span>
+                        <a href="/households" data-online class="font-medium underline" x-text="$t('Create household')"></a>
+                    </p>
+                </div>
 
                 <form @submit.prevent="share()" class="space-y-2">
                     <label class="block">

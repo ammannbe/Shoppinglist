@@ -8,7 +8,7 @@ const syncFields = {
 };
 
 export const lists = {
-    version: 2,
+    version: 3,
     primaryKey: 'id',
     type: 'object',
     properties: {
@@ -19,6 +19,12 @@ export const lists = {
         owner_email: { type: ['string', 'null'] },
         is_owner: { type: 'boolean', default: true },
         members: { type: 'array', items: { type: 'string' }, default: [] },
+        // Households the list is shared with (owner: all, members: the ones they belong to): { id (uuid), name }.
+        households: {
+            type: 'array',
+            default: [],
+            items: { type: 'object', properties: { id: { type: 'string' }, name: { type: 'string' } }, required: ['id', 'name'] },
+        },
         // Manual order, personal per member (null: sorted by name after the positioned lists).
         position: { type: ['number', 'null'] },
         ...syncFields,
@@ -115,6 +121,7 @@ export const migrations = {
         1: (doc) => ({ ...doc, position: null, item_sort: null }),
         // Version 1 briefly existed without item_sort (development builds only).
         2: (doc) => ({ ...doc, item_sort: doc.item_sort ?? null }),
+        3: (doc) => ({ households: [], ...doc }),
     },
     items: {
         1: (doc) => ({ ...doc, position: null, image: null }),
