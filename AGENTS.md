@@ -71,6 +71,8 @@ Shoppinglist: offline-first PWA for shared shopping lists. One Laravel app serve
 - Back to `local`: mirrored households become ordinary local households (management enabled again, `account_manager_household_uuid`/`account_manager_version` stay, pending members are ignored), shares stay. Switching to `account-manager` again overwrites them with the next newer snapshot.
 - UI texts name the AccountManager ("Manage households in “:name”", "Only in this app, not managed in “:name”." …): `App\Households\AccountManagerLabel::get()` = `ACCOUNT_MANAGER_LABEL`, otherwise the `name` (its `APP_NAME`) from the public `ACCOUNT_MANAGER_URL/api/info` (only asked with the account-manager driver; cached a day, a failure 10 minutes), otherwise "Account" («Konto»). The link goes to `AccountManagerHouseholds::portalUrl()` (`households_url` of `/api/info`, otherwise `ACCOUNT_MANAGER_URL/households`). Tests: `AccountManagerLabelTest`.
 
+- Easter egg: "All rights reserved." in the mail footer (published `resources/views/vendor/mail/{html,text}/message.blade.php`, nothing else of the mail views) links to `<ACCOUNT_MANAGER_URL>/easter-egg` (the page and the video live only in the AccountManager) via `App\Support\EasterEgg::url()`; without `ACCOUNT_MANAGER_URL` it stays plain text. Tests: `EasterEggMailTest`.
+
 ## Translations
 
 - Languages: `de_CH` (default, Swiss spelling "ss", informal "du") and `en`; keys are the English texts.
