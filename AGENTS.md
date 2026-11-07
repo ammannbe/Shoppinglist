@@ -72,6 +72,7 @@ Shoppinglist: offline-first PWA for shared shopping lists. One Laravel app serve
 
 ## UI patterns
 
+- Settings (`#/settings`) and the `#/install` view: `resources/views/partials/settings.blade.php`, same structure as Chorelist's (account, one card with the sub pages, selects, row actions, recipe app connection).
 - Install instructions: `resources/js/install.js` (platform detection, steps per OS/browser, native `beforeinstallprompt` button), first visit hint + `#/install` view, linked in the settings.
 
 - Rows use `<x-swipe-row actions="…">` (`resources/js/swipe.js`): on touch either swipe left to reveal the actions (no full swipe action) or long press for the actions menu, per user setting `preferences.row_actions` (`users.preferences` JSON, `PUT /preferences`, `resources/js/prefs.js`: cached in localStorage and resent when offline). Mouse gets a hover "…" menu (`pointer-fine`/`pointer-coarse`) and the right-click menu. Actions are defined once in `listActions()`/`itemActions()`/`catalogActions()`.
