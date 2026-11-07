@@ -377,18 +377,24 @@ class PlannerTest extends TestCase
             ->assertJsonPath('recipe.key', 'recipe-5')->assertJsonPath('recipe.servings', 6)->assertJsonPath('recipe.url', 'https://recipes.test/recipes/5');
         $this->actingAs($user)->getJson('/planned-recipes')->assertJsonCount(2, 'recipes');
 
-        // The recipes on a list are saved (also the ones not saved before) and marked as used.
-        $this->actingAs($user)->postJson('/planner/list', ['offers' => [], 'pantry' => [], 'recipes' => [
+        // The recipes a list is built from are saved (also the ones not saved before), but not on a list yet.
+        $built = $this->actingAs($user)->postJson('/planner/list', ['offers' => [], 'pantry' => [], 'recipes' => [
             [...$lasagne, 'servings' => 4],
             [...$roesti, 'servings' => 2],
-        ]])->assertOk();
+        ]])->assertOk()->json('recipes');
         $history = collect($this->actingAs($user)->getJson('/planned-recipes')->json('recipes'))->keyBy('name');
         $this->assertCount(3, $history);
-        $this->assertNotNull($history['Lasagne']['used_at']);
         $this->assertSame([$roesti['key'], '1. Reiben', 2], [$history['Rösti']['key'], $history['Rösti']['instructions'], $history['Rösti']['servings']]);
+        $this->assertSame([null, null, null], [$history['Lasagne']['used_at'], $history['Rösti']['used_at'], $history['Omelette']['used_at']]);
+        // Building does not change the plan (cancelling keeps the recipes planned).
+        $this->assertSame([true, false, true], [$history['Lasagne']['planned'], $history['Rösti']['planned'], $history['Omelette']['planned']]);
+
+        // The items were added to a list: those recipes are on a list, no longer planned.
+        $this->actingAs($user)->postJson('/planned-recipes/used', ['ids' => array_column($built, 'id')])->assertOk()->assertJsonCount(2, 'recipes');
+        $history = collect($this->actingAs($user)->getJson('/planned-recipes')->json('recipes'))->keyBy('name');
+        $this->assertNotNull($history['Lasagne']['used_at']);
         $this->assertNotNull($history['Rösti']['used_at']);
         $this->assertNull($history['Omelette']['used_at']);
-        // On a list: no longer planned; the one not on the list stays planned.
         $this->assertSame([false, false, true], [$history['Lasagne']['planned'], $history['Rösti']['planned'], $history['Omelette']['planned']]);
         $this->assertNotNull($history['Rösti']['planned_at']);
 
@@ -423,6 +429,49 @@ class PlannerTest extends TestCase
             ->assertJsonPath('recipe.planned_at', $recipe['planned_at']);
         // Still saved (Recipes tab, "earlier").
         $this->actingAs($user)->getJson('/planned-recipes')->assertJsonCount(1, 'recipes')->assertJsonPath('recipes.0.planned', false);
+    }
+
+    public function test_recipes_are_on_a_list_once_the_items_are_added(): void
+    {
+        $this->travelTo(Carbon::parse('2026-11-07 09:00'));
+        $user = User::factory()->create();
+        $other = User::factory()->create();
+        $plan = fn (User $owner, int $id) => PlannedRecipe::remember($owner, [['source' => 'recipes', 'recipe_id' => $id, 'name' => 'Rezept '.$id]], planned: true)[0];
+        $lasagne = $plan($user, 5);
+        $roesti = $plan($user, 6);
+        $foreign = $plan($other, 7);
+        $this->travelTo(Carbon::parse('2026-11-07 10:00'));
+        $addedAt = now()->subMinutes(5);
+
+        $response = $this->actingAs($user)->postJson('/planned-recipes/used', [
+            'ids' => [$lasagne->id, $foreign->id, $lasagne->id], 'added_at' => $addedAt->getTimestampMs(),
+        ])->assertOk();
+
+        // Only own recipes; used at the time of adding.
+        $this->assertSame([$lasagne->id], array_column($response->json('recipes'), 'id'));
+        $response->assertJsonPath('recipes.0.planned', false)->assertJsonPath('recipes.0.used_at', $addedAt->toIso8601String());
+        $this->assertTrue($foreign->fresh()->planned);
+        $this->assertNull($foreign->fresh()->used_at);
+        $this->assertTrue($roesti->fresh()->planned);
+
+        // A retry gives the same result.
+        $this->travel(1)->hours();
+        $this->actingAs($user)->postJson('/planned-recipes/used', ['ids' => [$lasagne->id], 'added_at' => $addedAt->getTimestampMs()])->assertOk()
+            ->assertJsonPath('recipes.0.planned', false)->assertJsonPath('recipes.0.used_at', $addedAt->toIso8601String());
+        $this->assertSame(2, PlannedRecipe::where('user_id', $user->id)->count());
+
+        // Planned again after it was added: a late retry does not take it out of the plan.
+        $this->actingAs($user)->postJson("/planned-recipes/{$lasagne->id}/plan")->assertOk();
+        $this->actingAs($user)->postJson('/planned-recipes/used', ['ids' => [$lasagne->id], 'added_at' => $addedAt->getTimestampMs()])->assertOk()
+            ->assertJsonPath('recipes.0.planned', true);
+
+        // Without a time: now; a time in the future counts as now.
+        $this->actingAs($user)->postJson('/planned-recipes/used', ['ids' => [$roesti->id], 'added_at' => now()->addDay()->getTimestampMs()])->assertOk()
+            ->assertJsonPath('recipes.0.used_at', now()->toIso8601String());
+
+        $this->actingAs($user)->postJson('/planned-recipes/used', ['ids' => []])->assertJsonValidationErrors('ids');
+        $this->actingAs($user)->postJson('/planned-recipes/used', ['ids' => ['recipe-5']])->assertJsonValidationErrors('ids.0');
+        $this->actingAs(User::factory()->unverified()->create())->postJson('/planned-recipes/used', ['ids' => [$lasagne->id]])->assertForbidden();
     }
 
     public function test_planning_again_matches_the_current_offers_pantry_and_season(): void

@@ -102,7 +102,7 @@ class PlannerController extends Controller
                 ], $result['ideas']),
             ];
 
-            // Not saved: the user saves the ones to keep (POST /planned-recipes), the ones put on a list are saved then.
+            // Not saved: the user saves the ones to keep (POST /planned-recipes), the ones a list is built from are saved then.
             return ['suggestions' => $suggestions, 'warning' => $warning];
         });
     }
@@ -144,15 +144,16 @@ class PlannerController extends Controller
                 'recipes' => array_values(array_unique(array_map(fn (string $name) => $names[mb_strtolower($name)] ?? $name, $item['recipes'] ?? []))),
             ], $this->assistant->shoppingList(array_values($recipes), $data['offers'] ?? [], $data['pantry'] ?? [], $this->language()));
 
-            // The recipes on a list are saved (Recipes tab), own recipes with the ingredients loaded
-            // above. Recipes without key (older clients) are not saved.
+            // The recipes are saved (Recipes tab), own recipes with the ingredients loaded above.
+            // They stay planned: they are on a list once the client added the items (POST
+            // /planned-recipes/used). Recipes without key (older clients) are not saved.
             $saving = array_filter($data['recipes'], fn (array $recipe) => filled($recipe['key'] ?? null));
             foreach (array_keys($saving) as $index) {
                 if (isset($loaded[$index])) {
                     $saving[$index]['ingredients'] = RecipeIngredients::forSaving($loaded[$index]);
                 }
             }
-            $saved = PlannedRecipe::remember($user, array_values($saving), used: true);
+            $saved = PlannedRecipe::remember($user, array_values($saving));
 
             return [
                 'items' => $items,

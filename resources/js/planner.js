@@ -5,8 +5,8 @@ import { offerReader } from './offers.js';
 import { closeDialogThen } from './layers.js';
 import { offerMatches, shortDate } from './helpers.js';
 import {
-    allowedStep, builtRecipe, migrateState, plannerSelection, recipePayload, remoteIsNewer, selectedOfferIds, STEPS, stepAllowed, stepTrail,
-    suggestionExclude, SYNCED_KEYS, syncedState, withoutPlanned,
+    allowedStep, builtRecipe, migrateState, plannerSelection, queueUsed, recipePayload, remoteIsNewer, selectedOfferIds, STEPS, stepAllowed, stepTrail,
+    suggestionExclude, SYNCED_KEYS, syncedState, unbuiltRecipes, withoutPlanned, withoutUsed,
 } from './planner-state.js';
 import { listRecipes } from './recipe-links.js';
 import { requests } from './requests.js';
@@ -27,12 +27,45 @@ const STEP_KEY = 'shoppinglist.planner-step';
 const OWNER_KEY = 'shoppinglist.owner';
 // Planned recipes as last loaded (the steps can be opened before they are loaded again).
 const PLANNED_KEY = 'shoppinglist.planned';
+// Recipes whose items were added to a list, "used" not sent yet ([{ ids, added_at }], device only).
+const USED_KEY = 'shoppinglist.planned-used';
 const PUSH_DELAY = 1000;
 const api = createApi();
 
 /** Logout or another account: the planner state of this device is removed with the local data. */
 export function clearPlannerState() {
-    [STORAGE_KEY, SYNC_KEY, STEP_KEY, PLANNED_KEY].forEach((key) => localStorage.removeItem(key));
+    [STORAGE_KEY, SYNC_KEY, STEP_KEY, PLANNED_KEY, USED_KEY].forEach((key) => localStorage.removeItem(key));
+}
+
+let sendingUsed = null;
+
+/**
+ * Marks the recipes of added items as on a list (POST /planned-recipes/used). Queued first, so
+ * offline or after a failure it is sent again: when the planner or the Recipes tab is opened,
+ * on foreground and when online again. The changed recipes go out as `planned-recipe` events.
+ */
+export function sendUsedRecipes() {
+    sendingUsed ??= (async () => {
+        while (navigator.onLine) {
+            const [entry] = readJson(USED_KEY, []);
+            if (!entry) break;
+            try {
+                const { recipes } = await api.post('/planned-recipes/used', entry);
+                recipes.forEach((recipe) => window.dispatchEvent(new CustomEvent('planned-recipe', { detail: recipe })));
+            } catch (error) {
+                // Invalid (e.g. a recipe without saved id): retrying does not help. Otherwise later.
+                if (!(error instanceof HttpError && error.status === 422)) break;
+            }
+            const rest = readJson(USED_KEY, []).filter((each) => JSON.stringify(each) !== JSON.stringify(entry));
+            if (rest.length) localStorage.setItem(USED_KEY, JSON.stringify(rest));
+            else localStorage.removeItem(USED_KEY);
+        }
+    })().finally(() => {
+        // Asynchronous also when there was nothing to send (a `finally` block would run before the assignment).
+        sendingUsed = null;
+    });
+
+    return sendingUsed;
 }
 
 function readJson(key, fallback) {
@@ -178,6 +211,7 @@ export function planner({ addItems, merges, lists, open, navigate }) {
                 }
                 if (this.step) this.pullState();
                 else this.pushState();
+                if (localStorage.getItem(USED_KEY)) sendUsedRecipes();
             };
             document.addEventListener('visibilitychange', resume);
             window.addEventListener('online', resume);
@@ -477,10 +511,12 @@ export function planner({ addItems, merges, lists, open, navigate }) {
 
         // ---- planned recipes (saved, planned_recipes; the list is built from them)
 
-        /** Planned recipes of the server (other devices, the Recipes tab). */
+        /** Planned recipes of the server (other devices, the Recipes tab); used marks not sent yet go first. */
         async loadPlanned() {
+            await sendUsedRecipes();
             try {
-                this.setPlanned((await api.get('/planned-recipes')).recipes.filter((recipe) => recipe.planned));
+                const planned = (await api.get('/planned-recipes')).recipes.filter((recipe) => recipe.planned);
+                this.setPlanned(withoutUsed(planned, readJson(USED_KEY, [])));
             } catch {
                 // Offline or server error: the last loaded ones stay.
             }
@@ -561,8 +597,18 @@ export function planner({ addItems, merges, lists, open, navigate }) {
 
         // ---- 4. shopping list
 
+        /** Planned recipes no items were built from yet (they stay planned until the items are added). */
+        get unbuilt() {
+            return unbuiltRecipes(this.planned, this.builtRecipes);
+        },
+
+        /** Whether items were built from the recipe (shown at the planned recipes). */
+        isBuilt(recipe) {
+            return this.builtRecipes.some((built) => built.key === recipe.id);
+        },
+
         async buildList() {
-            const built = [...this.planned];
+            const built = [...this.unbuilt];
             if (!built.length) return;
             await this.run('list', this.$t('Creating the shopping list …'), async () => {
                 const { items, recipes = [] } = await api.post('/planner/list', {
@@ -573,11 +619,10 @@ export function planner({ addItems, merges, lists, open, navigate }) {
                 });
                 // A list built before (not added yet) gets the new items.
                 this.items = [...this.items, ...items.map((item) => ({ ...item, selected: !item.at_home }))];
-                // Saved recipe of each one: the items link to it (recipes[].key). They are on a list now, no longer planned.
+                // Saved recipe of each one: the items link to it (recipes[].key). They stay planned
+                // until the items are added (addToList), cancelling keeps them in the plan.
                 const ids = new Map(recipes.map(({ key, id }) => [key, id]));
                 this.builtRecipes = [...this.builtRecipes, ...built.map((recipe) => builtRecipe(recipe, ids.get(recipe.key) ?? recipe.id))];
-                const done = new Set(built.map((recipe) => recipe.id));
-                this.setPlanned(this.planned.filter((recipe) => !done.has(recipe.id)));
                 if (!this.listName) this.listName = this.$t('Weekly shopping :date', { date: new Date().toLocaleDateString(Alpine.store('i18n').locale.replace('_', '-')) });
             });
         },
@@ -603,7 +648,13 @@ export function planner({ addItems, merges, lists, open, navigate }) {
             }
             this.mergeCount = null;
             const listId = await addItems(this.target, this.listName.trim() || this.$t('Shopping list'), items, Boolean(merge));
+            // The recipes are on a list now: no longer planned here at once, the server is told
+            // (queued, sent again if offline or failed).
+            const queue = queueUsed(readJson(USED_KEY, []), this.builtRecipes, Date.now());
+            if (queue.length) localStorage.setItem(USED_KEY, JSON.stringify(queue));
+            this.setPlanned(withoutUsed(this.planned, queue));
             this.reset();
+            sendUsedRecipes();
             // Back from the new list leads to the lists, not into the finished planner.
             open(`#/list/${listId}`);
         },

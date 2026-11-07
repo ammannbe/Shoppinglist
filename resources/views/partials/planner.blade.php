@@ -255,9 +255,10 @@
 
     {{-- 4. Shopping list --}}
     <x-planner-step number="4" title="$t('Shopping list')" x-show="step === 'list'">
-        {{-- The list is built from all planned recipes; each can be taken out --}}
+        {{-- The list is built from the planned recipes (again only from the ones added since); each can be taken out.
+            They stay planned until the items are added to a list. --}}
         <x-planned-recipes />
-        <button type="button" x-show="planned.length" class="button flex w-full items-center justify-center gap-2" :disabled="busy" @click="buildList()">
+        <button type="button" x-show="unbuilt.length" class="button flex w-full items-center justify-center gap-2" :disabled="busy" @click="buildList()">
             <x-spinner x-show="busyKey === 'list'" />
             <span x-text="label('list', $t('Create shopping list'))"></span>
         </button>

@@ -2,7 +2,7 @@ import Alpine from 'alpinejs';
 import { createApi } from './api.js';
 import { shortDate } from './helpers.js';
 import { closeDialogThen } from './layers.js';
-import { currentSelection } from './planner.js';
+import { currentSelection, sendUsedRecipes } from './planner.js';
 import { linkedItems, recipeProgress, unavailableRecipe } from './recipe-links.js';
 import { requests } from './requests.js';
 
@@ -65,11 +65,17 @@ export function recipeHistory({ open: openTab, replace }) {
                 this.load();
             };
             window.addEventListener('hashchange', opened);
+            // Recipes the planner changed (e.g. put on a list after adding its items).
+            window.addEventListener('planned-recipe', (event) => {
+                this.store(this.recipes.map((each) => (each.id === event.detail.id ? event.detail : each)));
+            });
             opened();
         },
 
         async load() {
             await this.run('load', this.$t('Loading recipes …'), async () => {
+                // Recipes put on a list while offline are marked first.
+                await sendUsedRecipes();
                 this.store((await api.get('/planned-recipes')).recipes);
                 this.loaded = true;
             });

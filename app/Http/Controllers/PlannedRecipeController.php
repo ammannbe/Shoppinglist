@@ -13,10 +13,12 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Carbon;
 
 /**
  * Recipes tab (#/recipes): planner suggestions the user planned ("Plan", step 3) or put on a
- * shopping list (PlannerController::list, builds it from the planned ones). Plan or cook them
+ * shopping list (PlannerController::list builds the items from the planned ones, `used` marks
+ * them once the items are added). Plan or cook them
  * again, import AI ideas into the recipe app later.
  */
 class PlannedRecipeController extends Controller
@@ -70,6 +72,26 @@ class PlannedRecipeController extends Controller
         $plannedRecipe->planAgain($offers, array_values($data['pantry'] ?? []), Seasons::names(Seasons::month(), $foods));
 
         return response()->json(['recipe' => $plannedRecipe->toClient()]);
+    }
+
+    /**
+     * The planner added the items built from these recipes to a shopping list: they are on a list
+     * now, no longer planned. Sent after adding (the client retries if offline), `added_at` = ms of
+     * adding, so a retry gives the same result. Ids of others are ignored.
+     */
+    public function used(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1', 'max:'.PlannedRecipe::LIMIT],
+            'ids.*' => ['uuid'],
+            'added_at' => ['nullable', 'integer', 'min:0'],
+        ]);
+        $at = isset($data['added_at']) ? Carbon::createFromTimestampMs($data['added_at']) : null;
+
+        return response()->json(['recipes' => array_map(
+            fn (PlannedRecipe $recipe) => $recipe->toClient(),
+            PlannedRecipe::markUsed($request->user(), array_values(array_unique($data['ids'])), $at),
+        )]);
     }
 
     /** Takes a recipe out of the plan (it stays saved). */

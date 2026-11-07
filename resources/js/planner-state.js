@@ -150,3 +150,41 @@ export function plannerSelection(state) {
 export function remoteIsNewer(local, remote) {
     return Boolean(remote?.state) && (remote.updated_at ?? 0) > (local?.updated_at ?? 0);
 }
+
+/**
+ * Planned recipes the list step has not built items from yet (a second build only adds those).
+ *
+ * @param {object[]} planned saved planned recipes
+ * @param {{ key: string|null }[]} builtRecipes recipes the items were built from (key = saved id)
+ */
+export function unbuiltRecipes(planned, builtRecipes) {
+    const built = new Set((builtRecipes ?? []).map((recipe) => recipe.key).filter(Boolean));
+
+    return (planned ?? []).filter((recipe) => !built.has(recipe.id));
+}
+
+/**
+ * Queue of recipes whose items were added to a list but whose "used" mark (POST
+ * /planned-recipes/used) was not sent yet (device only): adds an entry for the built recipes.
+ *
+ * @param {{ ids: string[], added_at: number }[]} queue
+ * @param {{ key: string|null }[]} builtRecipes
+ * @param {number} addedAt ms
+ */
+export function queueUsed(queue, builtRecipes, addedAt) {
+    const ids = [...new Set((builtRecipes ?? []).map((recipe) => recipe.key).filter(Boolean))];
+
+    return ids.length ? [...(queue ?? []), { ids, added_at: addedAt }] : [...(queue ?? [])];
+}
+
+/**
+ * Planned recipes without the ones added to a list meanwhile (queued, not sent yet); a recipe
+ * planned again after it was added stays (like the server, PlannedRecipe::markUsed).
+ */
+export function withoutUsed(planned, queue) {
+    const addedAt = new Map();
+    for (const entry of queue ?? []) entry.ids.forEach((id) => addedAt.set(id, Math.max(addedAt.get(id) ?? 0, entry.added_at)));
+
+    return (planned ?? []).filter((recipe) => !addedAt.has(recipe.id)
+        || (recipe.planned_at != null && Date.parse(recipe.planned_at) > addedAt.get(recipe.id)));
+}

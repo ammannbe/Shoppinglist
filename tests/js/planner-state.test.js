@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     allowedStep, builtRecipe, migrateState, plannerSelection, recipePayload, remoteIsNewer, selectedOfferIds, stepAllowed, stepTrail, suggestionExclude,
-    syncedState, withoutPlanned,
+    syncedState, queueUsed, unbuiltRecipes, withoutPlanned, withoutUsed,
 } from '../../resources/js/planner-state.js';
 
 const empty = { offerIds: [], pantry: [], planned: [], items: [] };
@@ -155,5 +155,35 @@ describe('recipePayload', () => {
 
     it('falls back to one serving for invalid numbers', () => {
         expect(recipePayload({ source: 'recipes', recipe_id: 5, name: 'Lasagne', servings: '' }).servings).toBe(1);
+    });
+});
+
+describe('unbuiltRecipes', () => {
+    it('leaves out the planned recipes the items were built from', () => {
+        const planned = [{ id: 'r1' }, { id: 'r2' }];
+        expect(unbuiltRecipes(planned, [])).toEqual(planned);
+        expect(unbuiltRecipes(planned, [{ name: 'A', key: 'r1' }, { name: 'Old', key: null }])).toEqual([{ id: 'r2' }]);
+        expect(unbuiltRecipes(planned, [{ key: 'r1' }, { key: 'r2' }])).toEqual([]);
+    });
+});
+
+describe('used recipes queue', () => {
+    it('queues the saved ids of the built recipes', () => {
+        expect(queueUsed([], [{ key: 'r1' }, { key: null }, { key: 'r1' }, { key: 'r2' }], 1000)).toEqual([{ ids: ['r1', 'r2'], added_at: 1000 }]);
+        expect(queueUsed([{ ids: ['r0'], added_at: 1 }], [{ key: 'r1' }], 2)).toEqual([{ ids: ['r0'], added_at: 1 }, { ids: ['r1'], added_at: 2 }]);
+        // Nothing saved: nothing to send.
+        expect(queueUsed([], [{ key: null }], 1000)).toEqual([]);
+    });
+
+    it('hides queued recipes from the planned ones unless planned again after adding', () => {
+        const added = Date.parse('2026-11-07T10:00:00Z');
+        const queue = [{ ids: ['r1', 'r2'], added_at: added }];
+        const planned = [
+            { id: 'r1', planned_at: '2026-11-07T09:00:00+00:00' },
+            { id: 'r2', planned_at: '2026-11-07T11:00:00+00:00' },
+            { id: 'r3', planned_at: null },
+        ];
+        expect(withoutUsed(planned, queue).map((recipe) => recipe.id)).toEqual(['r2', 'r3']);
+        expect(withoutUsed(planned, []).map((recipe) => recipe.id)).toEqual(['r1', 'r2', 'r3']);
     });
 });

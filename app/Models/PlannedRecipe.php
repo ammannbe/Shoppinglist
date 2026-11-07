@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Support\FoodNames;
 use App\Support\Seasons;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
@@ -37,15 +38,15 @@ class PlannedRecipe extends Model
     }
 
     /**
-     * Saves planner suggestions (when planned, imported into the recipe app or put on a shopping
-     * list): own recipes once per recipe id (moved to the top again), AI ideas by their key.
-     * Fields not sent keep their saved value. `planned` plans them (now), `used` marks them as
-     * on a list (no longer planned).
+     * Saves planner suggestions (when planned, imported into the recipe app or a list is built
+     * from them): own recipes once per recipe id (moved to the top again), AI ideas by their key.
+     * Fields not sent keep their saved value. `planned` plans them (now). Building a list does not
+     * change the plan: the recipes are on a list once its items are added (markUsed).
      *
      * @param  list<array<string, mixed>>  $suggestions  validated by StorePlannedRecipeRequest::recipe()
      * @return list<self>
      */
-    public static function remember(User $user, array $suggestions, bool $used = false, bool $planned = false): array
+    public static function remember(User $user, array $suggestions, bool $planned = false): array
     {
         $saved = [];
         foreach ($suggestions as $suggestion) {
@@ -63,11 +64,6 @@ class PlannedRecipe extends Model
                 $recipe->planned = true;
                 $recipe->planned_at = now();
             }
-            if ($used) {
-                $recipe->used_at = now();
-                $recipe->planned = false;
-                $recipe->planned_at ??= now();
-            }
             $recipe->user()->associate($user);
             $recipe->touch();
             $saved[] = $recipe;
@@ -82,6 +78,33 @@ class PlannedRecipe extends Model
         }
 
         return $saved;
+    }
+
+    /**
+     * The planner's items built from these recipes were added to a shopping list: they are on a
+     * list now (`used_at` = when they were added, sent by the client, never in the future) and no
+     * longer planned. Only the user's own recipes; sending the same ids again (a retry) gives the
+     * same result, and a late retry does not unplan a recipe planned again after it was added.
+     *
+     * @param  list<string>  $ids
+     * @return list<self>
+     */
+    public static function markUsed(User $user, array $ids, ?CarbonInterface $at = null): array
+    {
+        $at = $at === null || $at->isFuture() ? now() : $at;
+        $recipes = self::where('user_id', $user->id)->whereIn('id', $ids)->get();
+        foreach ($recipes as $recipe) {
+            if ($recipe->used_at === null || $recipe->used_at->lt($at)) {
+                $recipe->used_at = $at;
+            }
+            if ($recipe->planned_at === null || $recipe->planned_at->lte($at)) {
+                $recipe->planned = false;
+            }
+            $recipe->planned_at ??= $at;
+            $recipe->save();
+        }
+
+        return $recipes->all();
     }
 
     /**
