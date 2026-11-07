@@ -383,4 +383,23 @@ class AccountManagerEntitlementsTest extends TestCase
         $this->webhook('user.deleted', ['user' => ['sub' => 'sub-unknown']])->assertNoContent();
         $this->assertNotNull($other->fresh());
     }
+
+    public function test_api_answers_always_apply_also_older_versions(): void
+    {
+        $this->store($this->user, 'active', admin: true, version: 9);
+
+        // After a backup restore the AccountManager answers with a lower version: the API is the current truth.
+        $this->accountManager['GET entitlements/sub-123'] = [200, ['data' => $this->snapshot(3, 'suspended')]];
+        $this->artisan('entitlements:sync')->assertSuccessful();
+
+        $this->assertSame(['suspended', false, 3], [$this->stored()?->status, $this->stored()?->admin, $this->stored()?->version]);
+        $this->assertNotNull($this->stored()?->synced_at);
+
+        // Webhooks stay strict: equal or lower versions are ignored, higher ones apply.
+        $this->changed($this->snapshot(3))->assertNoContent();
+        $this->changed($this->snapshot(2))->assertNoContent();
+        $this->assertSame('suspended', $this->stored()?->status);
+        $this->changed($this->snapshot(4))->assertNoContent();
+        $this->assertSame(['active', 4], [$this->stored()?->status, $this->stored()?->version]);
+    }
 }
