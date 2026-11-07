@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Households\AccountManagerHouseholds;
 use App\Jobs\ApplyAccountManagerEvent;
 use App\Models\AccountManagerWebhookEvent;
 use App\Models\Household;
@@ -222,11 +223,30 @@ class AccountManagerHouseholdTest extends TestCase
         $this->assertSame(2, AccountManagerWebhookEvent::count());
 
         // Unknown types without a household are acknowledged.
-        $this->webhook('user.deleted', [], ['data' => ['household' => null]])->assertNoContent();
+        $this->webhook('subscription.renewed', [], ['data' => ['household' => null]])->assertNoContent();
         Queue::assertPushed(ApplyAccountManagerEvent::class, 1);
         $this->travel(8)->days();
         $this->artisan('model:prune', ['--model' => [AccountManagerWebhookEvent::class]])->assertSuccessful();
         $this->assertSame(0, AccountManagerWebhookEvent::count());
+    }
+
+    public function test_api_answers_always_apply_also_older_versions(): void
+    {
+        $household = $this->mirror($this->snapshot(5));
+
+        // After a backup restore the AccountManager answers with a lower version: the API is the current truth.
+        $this->accountManager['GET households/'.self::UUID] = [200, ['data' => $this->snapshot(2, name: 'Wiederhergestellt')]];
+        app(AccountManagerHouseholds::class)->refresh(self::UUID);
+
+        $this->assertSame('Wiederhergestellt', $household->fresh()?->name);
+        $this->assertSame(2, $household->fresh()?->account_manager_version);
+
+        // Webhooks stay strict: equal or lower versions are ignored, higher ones apply.
+        $this->webhook('household.updated', $this->snapshot(2, name: 'Gleich'))->assertNoContent();
+        $this->webhook('household.updated', $this->snapshot(1, name: 'Alt'))->assertNoContent();
+        $this->assertSame('Wiederhergestellt', $household->fresh()?->name);
+        $this->webhook('household.updated', $this->snapshot(3, name: 'Neu'))->assertNoContent();
+        $this->assertSame('Neu', $household->fresh()?->name);
     }
 
     public function test_stale_versions_are_ignored(): void

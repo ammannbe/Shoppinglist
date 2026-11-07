@@ -6,6 +6,8 @@ use App\Actions\Fortify\PasswordValidationRules;
 use App\Auth\OidcAccount;
 use App\Auth\OidcLogin;
 use App\Auth\OidcLoginException;
+use App\Entitlements\AccountManagerEntitlements;
+use App\Entitlements\Entitlements;
 use App\Households\AccountManagerHouseholds;
 use App\Households\AccountManagerUnavailable;
 use App\Http\Controllers\Controller;
@@ -68,7 +70,7 @@ class OidcController extends Controller
         return $this->provider()->redirect();
     }
 
-    public function callback(Request $request, OidcLogin $login, OidcAccount $accounts, AccountManagerHouseholds $households): RedirectResponse
+    public function callback(Request $request, OidcLogin $login, OidcAccount $accounts, AccountManagerHouseholds $households, AccountManagerEntitlements $entitlements): RedirectResponse
     {
         abort_unless(config('login.oidc.enabled'), 404);
 
@@ -103,6 +105,19 @@ class OidcController extends Controller
         }
 
         $this->syncHouseholds($households, $user);
+
+        // ENTITLEMENTS_DRIVER / AUTH_ADMIN_SOURCE=account-manager: the current snapshot (failures keep the last one).
+        $entitlements->syncOnSignIn($user);
+
+        if (! Entitlements::allowsAccess($user)) {
+            if ($current) {
+                Auth::guard('web')->logout();
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+            }
+
+            return $this->failed(Entitlements::deniedMessage($user), 'login');
+        }
 
         // Stay logged in like the password login: the app has to sync after long offline periods.
         // Also after linking: the remember token was rotated, this device gets the new one.

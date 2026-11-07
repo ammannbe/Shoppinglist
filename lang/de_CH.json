@@ -707,5 +707,8 @@
     "Someone asked to reset the password of your :app account.": "Jemand möchte das Passwort deines :app-Kontos zurücksetzen.",
     "Your account is connected to :provider and has no password. Sign in with :provider instead.": "Dein Konto ist mit :provider verbunden und hat kein Passwort. Melde dich stattdessen mit :provider an.",
     "If you did not ask for this, you can ignore this e-mail.": "Falls du das nicht warst, kannst du diese E-Mail ignorieren.",
-    "Linked sign-in": "Verknüpfte Anmeldung"
+    "Linked sign-in": "Verknüpfte Anmeldung",
+    "Your access to :app is suspended.": "Dein Zugang zu :app ist gesperrt.",
+    "Your access to :app is not enabled.": "Dein Zugang zu :app ist nicht freigeschaltet.",
+    "The AI features are not enabled for your account.": "Die KI-Funktionen sind für dein Konto nicht freigeschaltet."
 }

@@ -117,6 +117,9 @@
         </div>
     </fieldset>
 
+    {{-- AI configured, but not unlocked for this account (Entitlements, shoppinglist.ai) --}}
+    <p x-show="loggedIn && $store.sync.user?.assistant_locked" class="notice" x-text="$t('The AI features are not enabled for your account.')"></p>
+
     {{-- Connection to the recipe app (week planner); connecting is a server page --}}
     <template x-if="recipeApp && loggedIn">
         <div>

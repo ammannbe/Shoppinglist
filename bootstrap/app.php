@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureEntitlementAccess;
 use App\Http\Middleware\RestrictLocalLogin;
 use App\Http\Middleware\SetLocale;
 use Illuminate\Foundation\Application;
@@ -15,7 +16,8 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->web(append: [SetLocale::class, RestrictLocalLogin::class]);
+        // EnsureEntitlementAccess: ENTITLEMENTS_DRIVER=account-manager blocks users whose access was blocked in the AccountManager.
+        $middleware->web(append: [SetLocale::class, RestrictLocalLogin::class, EnsureEntitlementAccess::class]);
         // Changing or resetting the password ends the other sessions.
         $middleware->authenticateSessions();
     })

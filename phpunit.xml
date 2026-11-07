@@ -22,6 +22,9 @@
         <!-- Local DDEV may mirror households from the AccountManager; tests switch the driver themselves. -->
         <env name="HOUSEHOLDS_DRIVER" value="local" force="true"/>
         <server name="HOUSEHOLDS_DRIVER" value="local" force="true"/>
+        <env name="ENTITLEMENTS_DRIVER" value="local" force="true"/>
+        <env name="ENTITLEMENTS_LOCAL_FEATURES" value="shoppinglist.ai" force="true"/>
+        <env name="AUTH_ADMIN_SOURCE" value="local" force="true"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
