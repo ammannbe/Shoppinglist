@@ -21,7 +21,8 @@ function init() {
     if (login) {
         const done = (response) => { if (response) location.assign(response.redirect ?? '/'); };
         login.addEventListener('click', () => Passkeys.verify({ remember: true }).then(done).catch((error) => showError(login, error)));
-        Passkeys.autofill({ remember: true }).then(done).catch(() => {});
+        // Cancelled autofills resolve without a response; refusals of the server (e.g. a linked account) are shown.
+        Passkeys.autofill({ remember: true }).then(done).catch((error) => showError(login, error));
     }
 
     // Confirm the password with a passkey

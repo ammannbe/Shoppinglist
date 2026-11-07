@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Auth\OidcAccount;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -29,7 +30,8 @@ class RestrictLocalLogin
             $email = mb_strtolower(trim((string) $request->input('email')));
 
             if (! in_array($email, config('login.local.emergency_emails'), true)) {
-                throw ValidationException::withMessages(['email' => __('auth.failed')]);
+                // Linked accounts are told to use the provider, like with the local login enabled (RefuseLinkedAccounts).
+                throw ValidationException::withMessages(['email' => OidcAccount::isLinkedEmail($email) ? OidcAccount::message() : __('auth.failed')]);
             }
         }
 

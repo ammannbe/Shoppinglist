@@ -67,9 +67,9 @@ class AccountManagerHouseholdTest extends TestCase
         });
 
         $this->owner = User::factory()->create(['email' => 'olivia@example.com']);
-        $this->owner->forceFill(['oidc_sub' => 'sub-owner'])->save();
+        $this->owner->forceFill(['oidc_sub' => 'sub-owner', 'password' => null])->save();
         $this->member = User::factory()->create(['email' => 'max@example.com']);
-        $this->member->forceFill(['oidc_sub' => 'sub-member'])->save();
+        $this->member->forceFill(['oidc_sub' => 'sub-member', 'password' => null])->save();
     }
 
     private function snapshot(int $version, array $members = ['sub-owner' => 'admin', 'sub-member' => 'member'], string $name = 'Familie Muster', string $uuid = self::UUID): array
@@ -287,7 +287,7 @@ class AccountManagerHouseholdTest extends TestCase
 
         // A new member who uses the app already gets the list right away.
         $newcomer = User::factory()->create();
-        $newcomer->forceFill(['oidc_sub' => 'sub-newcomer'])->save();
+        $newcomer->forceFill(['oidc_sub' => 'sub-newcomer', 'password' => null])->save();
         $this->webhook('household.member_added', $this->snapshot(5, ['sub-owner' => 'admin', 'sub-member' => 'member', 'sub-newcomer' => 'member']))->assertNoContent();
         $this->assertFalse($this->listDoc($newcomer, $listId)['_deleted']);
         $this->assertCount(1, $this->pull($newcomer, 'items')->json('documents'));
@@ -374,12 +374,20 @@ class AccountManagerHouseholdTest extends TestCase
     {
         $household = $this->mirror($this->snapshot(1));
         $listId = $this->sharedList($this->owner, $household);
+        $ownListId = $this->sharedList($this->member, $household, 'Eigene Liste');
 
-        $this->actingAs($this->member)->delete(route('oidc.unlink'))->assertRedirect(route('account'));
+        // Unlinking needs the OIDC login, a recent OIDC login and a new password (OidcLinkedAccountTest).
+        config(['login.oidc.enabled' => true]);
+        $this->actingAs($this->member)->withSession(['oidc.signed_in_at' => now()->getTimestamp()])
+            ->delete(route('oidc.unlink'), ['password' => 'new-secret-password', 'password_confirmation' => 'new-secret-password'])
+            ->assertRedirect(route('account'));
 
         $this->assertFalse($household->hasMember($this->member));
         $this->assertSame(['sub-member'], $household->pendingMembers()->pluck('oidc_sub')->all());
         $this->assertTrue($this->listDoc($this->member, $listId)['_deleted']);
+        // The own lists are no longer shared with the household, like leaving it.
+        $this->assertSame([$listId], $household->shoppingLists()->pluck('shopping_lists.id')->all());
+        $this->assertTrue($this->listDoc($this->owner, $ownListId)['_deleted']);
     }
 
     public function test_the_sync_command_mirrors_all_households(): void

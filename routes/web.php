@@ -43,6 +43,8 @@ Route::middleware('auth')->group(function () {
         'email' => $request->user()->email,
         'name' => $request->user()->name,
         'verified' => $request->user()->hasVerifiedEmail(),
+        // Linked to the OIDC login: no password and no passkeys (App\Auth\OidcAccount).
+        'linked' => $request->user()->isLinkedToOidc(),
         'locale' => $request->user()->locale,
         'preferences' => [...PreferenceController::DEFAULTS, ...($request->user()->preferences ?? [])],
         // For "Share with household", and a hint about open invitations in the settings.
@@ -68,6 +70,7 @@ Route::middleware('auth')->group(function () {
     Route::get('account', fn (Request $request) => view('account', [
         'passkeyCount' => $request->user()->passkeys()->count(),
     ]))->name('account');
+    Route::post('account/oidc', [OidcController::class, 'link'])->middleware('throttle:5,1')->name('oidc.link');
     Route::delete('account/oidc', [OidcController::class, 'destroy'])->name('oidc.unlink');
     Route::get('account/passkeys', fn (Request $request) => view('account-passkeys', [
         'passkeys' => $request->user()->passkeys()->latest()->get(),
