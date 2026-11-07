@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Model;
  * acknowledged without applying them again. Kept for 7 days (model:prune).
  */
 #[Fillable(['event_id', 'type', 'created_at'])]
-class KontoWebhookEvent extends Model
+class AccountManagerWebhookEvent extends Model
 {
     use MassPrunable;
 

@@ -2,11 +2,11 @@
 
 namespace Tests\Feature;
 
-use App\Jobs\ApplyKontoEvent;
+use App\Jobs\ApplyAccountManagerEvent;
+use App\Models\AccountManagerWebhookEvent;
 use App\Models\Household;
 use App\Models\HouseholdPendingMember;
 use App\Models\Item;
-use App\Models\KontoWebhookEvent;
 use App\Models\ShoppingList;
 use App\Models\User;
 use Closure;
@@ -25,10 +25,10 @@ use Mockery;
 use Tests\TestCase;
 
 /**
- * HOUSEHOLDS_DRIVER=konto: households mirrored from the AccountManager (contract: AccountManager
+ * HOUSEHOLDS_DRIVER=account-manager: households mirrored from the AccountManager (contract: AccountManager
  * docs/HOUSEHOLDS-API.md).
  */
-class KontoHouseholdTest extends TestCase
+class AccountManagerHouseholdTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -41,7 +41,7 @@ class KontoHouseholdTest extends TestCase
      *
      * @var array<string, mixed>
      */
-    private array $konto = [];
+    private array $accountManager = [];
 
     private User $owner;
 
@@ -52,13 +52,13 @@ class KontoHouseholdTest extends TestCase
         parent::setUp();
         Carbon::setTestNow('2026-11-10 12:00');
         config([
-            'households.driver' => 'konto',
-            'households.konto' => ['url' => 'https://konto.test', 'key' => 'shoppinglist', 'secret' => self::SECRET, 'report_shares' => false],
+            'households.driver' => 'account-manager',
+            'households.account_manager' => ['url' => 'https://account-manager.test', 'key' => 'shoppinglist', 'secret' => self::SECRET, 'report_shares' => false],
         ]);
 
         Http::fake(function (HttpRequest $request) {
-            $route = $request->method().' '.Str::after($request->url(), 'https://konto.test/api/');
-            $answer = $this->konto[$route] ?? [404, ['message' => 'Not found.']];
+            $route = $request->method().' '.Str::after($request->url(), 'https://account-manager.test/api/');
+            $answer = $this->accountManager[$route] ?? [404, ['message' => 'Not found.']];
             if ($answer instanceof Closure) {
                 return $answer($request);
             }
@@ -93,12 +93,12 @@ class KontoHouseholdTest extends TestCase
         $timestamp = (string) ($options['timestamp'] ?? now()->getTimestamp());
         $signature = 'sha256='.hash_hmac('sha256', $timestamp.'.'.$body, $options['secret'] ?? self::SECRET);
 
-        return $this->call('POST', '/api/konto/webhook', server: [
+        return $this->call('POST', '/api/account-manager/webhook', server: [
             'CONTENT_TYPE' => 'application/json',
             'HTTP_ACCEPT' => 'application/json',
-            'HTTP_X_KONTO_EVENT' => $type,
-            'HTTP_X_KONTO_TIMESTAMP' => $timestamp,
-            'HTTP_X_KONTO_SIGNATURE' => $options['signature'] ?? $signature,
+            'HTTP_X_ACCOUNT_MANAGER_EVENT' => $type,
+            'HTTP_X_ACCOUNT_MANAGER_TIMESTAMP' => $timestamp,
+            'HTTP_X_ACCOUNT_MANAGER_SIGNATURE' => $options['signature'] ?? $signature,
         ], content: $body);
     }
 
@@ -107,10 +107,10 @@ class KontoHouseholdTest extends TestCase
      */
     private function mirror(array $snapshot): Household
     {
-        $this->konto['GET households/'.$snapshot['uuid']] = [200, ['data' => $snapshot]];
+        $this->accountManager['GET households/'.$snapshot['uuid']] = [200, ['data' => $snapshot]];
         $this->webhook('household.created', $snapshot)->assertNoContent();
 
-        return Household::where('konto_household_uuid', $snapshot['uuid'])->firstOrFail();
+        return Household::where('account_manager_household_uuid', $snapshot['uuid'])->firstOrFail();
     }
 
     private function pull(User $user, string $collection, array $checkpoint = []): TestResponse
@@ -158,18 +158,18 @@ class KontoHouseholdTest extends TestCase
         $household = $this->mirror($this->snapshot(1, ['sub-owner' => 'admin', 'sub-member' => 'member', 'sub-unknown' => 'member']));
 
         $this->assertSame('Familie Muster', $household->name);
-        $this->assertSame(1, $household->konto_version);
+        $this->assertSame(1, $household->account_manager_version);
         $this->assertNull($household->created_by);
         $this->assertSame('admin', $household->roleOf($this->owner));
         $this->assertSame('member', $household->roleOf($this->member));
         $this->assertSame(['sub-unknown'], $household->pendingMembers()->pluck('oidc_sub')->all());
         Http::assertSent(fn (HttpRequest $request) => $request->method() === 'GET'
-            && $request->url() === 'https://konto.test/api/households/'.self::UUID
+            && $request->url() === 'https://account-manager.test/api/households/'.self::UUID
             && $request->header('Authorization') === ['Basic '.base64_encode('shoppinglist:'.self::SECRET)]
             && $request->header('Accept') === ['application/json']);
 
         // An event after the deletion (404) creates nothing.
-        $this->konto['GET households/'.self::UUID] = [404, ['message' => 'Not found.']];
+        $this->accountManager['GET households/'.self::UUID] = [404, ['message' => 'Not found.']];
         $this->webhook('household.deleted', [...$this->snapshot(2, []), 'deleted' => true])->assertNoContent();
         $this->webhook('household.member_added', $this->snapshot(1))->assertNoContent();
         $this->assertSame(0, Household::count());
@@ -179,16 +179,16 @@ class KontoHouseholdTest extends TestCase
     public function test_invalid_and_expired_signatures_are_rejected(): void
     {
         $snapshot = $this->snapshot(1);
-        $this->konto['GET households/'.self::UUID] = [200, ['data' => $snapshot]];
+        $this->accountManager['GET households/'.self::UUID] = [200, ['data' => $snapshot]];
 
         $this->webhook('household.created', $snapshot, ['secret' => str_repeat('0', 64)])->assertUnauthorized();
         $this->webhook('household.created', $snapshot, ['signature' => ''])->assertUnauthorized();
         $this->webhook('household.created', $snapshot, ['timestamp' => now()->getTimestamp() - 301])->assertUnauthorized();
         $this->webhook('household.created', $snapshot, ['timestamp' => now()->getTimestamp() + 301])->assertUnauthorized();
         $this->webhook('household.created', $snapshot, ['timestamp' => 'abc'])->assertUnauthorized();
-        $this->postJson('/api/konto/webhook', ['event_id' => (string) Str::uuid(), 'type' => 'household.created', 'data' => ['household' => $snapshot]])->assertUnauthorized();
+        $this->postJson('/api/account-manager/webhook', ['event_id' => (string) Str::uuid(), 'type' => 'household.created', 'data' => ['household' => $snapshot]])->assertUnauthorized();
         $this->assertSame(0, Household::count());
-        $this->assertSame(0, KontoWebhookEvent::count());
+        $this->assertSame(0, AccountManagerWebhookEvent::count());
         Http::assertNothingSent();
 
         // Within the tolerance, and the signed body has to be valid.
@@ -202,7 +202,7 @@ class KontoHouseholdTest extends TestCase
         config(['households.driver' => 'local']);
         $this->webhook('household.created', $this->snapshot(1))->assertNotFound();
 
-        config(['households.driver' => 'konto', 'households.konto.secret' => null]);
+        config(['households.driver' => 'account-manager', 'households.account_manager.secret' => null]);
         $this->webhook('household.created', $this->snapshot(1))->assertNotFound();
 
         $this->assertSame(0, Household::count());
@@ -218,15 +218,15 @@ class KontoHouseholdTest extends TestCase
         $this->webhook('household.updated', $this->snapshot(2, name: 'Muster'), ['event_id' => $eventId])->assertNoContent();
         $this->webhook('household.updated', $this->snapshot(2, name: 'Muster'), ['event_id' => $eventId])->assertNoContent();
 
-        Queue::assertPushed(ApplyKontoEvent::class, 1);
-        $this->assertSame(2, KontoWebhookEvent::count());
+        Queue::assertPushed(ApplyAccountManagerEvent::class, 1);
+        $this->assertSame(2, AccountManagerWebhookEvent::count());
 
         // Unknown types without a household are acknowledged.
         $this->webhook('user.deleted', [], ['data' => ['household' => null]])->assertNoContent();
-        Queue::assertPushed(ApplyKontoEvent::class, 1);
+        Queue::assertPushed(ApplyAccountManagerEvent::class, 1);
         $this->travel(8)->days();
-        $this->artisan('model:prune', ['--model' => [KontoWebhookEvent::class]])->assertSuccessful();
-        $this->assertSame(0, KontoWebhookEvent::count());
+        $this->artisan('model:prune', ['--model' => [AccountManagerWebhookEvent::class]])->assertSuccessful();
+        $this->assertSame(0, AccountManagerWebhookEvent::count());
     }
 
     public function test_stale_versions_are_ignored(): void
@@ -245,7 +245,7 @@ class KontoHouseholdTest extends TestCase
         // Unknown types with a household count as household.updated.
         $this->webhook('household.archived', $this->snapshot(4, name: 'Familie Meier'))->assertNoContent();
         $this->assertSame('Familie Meier', $household->fresh()->name);
-        $this->assertSame(4, $household->fresh()->konto_version);
+        $this->assertSame(4, $household->fresh()->account_manager_version);
         // The household name is part of the list documents.
         $this->assertSame('Familie Meier', $this->pull($this->member, 'lists', $checkpoint)->json('documents.0.households.0.name'));
     }
@@ -342,7 +342,7 @@ class KontoHouseholdTest extends TestCase
         $household = $this->mirror($snapshot);
         $listId = $this->sharedList($this->owner, $household);
         $this->assertSame(1, $household->pendingMembers()->count());
-        $this->konto['GET households?sub=sub-new'] = [200, ['data' => [$snapshot]]];
+        $this->accountManager['GET households?sub=sub-new'] = [200, ['data' => [$snapshot]]];
 
         $this->oidcLogin('sub-new', 'neu@example.com')->assertRedirect(config('fortify.home'));
 
@@ -352,13 +352,13 @@ class KontoHouseholdTest extends TestCase
         $this->assertSame(0, $household->pendingMembers()->count());
         $this->assertFalse($this->listDoc($user, $listId)['_deleted']);
         $this->assertCount(1, $this->pull($user, 'items')->json('documents'));
-        Http::assertSent(fn (HttpRequest $request) => $request->url() === 'https://konto.test/api/households?sub=sub-new');
+        Http::assertSent(fn (HttpRequest $request) => $request->url() === 'https://account-manager.test/api/households?sub=sub-new');
     }
 
-    public function test_the_login_works_while_the_konto_is_down(): void
+    public function test_the_login_works_while_the_account_manager_is_down(): void
     {
         $household = $this->mirror($this->snapshot(1, ['sub-owner' => 'admin', 'sub-new' => 'member']));
-        $this->konto['GET households?sub=sub-new'] = fn () => Http::failedConnection();
+        $this->accountManager['GET households?sub=sub-new'] = fn () => Http::failedConnection();
         Log::spy();
 
         $this->oidcLogin('sub-new', 'neu@example.com')->assertRedirect(config('fortify.home'));
@@ -391,33 +391,33 @@ class KontoHouseholdTest extends TestCase
         $this->sharedList($this->owner, $left);
         Http::fake(); // only resets the recorded requests, the fake AccountManager stays
 
-        $this->konto = [
+        $this->accountManager = [
             'GET households?sub=sub-owner' => [200, ['data' => [
                 $this->snapshot(2, name: 'Familie Meier'),
                 $this->snapshot(1, ['sub-owner' => 'member', 'sub-later' => 'admin'], 'Neu', '019a5e3c-0000-7000-8000-000000000004'),
             ]]],
             'GET households?sub=sub-member' => [200, ['data' => [$this->snapshot(2, name: 'Familie Meier')]]],
             // The owner left: the household no longer concerns this app's users → checked one by one.
-            'GET households/'.$left->konto_household_uuid => [200, ['data' => $this->snapshot(2, ['sub-other' => 'admin'], 'Ferienhaus', $left->konto_household_uuid)]],
-            'GET households/'.$gone->konto_household_uuid => [404, ['message' => 'Not found.']],
+            'GET households/'.$left->account_manager_household_uuid => [200, ['data' => $this->snapshot(2, ['sub-other' => 'admin'], 'Ferienhaus', $left->account_manager_household_uuid)]],
+            'GET households/'.$gone->account_manager_household_uuid => [404, ['message' => 'Not found.']],
         ];
 
         $this->artisan('households:sync')->assertSuccessful();
 
         $this->assertSame('Familie Meier', $kept->fresh()->name);
-        $this->assertSame(2, $kept->fresh()->konto_version);
+        $this->assertSame(2, $kept->fresh()->account_manager_version);
         $this->assertFalse($left->hasMember($this->owner));
         $this->assertSame(['sub-other'], $left->pendingMembers()->pluck('oidc_sub')->all());
         $this->assertNull(Household::find($gone->id));
         $this->assertSame([], ShoppingList::find($goneList)->households()->pluck('households.id')->all());
-        $new = Household::where('konto_household_uuid', '019a5e3c-0000-7000-8000-000000000004')->firstOrFail();
+        $new = Household::where('account_manager_household_uuid', '019a5e3c-0000-7000-8000-000000000004')->firstOrFail();
         $this->assertSame('member', $new->roleOf($this->owner));
         $this->assertSame(['sub-later'], $new->pendingMembers()->pluck('oidc_sub')->all());
         // Every household is fetched once.
         Http::assertSentCount(4);
     }
 
-    public function test_the_sync_pull_revokes_access_of_members_removed_in_the_konto(): void
+    public function test_the_sync_pull_revokes_access_of_members_removed_in_the_account_manager(): void
     {
         $household = $this->mirror($this->snapshot(1));
         $listId = $this->sharedList($this->owner, $household);
@@ -425,7 +425,7 @@ class KontoHouseholdTest extends TestCase
         $item = $this->pull($this->member, 'items')->json('documents.0');
         Carbon::setTestNow(now()->addMinute());
         // The webhook got lost: the daily sync brings the removal.
-        $this->konto = [
+        $this->accountManager = [
             'GET households?sub=sub-owner' => [200, ['data' => [$this->snapshot(2, ['sub-owner' => 'admin'])]]],
             'GET households?sub=sub-member' => [200, ['data' => []]],
         ];
@@ -440,11 +440,11 @@ class KontoHouseholdTest extends TestCase
         $this->assertFalse($this->listDoc($this->owner, $listId)['_deleted']);
     }
 
-    public function test_the_last_state_stays_while_the_konto_is_down(): void
+    public function test_the_last_state_stays_while_the_account_manager_is_down(): void
     {
         $household = $this->mirror($this->snapshot(1));
         $listId = $this->sharedList($this->owner, $household);
-        $this->konto = ['GET households?sub=sub-owner' => fn () => Http::failedConnection(), 'GET households?sub=sub-member' => [503, []]];
+        $this->accountManager = ['GET households?sub=sub-owner' => fn () => Http::failedConnection(), 'GET households?sub=sub-member' => [503, []]];
         Log::spy();
 
         $this->artisan('households:sync')->assertFailed();
@@ -470,14 +470,14 @@ class KontoHouseholdTest extends TestCase
         $familyList = $this->sharedList($this->owner, $family);
         $holidayList = $this->sharedList($this->owner, $holiday, 'Ferien');
         $this->assertFalse($this->listDoc($local, $familyList)['_deleted']);
-        config(['households.driver' => 'konto']);
+        config(['households.driver' => 'account-manager']);
 
         $pending = [
             ['local_id' => (string) $family->id, 'status' => 'pending', 'household_uuid' => null, 'household' => null],
             ['local_id' => (string) $holiday->id, 'status' => 'pending', 'household_uuid' => null, 'household' => null],
         ];
-        $this->konto['POST households/import'] = [202, ['data' => $pending]];
-        $this->konto['GET households/import'] = [200, ['data' => $pending]];
+        $this->accountManager['POST households/import'] = [202, ['data' => $pending]];
+        $this->accountManager['GET households/import'] = [200, ['data' => $pending]];
 
         $this->artisan('households:import')->assertSuccessful();
 
@@ -485,22 +485,22 @@ class KontoHouseholdTest extends TestCase
             ['local_id' => (string) $family->id, 'name' => 'Familie', 'members' => [['sub' => 'sub-owner', 'role' => 'admin'], ['sub' => 'sub-member', 'role' => 'member']]],
             ['local_id' => (string) $holiday->id, 'name' => 'Ferien', 'members' => [['sub' => 'sub-owner', 'role' => 'admin']]],
         ]]);
-        $this->assertSame('pending', $family->fresh()->konto_import_status);
-        $this->assertNull($nobody->fresh()->konto_import_status);
+        $this->assertSame('pending', $family->fresh()->account_manager_import_status);
+        $this->assertNull($nobody->fresh()->account_manager_import_status);
         $this->actingAs($this->owner)->get('/households')->assertOk()->assertSee('Proposed for your account, waiting for confirmation.');
 
         // The admin of the AccountManager confirmed both.
-        $this->konto['GET households/import'] = [200, ['data' => [
+        $this->accountManager['GET households/import'] = [200, ['data' => [
             ['local_id' => (string) $family->id, 'status' => 'confirmed', 'household_uuid' => self::UUID, 'household' => $this->snapshot(1, name: 'Familie Muster')],
-            ['local_id' => (string) $holiday->id, 'status' => 'confirmed', 'household_uuid' => $mirrored->konto_household_uuid, 'household' => $this->snapshot(2, ['sub-owner' => 'admin'], 'Ferienhaus', $mirrored->konto_household_uuid)],
+            ['local_id' => (string) $holiday->id, 'status' => 'confirmed', 'household_uuid' => $mirrored->account_manager_household_uuid, 'household' => $this->snapshot(2, ['sub-owner' => 'admin'], 'Ferienhaus', $mirrored->account_manager_household_uuid)],
         ]]];
 
         $this->artisan('households:import --check')->assertSuccessful();
 
         $family->refresh();
-        $this->assertSame(self::UUID, $family->konto_household_uuid);
+        $this->assertSame(self::UUID, $family->account_manager_household_uuid);
         $this->assertSame('Familie Muster', $family->name);
-        $this->assertNull($family->konto_import_status);
+        $this->assertNull($family->account_manager_import_status);
         $this->assertTrue($family->hasMember($this->member));
         // Members without a linked login are not in the AccountManager's household.
         $this->assertFalse($family->hasMember($local));
@@ -510,7 +510,7 @@ class KontoHouseholdTest extends TestCase
 
         $this->assertNull(Household::find($holiday->id));
         $this->assertSame([$holidayList], $mirrored->shoppingLists()->pluck('shopping_lists.id')->all());
-        $this->assertSame(2, $mirrored->fresh()->konto_version);
+        $this->assertSame(2, $mirrored->fresh()->account_manager_version);
 
         // Nothing pending anymore: the hourly check does not call the AccountManager.
         Http::fake(); // only resets the recorded requests
@@ -523,28 +523,28 @@ class KontoHouseholdTest extends TestCase
         config(['households.driver' => 'local']);
         $family = $this->localHousehold('Familie', [[$this->owner, 'admin'], [$this->member, 'member']]);
         $listId = $this->sharedList($this->owner, $family);
-        config(['households.driver' => 'konto']);
-        $family->forceFill(['konto_import_status' => 'pending'])->save();
-        $this->konto['GET households/import'] = [200, ['data' => [
+        config(['households.driver' => 'account-manager']);
+        $family->forceFill(['account_manager_import_status' => 'pending'])->save();
+        $this->accountManager['GET households/import'] = [200, ['data' => [
             ['local_id' => (string) $family->id, 'status' => 'rejected', 'household_uuid' => null, 'household' => null],
         ]]];
 
         $this->artisan('households:import --check')->assertSuccessful();
 
-        $this->assertSame('rejected', $family->fresh()->konto_import_status);
-        $this->assertNull($family->fresh()->konto_household_uuid);
+        $this->assertSame('rejected', $family->fresh()->account_manager_import_status);
+        $this->assertNull($family->fresh()->account_manager_household_uuid);
         $this->assertFalse($this->listDoc($this->member, $listId)['_deleted']);
         $this->actingAs($this->owner)->get('/households')->assertOk()
             ->assertSee('Only in this app, not managed in your account.')
             ->assertSee('Not taken over into your account.');
     }
 
-    public function test_shares_are_reported_to_the_konto(): void
+    public function test_shares_are_reported_to_the_account_manager(): void
     {
-        config(['households.konto.report_shares' => true]);
+        config(['households.account_manager.report_shares' => true]);
         $household = $this->mirror($this->snapshot(1));
         $shares = [];
-        $this->konto['PUT households/'.self::UUID.'/shares'] = function (HttpRequest $request) use (&$shares) {
+        $this->accountManager['PUT households/'.self::UUID.'/shares'] = function (HttpRequest $request) use (&$shares) {
             $shares[] = $request->data()['shares'];
 
             return Http::response(['data' => ['shares' => $request->data()['shares']]]);
@@ -562,14 +562,14 @@ class KontoHouseholdTest extends TestCase
         ], $shares);
 
         // The overview is optional: failures do not break sharing, the daily sync reports again.
-        $this->konto['PUT households/'.self::UUID.'/shares'] = [500, ['message' => 'Server Error']];
+        $this->accountManager['PUT households/'.self::UUID.'/shares'] = [500, ['message' => 'Server Error']];
         $this->actingAs($this->owner)->postJson("/lists/{$listId}/households", ['household' => $household->uuid])->assertNoContent();
         $this->assertTrue(ShoppingList::find($listId)->households()->whereKey($household->id)->exists());
-        $this->assertSame(hash('sha256', '[]'), $household->fresh()->konto_shares_hash);
+        $this->assertSame(hash('sha256', '[]'), $household->fresh()->account_manager_shares_hash);
 
         // Reported with the next change; deleting the list removes it from the overview.
         $shares = [];
-        $this->konto['PUT households/'.self::UUID.'/shares'] = function (HttpRequest $request) use (&$shares) {
+        $this->accountManager['PUT households/'.self::UUID.'/shares'] = function (HttpRequest $request) use (&$shares) {
             $shares[] = $request->data()['shares'];
 
             return Http::response(['data' => ['shares' => $request->data()['shares']]]);
@@ -580,16 +580,16 @@ class KontoHouseholdTest extends TestCase
         $this->assertSame([[['resource_type' => 'shopping_list', 'resource_id' => $listId, 'label' => 'Coop']], []], $shares);
     }
 
-    public function test_the_households_pages_link_to_the_konto(): void
+    public function test_the_households_pages_link_to_the_account_manager(): void
     {
         $household = $this->mirror($this->snapshot(1, ['sub-owner' => 'admin', 'sub-new' => 'member', 'sub-other' => 'member']));
 
         $this->actingAs($this->owner)->get('/households')->assertOk()
             ->assertSee('Familie Muster')
-            ->assertSee('https://konto.test/households')
+            ->assertSee('https://account-manager.test/households')
             ->assertDontSee('Create household');
         $this->actingAs($this->owner)->get(route('households.show', $household))->assertOk()
-            ->assertSee('https://konto.test/households')
+            ->assertSee('https://account-manager.test/households')
             ->assertSee('2 more members have not used the app yet.')
             ->assertDontSee(route('households.invitations.store', $household));
         $this->actingAs($this->owner)->post('/households', ['name' => 'Neu'])->assertForbidden();

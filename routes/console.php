@@ -1,6 +1,6 @@
 <?php
 
-use App\Models\KontoWebhookEvent;
+use App\Models\AccountManagerWebhookEvent;
 use App\Models\Offer;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -18,7 +18,7 @@ Artisan::command('offers:prune', function () {
 
 Schedule::command('offers:prune')->daily();
 
-// HOUSEHOLDS_DRIVER=konto: fallback for lost webhooks, and the state of proposed local households.
+// HOUSEHOLDS_DRIVER=account-manager: fallback for lost webhooks, and the state of proposed local households.
 Schedule::command('households:sync')->dailyAt('04:15')->withoutOverlapping();
 Schedule::command('households:import --check')->hourly()->withoutOverlapping();
-Schedule::command('model:prune', ['--model' => [KontoWebhookEvent::class]])->daily();
+Schedule::command('model:prune', ['--model' => [AccountManagerWebhookEvent::class]])->daily();

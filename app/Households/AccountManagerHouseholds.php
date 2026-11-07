@@ -2,7 +2,7 @@
 
 namespace App\Households;
 
-use App\Jobs\ReportKontoShares;
+use App\Jobs\ReportAccountManagerShares;
 use App\Models\Household;
 use App\Models\HouseholdPendingMember;
 use App\Models\User;
@@ -11,21 +11,21 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Mirrors the households of the AccountManager (HOUSEHOLDS_DRIVER=konto, contract: AccountManager
+ * Mirrors the households of the AccountManager (HOUSEHOLDS_DRIVER=account-manager, contract: AccountManager
  * docs/HOUSEHOLDS-API.md, section 5). Every webhook and API answer carries the full snapshot of a
  * household: the local copy is set to it (name, members by oidc_sub, roles), older versions are
  * ignored. Access to the shared lists follows through ShoppingList::syncHouseholdAccess(), so
  * removed members lose the lists on their next sync.
  */
-class KontoHouseholds
+class AccountManagerHouseholds
 {
     public const DELETED = 'household.deleted';
 
-    public function __construct(private readonly KontoClient $client) {}
+    public function __construct(private readonly AccountManagerClient $client) {}
 
     public static function enabled(): bool
     {
-        return config('households.driver') === 'konto' && KontoClient::configured();
+        return config('households.driver') === 'account-manager' && AccountManagerClient::configured();
     }
 
     /**
@@ -34,7 +34,7 @@ class KontoHouseholds
      *
      * @param  array{uuid: string, name: string, version: int, members: list<array{sub: string, role: string}>, deleted?: bool}  $snapshot
      *
-     * @throws KontoUnavailable
+     * @throws AccountManagerUnavailable
      */
     public function handleEvent(string $type, array $snapshot): void
     {
@@ -44,7 +44,7 @@ class KontoHouseholds
             return;
         }
 
-        if (! Household::where('konto_household_uuid', $snapshot['uuid'])->exists()) {
+        if (! Household::where('account_manager_household_uuid', $snapshot['uuid'])->exists()) {
             $this->refresh($snapshot['uuid']);
 
             return;
@@ -56,7 +56,7 @@ class KontoHouseholds
     /**
      * Fetches the household and applies it; 404 deletes the local copy.
      *
-     * @throws KontoUnavailable
+     * @throws AccountManagerUnavailable
      */
     public function refresh(string $uuid): ?Household
     {
@@ -89,7 +89,7 @@ class KontoHouseholds
 
     public function delete(string $uuid): void
     {
-        Household::where('konto_household_uuid', $uuid)->first()?->deleteWithShares();
+        Household::where('account_manager_household_uuid', $uuid)->first()?->deleteWithShares();
     }
 
     /**
@@ -99,7 +99,7 @@ class KontoHouseholds
      *
      * @param  array<string, true>  $checked
      *
-     * @throws KontoUnavailable the user's households could not be fetched (the state stays)
+     * @throws AccountManagerUnavailable the user's households could not be fetched (the state stays)
      */
     public function syncUser(User $user, array &$checked = []): void
     {
@@ -118,7 +118,7 @@ class KontoHouseholds
             }
         }
 
-        $missing = $user->households()->whereNotNull('konto_household_uuid')->pluck('konto_household_uuid')
+        $missing = $user->households()->whereNotNull('account_manager_household_uuid')->pluck('account_manager_household_uuid')
             ->reject(fn (string $uuid) => isset($seen[$uuid]) || isset($checked[$uuid]));
 
         foreach ($missing as $uuid) {
@@ -156,7 +156,7 @@ class KontoHouseholds
      */
     public function detachUser(User $user): void
     {
-        $user->households()->whereNotNull('konto_household_uuid')->get()
+        $user->households()->whereNotNull('account_manager_household_uuid')->get()
             ->each(function (Household $household) use ($user) {
                 DB::transaction(function () use ($household, $user) {
                     if ($user->oidc_sub !== null) {
@@ -178,10 +178,10 @@ class KontoHouseholds
     public function adopt(Household $local, array $snapshot): Household
     {
         return DB::transaction(function () use ($local, $snapshot) {
-            $target = Household::where('konto_household_uuid', $snapshot['uuid'])->first();
+            $target = Household::where('account_manager_household_uuid', $snapshot['uuid'])->first();
 
             if ($target === null || $target->is($local)) {
-                $local->forceFill(['konto_household_uuid' => $snapshot['uuid'], 'konto_version' => null, 'konto_import_status' => null])->save();
+                $local->forceFill(['account_manager_household_uuid' => $snapshot['uuid'], 'account_manager_version' => null, 'account_manager_import_status' => null])->save();
                 $target = $local;
             } else {
                 $target->shoppingLists()->syncWithoutDetaching($local->shoppingLists()->withTrashed()->pluck('shopping_lists.id')->all());
@@ -204,7 +204,7 @@ class KontoHouseholds
     public function reportShares(Household $household, bool $changed = true): void
     {
         if ($changed) {
-            ReportKontoShares::dispatchFor($household);
+            ReportAccountManagerShares::dispatchFor($household);
         }
     }
 
@@ -216,19 +216,19 @@ class KontoHouseholds
         return DB::transaction(function () use ($snapshot, $authoritative, $household) {
             $household = $household
                 ? Household::whereKey($household->id)->lockForUpdate()->firstOrFail()
-                : Household::where('konto_household_uuid', $snapshot['uuid'])->lockForUpdate()->first();
+                : Household::where('account_manager_household_uuid', $snapshot['uuid'])->lockForUpdate()->first();
 
-            if ($household?->konto_version !== null) {
-                $stale = $authoritative ? $snapshot['version'] < $household->konto_version : $snapshot['version'] <= $household->konto_version;
+            if ($household?->account_manager_version !== null) {
+                $stale = $authoritative ? $snapshot['version'] < $household->account_manager_version : $snapshot['version'] <= $household->account_manager_version;
                 if ($stale) {
                     return $household;
                 }
             }
 
-            $household ??= (new Household)->forceFill(['konto_household_uuid' => $snapshot['uuid']]);
+            $household ??= (new Household)->forceFill(['account_manager_household_uuid' => $snapshot['uuid']]);
             $renamed = $household->exists && $household->name !== $snapshot['name'];
             $household->name = $snapshot['name'];
-            $household->konto_version = $snapshot['version'];
+            $household->account_manager_version = $snapshot['version'];
             $household->save();
 
             [$membersChanged, $unshared] = $this->syncMembers($household, $snapshot['members']);
@@ -292,7 +292,7 @@ class KontoHouseholds
     /**
      * Logs a failed call; the app keeps working with the last mirrored state.
      */
-    public static function logUnavailable(KontoUnavailable $exception, string $context): void
+    public static function logUnavailable(AccountManagerUnavailable $exception, string $context): void
     {
         Log::warning("Households: {$context} failed, keeping the last state.", ['exception' => $exception->getMessage()]);
     }

@@ -120,7 +120,7 @@ Route::middleware('auth')->group(function () {
         Route::post('lists/{list}/households', [ListHouseholdController::class, 'store'])->name('list-households.store');
         Route::delete('lists/{list}/households/{household}', [ListHouseholdController::class, 'destroy'])->name('list-households.destroy');
 
-        // Households (server rendered, HOUSEHOLDS_DRIVER=konto: read only).
+        // Households (server rendered, HOUSEHOLDS_DRIVER=account-manager: read only).
         Route::get('households', [HouseholdController::class, 'index'])->name('households.index');
         Route::post('households', [HouseholdController::class, 'store'])->name('households.store');
         Route::get('households/{household}', [HouseholdController::class, 'show'])->name('households.show');

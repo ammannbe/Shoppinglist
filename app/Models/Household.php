@@ -21,7 +21,7 @@ class Household extends Model
     public const ROLES = ['admin', 'member'];
 
     /**
-     * HOUSEHOLDS_DRIVER=local: managed in this app. Otherwise (konto) they are mirrored and
+     * HOUSEHOLDS_DRIVER=local: managed in this app. Otherwise (account-manager) they are mirrored and
      * the local management is read only.
      */
     public static function managedLocally(): bool
@@ -30,18 +30,18 @@ class Household extends Model
     }
 
     /**
-     * Mirrored from the AccountManager (HOUSEHOLDS_DRIVER=konto): name and members come from there.
+     * Mirrored from the AccountManager (HOUSEHOLDS_DRIVER=account-manager): name and members come from there.
      * After switching back to "local" mirrored households are ordinary local ones.
      */
     public function isMirrored(): bool
     {
-        return $this->konto_household_uuid !== null && ! self::managedLocally();
+        return $this->account_manager_household_uuid !== null && ! self::managedLocally();
     }
 
     protected function casts(): array
     {
         return [
-            'konto_version' => 'integer',
+            'account_manager_version' => 'integer',
         ];
     }
 

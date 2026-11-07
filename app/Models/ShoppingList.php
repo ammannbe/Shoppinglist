@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use App\Households\KontoHouseholds;
-use App\Jobs\ReportKontoShares;
+use App\Households\AccountManagerHouseholds;
+use App\Jobs\ReportAccountManagerShares;
 use App\Models\Concerns\Syncable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -21,20 +21,20 @@ class ShoppingList extends Model
 
     protected static function booted(): void
     {
-        // The AccountManager shows the names of the lists shared with a household (HOUSEHOLDS_DRIVER=konto).
+        // The AccountManager shows the names of the lists shared with a household (HOUSEHOLDS_DRIVER=account-manager).
         static::updated(function (ShoppingList $list) {
             if ($list->wasChanged('name')) {
-                $list->reportKontoShares();
+                $list->reportAccountManagerShares();
             }
         });
-        static::deleted(fn (ShoppingList $list) => $list->reportKontoShares());
-        static::restored(fn (ShoppingList $list) => $list->reportKontoShares());
+        static::deleted(fn (ShoppingList $list) => $list->reportAccountManagerShares());
+        static::restored(fn (ShoppingList $list) => $list->reportAccountManagerShares());
     }
 
-    public function reportKontoShares(): void
+    public function reportAccountManagerShares(): void
     {
-        if (KontoHouseholds::enabled()) {
-            ReportKontoShares::dispatchFor($this->households()->whereNotNull('konto_household_uuid')->get());
+        if (AccountManagerHouseholds::enabled()) {
+            ReportAccountManagerShares::dispatchFor($this->households()->whereNotNull('account_manager_household_uuid')->get());
         }
     }
 

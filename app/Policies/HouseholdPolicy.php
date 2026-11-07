@@ -7,7 +7,7 @@ use App\Models\User;
 
 /**
  * Admins invite and remove members, rename and delete the household; members can leave.
- * With HOUSEHOLDS_DRIVER=konto the households come from the AccountManager and are read only here.
+ * With HOUSEHOLDS_DRIVER=account-manager the households come from the AccountManager and are read only here.
  */
 class HouseholdPolicy
 {

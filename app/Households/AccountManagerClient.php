@@ -11,15 +11,15 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Households API of the AccountManager (docs/HOUSEHOLDS-API.md there, section 3): HTTP Basic with
- * the service key and the service secret. Every failure is a KontoUnavailable, 404 is an answer.
+ * the service key and the service secret. Every failure is a AccountManagerUnavailable, 404 is an answer.
  */
-class KontoClient
+class AccountManagerClient
 {
     public static function configured(): bool
     {
-        return filled(config('households.konto.url'))
-            && filled(config('households.konto.key'))
-            && filled(config('households.konto.secret'));
+        return filled(config('households.account_manager.url'))
+            && filled(config('households.account_manager.key'))
+            && filled(config('households.account_manager.secret'));
     }
 
     /**
@@ -115,8 +115,8 @@ class KontoClient
 
     private function http(): PendingRequest
     {
-        return Http::baseUrl(rtrim((string) config('households.konto.url'), '/').'/api')
-            ->withBasicAuth((string) config('households.konto.key'), (string) config('households.konto.secret'))
+        return Http::baseUrl(rtrim((string) config('households.account_manager.url'), '/').'/api')
+            ->withBasicAuth((string) config('households.account_manager.key'), (string) config('households.account_manager.secret'))
             ->acceptJson()
             ->connectTimeout(3)
             ->timeout(10)
@@ -129,20 +129,20 @@ class KontoClient
     private function send(callable $request, bool $allowNotFound = false): Response
     {
         if (! self::configured()) {
-            throw new KontoUnavailable('The AccountManager is not configured (KONTO_URL, KONTO_SERVICE_KEY, KONTO_SECRET).');
+            throw new AccountManagerUnavailable('The AccountManager is not configured (ACCOUNT_MANAGER_URL, ACCOUNT_MANAGER_SERVICE_KEY, ACCOUNT_MANAGER_SECRET).');
         }
 
         try {
             $response = $request($this->http());
         } catch (ConnectionException $exception) {
-            throw new KontoUnavailable('The AccountManager is not reachable: '.$exception->getMessage(), previous: $exception);
+            throw new AccountManagerUnavailable('The AccountManager is not reachable: '.$exception->getMessage(), previous: $exception);
         }
 
         if ($response->successful() || ($allowNotFound && $response->notFound())) {
             return $response;
         }
 
-        throw new KontoUnavailable("The AccountManager answered with HTTP {$response->status()}.");
+        throw new AccountManagerUnavailable("The AccountManager answered with HTTP {$response->status()}.");
     }
 
     /**
@@ -153,7 +153,7 @@ class KontoClient
         try {
             $snapshot = self::validSnapshot($data);
         } catch (ValidationException) {
-            throw new KontoUnavailable('The AccountManager returned an invalid household.');
+            throw new AccountManagerUnavailable('The AccountManager returned an invalid household.');
         }
         unset($snapshot['deleted']);
 
@@ -166,7 +166,7 @@ class KontoClient
     private function list(mixed $data): array
     {
         if (! is_array($data) || ! array_is_list($data)) {
-            throw new KontoUnavailable('The AccountManager returned an unexpected answer.');
+            throw new AccountManagerUnavailable('The AccountManager returned an unexpected answer.');
         }
 
         return $data;

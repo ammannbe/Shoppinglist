@@ -18,7 +18,7 @@ return new class extends Migration
             $table->uuid('uuid')->unique();
             $table->string('name');
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
-            $table->uuid('konto_household_uuid')->nullable()->unique();
+            $table->uuid('account_manager_household_uuid')->nullable()->unique();
             $table->timestamps();
         });
 

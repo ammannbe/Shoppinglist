@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Jobs\ReportKontoShares;
+use App\Jobs\ReportAccountManagerShares;
 use App\Models\Household;
 use App\Models\ShoppingList;
 use Illuminate\Http\Request;
@@ -23,7 +23,7 @@ class ListHouseholdController extends Controller
         abort_unless($household->hasMember($request->user()), 403);
 
         DB::transaction(fn () => $list->shareWith($household));
-        ReportKontoShares::dispatchFor($household);
+        ReportAccountManagerShares::dispatchFor($household);
 
         return response()->noContent();
     }
@@ -33,7 +33,7 @@ class ListHouseholdController extends Controller
         abort_unless($list->isOwnedBy($request->user()), 403);
 
         DB::transaction(fn () => $list->unshareWith($household));
-        ReportKontoShares::dispatchFor($household);
+        ReportAccountManagerShares::dispatchFor($household);
 
         return response()->noContent();
     }

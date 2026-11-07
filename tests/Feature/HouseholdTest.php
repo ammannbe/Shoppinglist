@@ -461,14 +461,14 @@ class HouseholdTest extends TestCase
         $this->assertSame(1, $household->invitations()->count());
     }
 
-    // ---- HOUSEHOLDS_DRIVER=konto
+    // ---- HOUSEHOLDS_DRIVER=account-manager
 
-    public function test_the_konto_driver_makes_the_local_management_read_only(): void
+    public function test_the_account_manager_driver_makes_the_local_management_read_only(): void
     {
         [$owner, $member, $household, $list] = $this->sharedList();
         [, $token] = HouseholdInvitation::issue($household, $owner, 'anna@example.com', 'member');
         $anna = User::factory()->create(['email' => 'anna@example.com']);
-        config(['households.driver' => 'konto']);
+        config(['households.driver' => 'account-manager']);
 
         $this->actingAs($owner);
         $this->post(route('households.store'), ['name' => 'Neu'])->assertForbidden();

@@ -37,7 +37,7 @@ ddev npm run dev
   * * * * *  cd /path-to-the-project && php artisan queue:work --max-time=50 >> /dev/null 2>&1
   ```
   The queue sends the mails (verification, password reset, invitations) and applies the household webhooks of the AccountManager.
-- Households from the AccountManager (optional, needs the OIDC login): `HOUSEHOLDS_DRIVER=konto`, `KONTO_URL`, `KONTO_SERVICE_KEY`, `KONTO_SECRET`; in the AccountManager set the webhook URL `<APP_URL>/api/konto/webhook` and generate the secret of the service. Switching from local households: `php artisan households:import` (see `AGENTS.md`).
+- Households from the AccountManager (optional, needs the OIDC login): `HOUSEHOLDS_DRIVER=account-manager`, `ACCOUNT_MANAGER_URL`, `ACCOUNT_MANAGER_SERVICE_KEY`, `ACCOUNT_MANAGER_SECRET`; in the AccountManager set the webhook URL `<APP_URL>/api/account-manager/webhook` and generate the secret of the service. Switching from local households: `php artisan households:import` (see `AGENTS.md`).
 - Apache: `public/.htaccess` sets the manifest MIME type and disables caching of `sw.js` (needs `mod_headers`).
 
 ### Automatic deployment (Forgejo Actions)

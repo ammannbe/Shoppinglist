@@ -18,7 +18,7 @@ class HouseholdController extends Controller
     {
         return view('households.index', [
             'households' => $request->user()->households()->withCount('members')->orderBy('name')->get(),
-            'kontoUrl' => self::kontoUrl(),
+            'accountManagerUrl' => self::accountManagerUrl(),
         ]);
     }
 
@@ -50,17 +50,17 @@ class HouseholdController extends Controller
             'invitations' => $household->invitations()->pending()->orderBy('email')->get(),
             'lists' => $household->shoppingLists()->with('owner')->orderBy('name')->get(),
             'pendingMembers' => Household::managedLocally() ? 0 : $household->pendingMembers()->count(),
-            'kontoUrl' => self::kontoUrl(),
+            'accountManagerUrl' => self::accountManagerUrl(),
         ]);
     }
 
     /**
-     * HOUSEHOLDS_DRIVER=konto: the households are managed in the AccountManager.
+     * HOUSEHOLDS_DRIVER=account-manager: the households are managed in the AccountManager.
      */
-    private static function kontoUrl(): ?string
+    private static function accountManagerUrl(): ?string
     {
-        return ! Household::managedLocally() && filled(config('households.konto.url'))
-            ? rtrim((string) config('households.konto.url'), '/').'/households'
+        return ! Household::managedLocally() && filled(config('households.account_manager.url'))
+            ? rtrim((string) config('households.account_manager.url'), '/').'/households'
             : null;
     }
 
