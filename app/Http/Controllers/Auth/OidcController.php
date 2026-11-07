@@ -2,8 +2,12 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Actions\Fortify\PasswordValidationRules;
+use App\Auth\OidcAccount;
 use App\Auth\OidcLogin;
 use App\Auth\OidcLoginException;
+use App\Households\AccountManagerHouseholds;
+use App\Households\AccountManagerUnavailable;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
@@ -17,23 +21,62 @@ use Symfony\Component\HttpFoundation\RedirectResponse as SymfonyRedirectResponse
 use Throwable;
 use UnexpectedValueException;
 
+/**
+ * OIDC login, linking from the account page and the confirmation before unlinking or deleting
+ * a linked account (App\Auth\OidcAccount).
+ */
 class OidcController extends Controller
 {
-    public function redirect(Request $request): SymfonyRedirectResponse
+    use PasswordValidationRules;
+
+    private const INTENT = 'oidc.intent';
+
+    /**
+     * What the confirmation is for: the account page opens at that section afterwards.
+     */
+    private const CONFIRM_FOR = 'oidc.confirm_for';
+
+    /**
+     * "?link=1" links the logged in user (account page, after confirming the password), "?confirm=1"
+     * confirms a linked user's login before unlinking ("&for=delete": deleting the account);
+     * otherwise a normal login.
+     */
+    public function redirect(Request $request, OidcAccount $accounts): SymfonyRedirectResponse
     {
         abort_unless(config('login.oidc.enabled'), 404);
 
-        // "Link" from the account page: the callback attaches the identity to the logged in user.
-        $request->session()->put('oidc.link', $request->boolean('link') && Auth::check());
+        $request->session()->forget([self::INTENT, self::CONFIRM_FOR]);
+
+        /** @var User|null $user */
+        $user = Auth::user();
+        $intent = 'login';
+
+        if ($user && $request->boolean('link')) {
+            // Linking removes the password and the passkeys, so a session alone (e.g. an unlocked device) is not enough.
+            if (! $accounts->pullPasswordConfirmation($user)) {
+                return $this->failed(__('Please confirm your password first.'), 'link');
+            }
+
+            $intent = 'link';
+        } elseif ($user && $request->boolean('confirm')) {
+            $intent = 'confirm';
+            $request->session()->put(self::CONFIRM_FOR, $request->query('for') === 'delete' ? 'delete' : 'unlink');
+        }
+
+        $request->session()->put(self::INTENT, $intent);
 
         return $this->provider()->redirect();
     }
 
-    public function callback(Request $request, OidcLogin $login): RedirectResponse
+    public function callback(Request $request, OidcLogin $login, OidcAccount $accounts, AccountManagerHouseholds $households): RedirectResponse
     {
         abort_unless(config('login.oidc.enabled'), 404);
 
-        $linking = (bool) $request->session()->pull('oidc.link', false) && Auth::check();
+        /** @var User|null $current */
+        $current = Auth::user();
+        $intent = (string) $request->session()->pull(self::INTENT, 'login');
+        $intent = $current ? $intent : 'login';
+        $confirmFor = $request->session()->pull(self::CONFIRM_FOR);
 
         try {
             $identity = $this->provider()->user();
@@ -42,40 +85,106 @@ class OidcController extends Controller
                 throw new UnexpectedValueException('Unexpected OIDC user.');
             }
 
-            /** @var User|null $current */
-            $current = $linking ? Auth::user() : null;
+            if ($intent === 'confirm' && $current) {
+                $login->confirm($identity, $current);
+                $accounts->rememberSignIn();
 
-            $user = $login->resolve($identity, $current);
+                // Opens the account page at the unlink (or delete) form.
+                return redirect()->to(route('account').($confirmFor === 'delete' ? '#delete-account' : '#oidc'));
+            }
+
+            $user = $login->resolve($identity, $intent === 'link' ? $current : null);
         } catch (OidcLoginException $exception) {
-            return $this->failed(__($exception->getMessage()), $linking);
+            return $this->failed(__($exception->getMessage()), $intent);
         } catch (Throwable $exception) {
             Log::warning('OIDC login failed', ['exception' => $exception->getMessage()]);
 
-            return $this->failed(__('The login failed. Please try again.'), $linking);
+            return $this->failed(__('The login failed. Please try again.'), $intent);
         }
 
-        if ($linking) {
-            return redirect()->route('account')->with('status', __('The login is linked to your account.'));
-        }
+        $this->syncHouseholds($households, $user);
 
         // Stay logged in like the password login: the app has to sync after long offline periods.
+        // Also after linking: the remember token was rotated, this device gets the new one.
         Auth::login($user, remember: true);
         $request->session()->regenerate();
+        $accounts->rememberSignIn();
+
+        if ($intent === 'link') {
+            return redirect()->route('account')->with('status', __('The login is linked to your account.'));
+        }
 
         return redirect()->intended(config('fortify.home'));
     }
 
-    public function destroy(Request $request): RedirectResponse
+    /**
+     * "Link …" on the account page: the current password first (accounts without one skip it),
+     * then the provider (redirect "?link=1", within OidcAccount::PASSWORD_TIMEOUT, used once).
+     */
+    public function link(Request $request, OidcAccount $accounts): RedirectResponse
     {
+        abort_unless(config('login.oidc.enabled'), 404);
+
         /** @var User $user */
         $user = $request->user();
 
-        // Without a password the account would no longer be reachable.
-        abort_if($user->password === null, 403);
+        abort_if($user->isLinkedToOidc(), 403);
 
-        $user->forceFill(['oidc_sub' => null])->save();
+        if ($user->password !== null) {
+            $request->validateWithBag('linkOidc', [
+                'password' => ['required', 'string', 'current_password:web'],
+            ]);
+        }
 
-        return redirect()->route('account')->with('status', __('The login is unlinked.'));
+        $accounts->rememberPasswordConfirmation();
+
+        return redirect()->route('oidc.redirect', ['link' => 1]);
+    }
+
+    /**
+     * Unlinking needs an OIDC login within OidcAccount::SIGN_IN_TIMEOUT (otherwise the
+     * confirmation at the provider first) and a new password. Without the OIDC login there is
+     * nothing to confirm with; users:unlink-oidc is the way back then.
+     */
+    public function destroy(Request $request, OidcAccount $accounts): RedirectResponse
+    {
+        abort_unless(config('login.oidc.enabled'), 404);
+
+        /** @var User $user */
+        $user = $request->user();
+
+        abort_unless($user->isLinkedToOidc(), 403);
+
+        if (! $accounts->hasRecentSignIn()) {
+            return redirect()->route('oidc.redirect', ['confirm' => 1]);
+        }
+
+        $input = $request->validateWithBag('unlinkOidc', [
+            'password' => $this->passwordRules(),
+        ]);
+
+        $accounts->unlink($user, $input['password']);
+
+        return redirect()->route('account')->with('status', __('The sign-in is unlinked. You now sign in with your e-mail address and password.'));
+    }
+
+    /**
+     * HOUSEHOLDS_DRIVER=account-manager: pending memberships and the user's households from the AccountManager.
+     * The login works without it (the daily sync catches up).
+     */
+    private function syncHouseholds(AccountManagerHouseholds $households, User $user): void
+    {
+        if (! AccountManagerHouseholds::enabled()) {
+            return;
+        }
+
+        try {
+            $households->syncUser($user);
+        } catch (AccountManagerUnavailable $exception) {
+            AccountManagerHouseholds::logUnavailable($exception, 'syncing the households on login');
+        } catch (Throwable $exception) {
+            report($exception);
+        }
     }
 
     private function provider(): AbstractProvider
@@ -92,8 +201,8 @@ class OidcController extends Controller
         return $provider;
     }
 
-    private function failed(string $message, bool $linking): RedirectResponse
+    private function failed(string $message, string $intent): RedirectResponse
     {
-        return redirect()->route($linking ? 'account' : 'login')->withErrors(['oidc' => $message]);
+        return redirect()->route($intent === 'login' ? 'login' : 'account')->withErrors(['oidc' => $message]);
     }
 }

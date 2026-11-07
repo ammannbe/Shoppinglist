@@ -2,7 +2,11 @@
 
 use App\Ai\OpenAiClient;
 use App\Http\Controllers\Auth\OidcController;
+use App\Http\Controllers\HouseholdController;
+use App\Http\Controllers\HouseholdInvitationController;
+use App\Http\Controllers\HouseholdMemberController;
 use App\Http\Controllers\ImageController;
+use App\Http\Controllers\ListHouseholdController;
 use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\MemberController;
 use App\Http\Controllers\OfferController;
@@ -12,6 +16,7 @@ use App\Http\Controllers\PlannerStateController;
 use App\Http\Controllers\PreferenceController;
 use App\Http\Controllers\RecipesConnectionController;
 use App\Http\Controllers\SyncController;
+use App\Models\Household;
 use App\Recipes\RecipesClient;
 use App\Support\Seasons;
 use App\Support\ShopRegions;
@@ -29,13 +34,23 @@ Route::middleware('throttle:20,1')->group(function () {
     Route::get('auth/oidc/callback', [OidcController::class, 'callback'])->name('oidc.callback');
 });
 
+// Link of the household invitation mail, also for guests (they log in or register first).
+Route::get('households/invitations/{token}', [HouseholdInvitationController::class, 'show'])
+    ->middleware('throttle:30,1')->name('households.invitations.show');
+
 Route::middleware('auth')->group(function () {
     Route::get('me', fn (Request $request) => [
         'email' => $request->user()->email,
         'name' => $request->user()->name,
         'verified' => $request->user()->hasVerifiedEmail(),
+        // Linked to the OIDC login: no password and no passkeys (App\Auth\OidcAccount).
+        'linked' => $request->user()->isLinkedToOidc(),
         'locale' => $request->user()->locale,
         'preferences' => [...PreferenceController::DEFAULTS, ...($request->user()->preferences ?? [])],
+        // For "Share with household", and a hint about open invitations in the settings.
+        'households' => $request->user()->households()->orderBy('name')->get()
+            ->map(fn (Household $household) => ['id' => $household->uuid, 'name' => $household->name])->all(),
+        'household_invitations' => $request->user()->householdInvitations()->count(),
         // Shops with regional offers and their regions (for the settings and the offers).
         'regions' => ShopRegions::ALL,
         // Foods in season this month (for the product suggestions and the week planner).
@@ -55,10 +70,15 @@ Route::middleware('auth')->group(function () {
     Route::get('account', fn (Request $request) => view('account', [
         'passkeyCount' => $request->user()->passkeys()->count(),
     ]))->name('account');
+    Route::post('account/oidc', [OidcController::class, 'link'])->middleware('throttle:5,1')->name('oidc.link');
     Route::delete('account/oidc', [OidcController::class, 'destroy'])->name('oidc.unlink');
     Route::get('account/passkeys', fn (Request $request) => view('account-passkeys', [
         'passkeys' => $request->user()->passkeys()->latest()->get(),
     ]))->middleware('password.confirm')->name('account.passkeys');
+
+    // Accepting proves the address (the link came by mail), so unverified users may accept.
+    Route::post('households/invitations/{token}', [HouseholdInvitationController::class, 'accept'])
+        ->middleware('throttle:30,1')->name('households.invitations.accept');
 
     Route::middleware('verified')->group(function () {
         Route::get('sync/{collection}/pull', [SyncController::class, 'pull'])->name('sync.pull');
@@ -101,5 +121,24 @@ Route::middleware('auth')->group(function () {
 
         Route::post('lists/{list}/members', [MemberController::class, 'store'])->name('members.store');
         Route::delete('lists/{list}/members/{email}', [MemberController::class, 'destroy'])->name('members.destroy');
+        Route::post('lists/{list}/households', [ListHouseholdController::class, 'store'])->name('list-households.store');
+        Route::delete('lists/{list}/households/{household}', [ListHouseholdController::class, 'destroy'])->name('list-households.destroy');
+
+        // Households (server rendered, HOUSEHOLDS_DRIVER=account-manager: read only).
+        Route::get('households', [HouseholdController::class, 'index'])->name('households.index');
+        Route::post('households', [HouseholdController::class, 'store'])->name('households.store');
+        Route::get('households/{household}', [HouseholdController::class, 'show'])->name('households.show');
+        Route::patch('households/{household}', [HouseholdController::class, 'update'])->name('households.update');
+        Route::delete('households/{household}', [HouseholdController::class, 'destroy'])->name('households.destroy');
+        Route::post('households/{household}/invitations', [HouseholdInvitationController::class, 'store'])->name('households.invitations.store');
+        Route::delete('households/{household}/invitations/{invitation}', [HouseholdInvitationController::class, 'destroy'])
+            ->scopeBindings()->name('households.invitations.destroy');
+        // Open invitations for the user, on the households page.
+        Route::post('households/invitations/{invitation}/accept', [HouseholdInvitationController::class, 'acceptOpen'])
+            ->whereNumber('invitation')->middleware('throttle:30,1')->name('households.invitations.accept-open');
+        Route::delete('households/invitations/{invitation}', [HouseholdInvitationController::class, 'decline'])
+            ->whereNumber('invitation')->name('households.invitations.decline');
+        Route::patch('households/{household}/members/{member}', [HouseholdMemberController::class, 'update'])->name('households.members.update');
+        Route::delete('households/{household}/members/{member}', [HouseholdMemberController::class, 'destroy'])->name('households.members.destroy');
     });
 });

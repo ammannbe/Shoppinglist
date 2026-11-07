@@ -2,23 +2,32 @@
 
 namespace App\Sync;
 
+use App\Models\Household;
 use App\Models\Membership;
 use App\Models\ShoppingList;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Collection;
 
 /**
  * Lists are pulled through the user's memberships, so revoked access and
- * deleted lists both arrive as deleted documents.
+ * deleted lists both arrive as deleted documents. Members of a household the
+ * list is shared with have a membership too (`direct` false), see
+ * ShoppingList::syncHouseholdAccess().
  */
 class ListResource extends SyncResource
 {
+    /**
+     * @var array<int, Collection<int, int>>
+     */
+    private array $householdIds = [];
+
     protected function pullQuery(User $user): Builder
     {
         return Membership::withTrashed()
             ->where('user_id', $user->id)
-            ->with(['shoppingList.owner', 'shoppingList.memberships.user']);
+            ->with(['shoppingList.owner', 'shoppingList.memberships.user', 'shoppingList.households']);
     }
 
     protected function checkpointIdColumn(): string
@@ -42,9 +51,16 @@ class ListResource extends SyncResource
             'is_owner' => $isOwner,
             // The order of the lists is personal.
             'position' => $model->position,
+            // Shared by email, members through a household are not listed.
             'members' => $isOwner
-                ? $list->memberships->pluck('user.email')->reject(fn ($email) => $email === $user->email)->sort()->values()->all()
+                ? $list->memberships->where('direct', true)->pluck('user.email')->reject(fn ($email) => $email === $user->email)->sort()->values()->all()
                 : [],
+            // The owner sees all households the list is shared with, members the ones they belong to.
+            'households' => $list->households
+                ->when(! $isOwner, fn ($households) => $households->whereIn('id', $this->householdIdsOf($user)))
+                ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
+                ->map(fn (Household $household) => ['id' => $household->uuid, 'name' => $household->name])
+                ->values()->all(),
             'version' => $list->version,
             'updated_at' => $model->syncTimestamp(),
             '_deleted' => $model->trashed() || $list->trashed(),
@@ -76,7 +92,8 @@ class ListResource extends SyncResource
             ->first();
 
         // No access (anymore): the client removes the list after the next pull.
-        if ($membership === null || $membership->trashed()) {
+        if ($membership === null || $membership->trashed()
+            || ! $user->accessibleListIds()->withTrashed()->whereKey($list->id)->exists()) {
             return null;
         }
 
@@ -93,6 +110,11 @@ class ListResource extends SyncResource
             } else {
                 // Members cannot delete a list, they leave it.
                 $list->removeMember($user);
+
+                // Access through a household stays: the list comes back.
+                if ($user->accessibleListIds()->whereKey($list->id)->exists()) {
+                    return $this->document($membership->refresh()->setRelation('shoppingList', $list), $user);
+                }
             }
 
             return null;
@@ -106,5 +128,13 @@ class ListResource extends SyncResource
         $membership->update(['position' => $new['position'] ?? null]);
 
         return null;
+    }
+
+    /**
+     * @return Collection<int, int>
+     */
+    private function householdIdsOf(User $user): Collection
+    {
+        return $this->householdIds[$user->id] ??= $user->households()->pluck('households.id');
     }
 }

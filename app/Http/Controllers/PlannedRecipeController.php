@@ -105,7 +105,7 @@ class PlannedRecipeController extends Controller
 
     /**
      * One recipe, for the recipe links of items (#/recipes/<id>): own ones, and read only the ones
-     * of others linked by an item in a list the user is a member of.
+     * of others linked by an item in a list the user can access (also through a household).
      */
     public function show(Request $request, PlannedRecipe $plannedRecipe): JsonResponse
     {

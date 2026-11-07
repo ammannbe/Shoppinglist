@@ -11,7 +11,10 @@ return [
     | the addresses in "emergency_emails" may still sign in with a password
     | (e.g. while the OpenID Connect provider is down). Registration follows
     | AUTH_LOCAL_REGISTRATION (config/fortify.php). Password reset stays
-    | available, so that users without password can set one.
+    | available, so that unlinked users without password can set one.
+    | Accounts linked to the OpenID Connect login never log in with a
+    | password or passkey (App\Auth\OidcAccount), so the emergency
+    | addresses stay unlinked.
     |
     */
 

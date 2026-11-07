@@ -34,6 +34,23 @@ class UserFactory extends Factory
     }
 
     /**
+     * Like the app: an account linked to the OIDC login has no password.
+     */
+    public function configure(): static
+    {
+        return $this->afterMaking(function (User $user): void {
+            if ($user->isLinkedToOidc()) {
+                $user->password = null;
+            }
+        });
+    }
+
+    public function linked(string $sub = 'sub-123'): static
+    {
+        return $this->state(fn (): array => ['oidc_sub' => $sub]);
+    }
+
+    /**
      * Indicate that the model's email address should be unverified.
      */
     public function unverified(): static

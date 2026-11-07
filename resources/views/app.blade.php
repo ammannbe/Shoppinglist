@@ -128,8 +128,10 @@
                         <a :href="`#/list/${item.id}`" class="flex min-w-0 flex-1 items-center gap-3 py-3 pl-4 pointer-coarse:pr-4 pointer-fine:pr-3" draggable="false">
                             <span class="min-w-0 flex-1">
                                 <span class="block truncate font-medium" x-text="item.name"></span>
-                                <span x-show="item.is_owner === false" class="block truncate text-xs text-stone-500" x-text="$t('Shared by :email', { email: item.owner_email })"></span>
-                                <span x-show="item.is_owner !== false && item.members?.length" class="block truncate text-xs text-stone-500" x-text="$t('Shared with :emails', { emails: item.members?.join(', ') })"></span>
+                                <span x-show="item.is_owner === false" class="block truncate text-xs text-stone-500"
+                                    x-text="item.households?.length ? $t('Shared by :email via :household', { email: item.owner_email, household: item.households.map((household) => household.name).join(', ') }) : $t('Shared by :email', { email: item.owner_email })"></span>
+                                <span x-show="item.is_owner !== false && (item.members?.length || item.households?.length)" class="block truncate text-xs text-stone-500"
+                                    x-text="$t('Shared with :emails', { emails: [...(item.households ?? []).map((household) => household.name), ...(item.members ?? [])].join(', ') })"></span>
                             </span>
                             <span class="rounded-full bg-stone-100 px-2 py-0.5 text-sm tabular-nums text-stone-600" x-text="openCount(item.id)"></span>
                         </a>
@@ -240,125 +242,8 @@
             </template>
         </section>
 
-        {{-- Settings --}}
-        <section x-show="route.view === 'settings'" class="space-y-6">
-            <div>
-                <h2 class="mb-2 text-sm font-medium text-stone-600" x-text="$t('Language')"></h2>
-                <select class="field w-full" :value="$store.i18n.locale" @change="setLocale($event.target.value)">
-                    <template x-for="(label, code) in $store.i18n.locales" :key="code">
-                        <option :value="code" x-text="label" :selected="code === $store.i18n.locale"></option>
-                    </template>
-                </select>
-            </div>
+        @include('partials.settings')
 
-            {{-- Country of the standard shops offered in the shop choice --}}
-            <div>
-                <h2 class="mb-2 text-sm font-medium text-stone-600" x-text="$t('Country of the shops')"></h2>
-                <select class="field w-full" @change="$store.prefs.set('country', $event.target.value)">
-                    <template x-for="option in [{ value: 'CH', label: $t('Switzerland') }, { value: 'DE', label: $t('Germany') }, { value: 'AT', label: $t('Austria') }]" :key="option.value">
-                        <option :value="option.value" x-text="option.label" :selected="option.value === country"></option>
-                    </template>
-                </select>
-            </div>
-
-            {{-- Region of shops with regional offers (Migros cooperatives): offers of other regions are hidden --}}
-            <template x-for="(regions, tag) in country === 'CH' ? shopRegions : {}" :key="tag">
-                <div>
-                    <h2 class="mb-2 text-sm font-medium text-stone-600" x-text="$t('Offers of :shop', { shop: storeLabel(tag) })"></h2>
-                    <select class="field w-full" @change="setShopRegion(tag, $event.target.value)">
-                        <option value="" x-text="$t('All regions')" :selected="!$store.prefs.regions?.[tag]"></option>
-                        <template x-for="(name, key) in regions" :key="key">
-                            <option :value="key" x-text="name" :selected="$store.prefs.regions?.[tag] === key"></option>
-                        </template>
-                    </select>
-                </div>
-            </template>
-
-            <div>
-                <h2 class="mb-2 text-sm font-medium text-stone-600" x-text="$t('Account')"></h2>
-                <div class="rounded-lg border border-stone-200 bg-white p-4">
-                    <template x-if="loggedIn">
-                        <div class="flex flex-wrap items-center justify-between gap-3">
-                            <span class="min-w-0 break-all" x-text="$t('Logged in as :email', { email: $store.sync.user.email })"></span>
-                            <button type="button" class="button-secondary shrink-0 whitespace-nowrap" @click="logout()" :disabled="busy" x-text="$t('Log Out')"></button>
-                            <a href="/account" data-online class="w-full text-sm font-medium underline" x-text="$t('Change password and passkeys')"></a>
-                        </div>
-                    </template>
-                    <template x-if="!loggedIn">
-                        <p>
-                            <span x-text="$t('Log in to sync your lists across devices and share them.')"></span>
-                            <a href="/login" data-online class="font-medium underline" x-text="$t('Log in')"></a> ·
-                            <a href="/register" data-online class="font-medium underline" x-text="$t('Register')"></a>
-                        </p>
-                    </template>
-                </div>
-            </div>
-
-            <fieldset>
-                <legend class="mb-2 text-sm font-medium text-stone-600" x-text="$t('Actions on touch devices')"></legend>
-                <div class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
-                    <template x-for="option in [
-                        { value: 'swipe', label: $t('Swipe left'), hint: $t('Edit, share and delete appear next to the row.') },
-                        { value: 'longpress', label: $t('Long press'), hint: $t('A menu with edit, share and delete opens.') },
-                    ]" :key="option.value">
-                        <label class="flex cursor-pointer items-start gap-3 p-4 hover:bg-stone-50">
-                            <input type="radio" name="row-actions" class="mt-1 accent-emerald-700" :value="option.value"
-                                :checked="$store.prefs.row_actions === option.value" @change="$store.prefs.set('row_actions', option.value)">
-                            <span>
-                                <span class="block" x-text="option.label"></span>
-                                <span class="block text-sm text-stone-500" x-text="option.hint"></span>
-                            </span>
-                        </label>
-                    </template>
-                </div>
-            </fieldset>
-
-            <div>
-                <template x-if="recipeApp && loggedIn">
-                    <div class="mb-6">
-                        <h2 class="mb-2 text-sm font-medium text-stone-600" x-text="recipeApp.name"></h2>
-                        <div class="rounded-lg border border-stone-200 bg-white p-4">
-                            <template x-if="recipeApp.connected">
-                                <div class="flex flex-wrap items-center justify-between gap-3">
-                                    <span class="min-w-0 break-all" x-text="$t('Connected as :account', { account: recipeApp.account?.email ?? recipeApp.account?.name ?? '' })"></span>
-                                    <button type="button" class="button-secondary shrink-0" :disabled="busy" @click="disconnectRecipes()" x-text="$t('Disconnect')"></button>
-                                </div>
-                            </template>
-                            <template x-if="!recipeApp.connected">
-                                <div class="space-y-3">
-                                    <p class="text-sm text-stone-600" x-text="$t('Connect your account so the week planner suggests your recipes and can save new ones.')"></p>
-                                    <a href="/recipes/connect" data-online class="button inline-block" x-text="$t('Connect with :name', { name: recipeApp.name })"></a>
-                                </div>
-                            </template>
-                        </div>
-                    </div>
-                </template>
-
-                <h2 class="mb-2 text-sm font-medium text-stone-600" x-text="$t('Suggestions')"></h2>
-                <div class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
-                    <a href="#/products" class="flex items-center justify-between gap-3 p-4 hover:bg-stone-50">
-                        <span x-text="$t('Products')"></span>
-                        <span aria-hidden="true">›</span>
-                    </a>
-                    <a href="#/units" class="flex items-center justify-between gap-3 p-4 hover:bg-stone-50">
-                        <span x-text="$t('Units')"></span>
-                        <span aria-hidden="true">›</span>
-                    </a>
-                    <a href="#/stores" class="flex items-center justify-between gap-3 p-4 hover:bg-stone-50">
-                        <span x-text="$t('Shops')"></span>
-                        <span aria-hidden="true">›</span>
-                    </a>
-                </div>
-            </div>
-
-            <div>
-                <h2 class="mb-2 text-sm font-medium text-stone-600" x-text="$t('Install app')"></h2>
-                <a href="#/install" class="flex items-center justify-between gap-3 rounded-lg border border-stone-200 bg-white p-4 hover:bg-stone-50">
-                    <span x-text="$store.install.installed ? $t('The app is installed on this device.') : $t('How to add Shoppinglist to your home screen or dock')"></span>
-                    <span aria-hidden="true">›</span>
-                </a>
-            </div>
-        </section>
         {{-- Products, units and shops suggested when adding items: own ones can be edited, public ones are read-only --}}
         <section x-show="['products', 'units', 'stores'].includes(route.view)" class="space-y-4">
             <p class="text-stone-600" x-text="{
@@ -454,45 +339,6 @@
             <div class="flex flex-wrap justify-center gap-2 pt-2">
                 <button type="button" class="button-secondary" @click="location.reload()" x-text="$t('Try again')"></button>
                 <a href="/" class="button" x-text="$t('Back to the lists')"></a>
-            </div>
-        </section>
-
-        {{-- Install instructions (offline available, part of the app shell) --}}
-        <section x-show="route.view === 'install'" class="space-y-6">
-            <p class="text-stone-600" x-text="$t('Installed, Shoppinglist starts like an app from the home screen, in full screen and without a connection.')"></p>
-
-            <div class="rounded-lg border border-stone-200 bg-white p-4">
-                <h2 class="mb-3 font-semibold" x-text="`${$t('This device')}: ${$store.install.current.name}`"></h2>
-                <p x-show="$store.install.installed" class="text-emerald-700" x-text="$t('The app is installed on this device.')"></p>
-                <template x-if="!$store.install.installed">
-                    <div>
-                        <button type="button" x-show="$store.install.prompt" class="button mb-4 w-full" @click="$store.install.install()" x-text="$t('Install now')"></button>
-                        <ol class="list-decimal space-y-1 pl-5">
-                            <template x-for="text in $store.install.current.steps" :key="text"><li x-text="$t(text)"></li></template>
-                        </ol>
-                        <p x-show="$store.install.current.note" class="mt-3 text-sm text-stone-500" x-text="$t($store.install.current.note ?? '')"></p>
-                    </div>
-                </template>
-            </div>
-
-            <div>
-                <h2 class="mb-2 text-sm font-medium text-stone-600" x-text="$t('Other devices and browsers')"></h2>
-                <div class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
-                    <template x-for="[id, platform] in $store.install.others" :key="id">
-                        <details class="group/details">
-                            <summary class="flex cursor-pointer list-none items-center justify-between px-4 py-3 hover:bg-stone-50">
-                                <span x-text="platform.name"></span>
-                                <span class="transition-transform group-open/details:rotate-90" aria-hidden="true">›</span>
-                            </summary>
-                            <div class="px-4 pb-4">
-                                <ol class="list-decimal space-y-1 pl-5 text-sm">
-                                    <template x-for="text in platform.steps" :key="text"><li x-text="$t(text)"></li></template>
-                                </ol>
-                                <p x-show="platform.note" class="mt-2 text-sm text-stone-500" x-text="$t(platform.note ?? '')"></p>
-                            </div>
-                        </details>
-                    </template>
-                </div>
             </div>
         </section>
     </main>
@@ -633,6 +479,25 @@
                         </li>
                     </template>
                 </ul>
+
+                {{-- Share with household: all members get access, also later ones --}}
+                <div>
+                    <span class="label" x-text="$t('Share with household')"></span>
+                    <ul x-show="households.length" class="divide-y divide-stone-200 rounded-lg border border-stone-200">
+                        <template x-for="household in households" :key="household.id">
+                            <li>
+                                <label class="flex cursor-pointer items-center gap-3 px-3 py-2">
+                                    <input type="checkbox" class="accent-emerald-700" :checked="sharedWithHousehold(household)" :disabled="busy" @change="toggleHousehold(household)">
+                                    <span class="min-w-0 truncate" x-text="household.name"></span>
+                                </label>
+                            </li>
+                        </template>
+                    </ul>
+                    <p x-show="!households.length" class="text-sm text-stone-600">
+                        <span x-text="$t('You are not a member of a household yet.')"></span>
+                        <a href="/households" data-online class="font-medium underline" x-text="$t('Create household')"></a>
+                    </p>
+                </div>
 
                 <form @submit.prevent="share()" class="space-y-2">
                     <label class="block">

@@ -4,6 +4,7 @@ Offline-first web app (PWA) to manage shopping lists and share them with your fa
 
 - **Works offline**: all lists live on the device and sync in the background as soon as a connection is available.
 - **Share lists**: invite others by email, changes of all members are merged.
+- **Households**: share lists with a household (e.g. family or flatmates), all its members see them, new members too.
 - **Installable**: add it to the home screen on Android and iOS, no app store needed.
 - **Passkeys**: log in with Face ID, Touch ID, Windows Hello or the device PIN.
 
@@ -35,7 +36,9 @@ ddev npm run dev
   * * * * *  cd /path-to-the-project && php artisan schedule:run >> /dev/null 2>&1
   * * * * *  cd /path-to-the-project && php artisan queue:work --max-time=50 >> /dev/null 2>&1
   ```
-  The queue sends the mails (verification, password reset, invitations).
+  The queue sends the mails (verification, password reset, invitations) and applies the household webhooks of the AccountManager.
+- Login with an OpenID Connect provider (optional, e.g. Pocket ID): `AUTH_OIDC_*` in `.env` (see `config/login.php`). An account linked to the provider logs in only there (no password, no passkeys, no password reset); keep the `AUTH_LOCAL_EMERGENCY_EMAILS` accounts unlinked as local emergency access. Way back to passwords: `php artisan users:unlink-oidc <email>` (or `--all`), then "Forgot your password?".
+- Households from the AccountManager (optional, needs the OIDC login): `HOUSEHOLDS_DRIVER=account-manager`, `ACCOUNT_MANAGER_URL`, `ACCOUNT_MANAGER_SERVICE_KEY`, `ACCOUNT_MANAGER_SECRET`; in the AccountManager set the webhook URL `<APP_URL>/api/account-manager/webhook` and generate the secret of the service. Switching from local households: `php artisan households:import` (see `AGENTS.md`).
 - Apache: `public/.htaccess` sets the manifest MIME type and disables caching of `sw.js` (needs `mod_headers`).
 
 ### Automatic deployment (Forgejo Actions)

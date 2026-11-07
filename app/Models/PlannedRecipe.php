@@ -139,7 +139,8 @@ class PlannedRecipe extends Model
     }
 
     /**
-     * The ones of `$keys` (planned recipe ids) an item in the user's lists links to.
+     * The ones of `$keys` (planned recipe ids) an item in the user's lists links to (all lists
+     * the user can access, also through a household, see User::accessibleListIds).
      *
      * @param  list<string>  $keys  uuids
      * @return list<string>

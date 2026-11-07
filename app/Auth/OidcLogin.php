@@ -5,7 +5,6 @@ namespace App\Auth;
 use App\Models\User;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Auth\Events\Verified;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Socialite\AbstractUser as SocialiteUser;
 
@@ -13,20 +12,16 @@ use Laravel\Socialite\AbstractUser as SocialiteUser;
  * Resolves the local user for an OpenID Connect login.
  *
  * Accounts are matched by the provider's subject ("sub"). A local account is only
- * linked through an e-mail address that the provider marks as verified.
+ * linked through an e-mail address that the provider marks as verified. Linking makes
+ * the account SSO-only (App\Auth\OidcAccount::link()).
  */
 class OidcLogin
 {
+    public function __construct(private readonly OidcAccount $accounts) {}
+
     public function resolve(SocialiteUser $identity, ?User $linkTo = null): User
     {
-        $sub = (string) $identity->getId();
-        $claims = (array) $identity->getRaw();
-
-        if ($sub === '') {
-            throw OidcLoginException::because('The login did not return a user.');
-        }
-
-        $this->assertAllowed($claims);
+        $sub = $this->subject($identity);
 
         $linked = User::query()->where('oidc_sub', $sub)->first();
 
@@ -40,7 +35,7 @@ class OidcLogin
 
         $email = mb_strtolower(trim((string) $identity->getEmail()));
 
-        if ($email === '' || ! $this->emailIsVerified($claims)) {
+        if ($email === '' || ! $this->emailIsVerified((array) $identity->getRaw())) {
             throw OidcLoginException::because('Your email address must be verified with the login provider.');
         }
 
@@ -55,6 +50,29 @@ class OidcLogin
         }
 
         return $this->register($identity, $sub, $email);
+    }
+
+    /**
+     * Before unlinking or deleting the account: the logged in user confirms the login at the provider.
+     */
+    public function confirm(SocialiteUser $identity, User $user): void
+    {
+        if (! $user->isLinkedToOidc() || ! hash_equals((string) $user->oidc_sub, $this->subject($identity))) {
+            throw OidcLoginException::because('This sign-in belongs to another account.');
+        }
+    }
+
+    private function subject(SocialiteUser $identity): string
+    {
+        $sub = (string) $identity->getId();
+
+        if ($sub === '') {
+            throw OidcLoginException::because('The login did not return a user.');
+        }
+
+        $this->assertAllowed((array) $identity->getRaw());
+
+        return $sub;
     }
 
     /**
@@ -85,7 +103,13 @@ class OidcLogin
             throw OidcLoginException::because('This login is already linked to another account.');
         }
 
-        $user->forceFill(['oidc_sub' => $sub])->save();
+        if ($user->oidc_sub !== null && $user->oidc_sub !== $sub) {
+            throw OidcLoginException::because('This account is already linked to another login.');
+        }
+
+        if (! $linked) {
+            $this->accounts->link($user, $sub);
+        }
 
         return $user;
     }
@@ -96,41 +120,18 @@ class OidcLogin
             throw OidcLoginException::because('This account is already linked to another login.');
         }
 
-        if ($user->hasVerifiedEmail()) {
-            $user->forceFill(['oidc_sub' => $sub])->save();
+        $wasVerified = $user->hasVerifiedEmail();
 
-            return $user;
+        // An unverified account may belong to somebody who registered (or was invited with) the address
+        // without owning it: the verified owner takes it over (linking drops the password, the passkeys
+        // and the other sessions).
+        $this->accounts->link($user, $sub, $wasVerified ? [] : ['email_verified_at' => now()]);
+
+        if (! $wasVerified) {
+            event(new Verified($user));
         }
-
-        // Somebody else may have registered (or been invited with) this address: the verified owner
-        // must not end up in an account that someone else can still log in to.
-        DB::transaction(function () use ($user, $sub): void {
-            $user->passkeys()->delete();
-            $user->forceFill([
-                'oidc_sub' => $sub,
-                'email_verified_at' => now(),
-                'password' => null,
-                'remember_token' => Str::random(60),
-            ])->save();
-            $this->endSessions($user);
-        });
-
-        event(new Verified($user));
 
         return $user;
-    }
-
-    /**
-     * Without a password AuthenticateSession no longer checks the sessions, so end them here.
-     */
-    private function endSessions(User $user): void
-    {
-        if (config('session.driver') === 'database') {
-            DB::connection(config('session.connection'))
-                ->table(config('session.table', 'sessions'))
-                ->where('user_id', $user->getKey())
-                ->delete();
-        }
     }
 
     private function register(SocialiteUser $identity, string $sub, string $email): User

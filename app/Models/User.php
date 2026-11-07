@@ -10,11 +10,13 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Passkeys\Contracts\PasskeyUser;
 use Laravel\Passkeys\PasskeyAuthenticatable;
+use LogicException;
 
 #[Fillable(['name', 'email', 'password', 'locale'])]
 #[Hidden(['password', 'remember_token', 'recipes_connection'])]
@@ -22,6 +24,16 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable, PasskeyAuthenticatable;
+
+    protected static function booted(): void
+    {
+        // A linked account logs in through the OIDC provider only; link and unlink through App\Auth\OidcAccount.
+        static::saving(function (User $user): void {
+            if ($user->isLinkedToOidc() && $user->password !== null && $user->isDirty(['password', 'oidc_sub'])) {
+                throw new LogicException('An account linked to the OIDC login cannot have a password.');
+            }
+        });
+    }
 
     /**
      * Get the attributes that should be cast.
@@ -46,20 +58,55 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
         return $this->locale;
     }
 
+    /**
+     * Logs in through the OpenID Connect provider only (see App\Auth\OidcAccount).
+     */
+    public function isLinkedToOidc(): bool
+    {
+        return $this->oidc_sub !== null;
+    }
+
     public function memberships(): HasMany
     {
         return $this->hasMany(Membership::class);
     }
 
+    public function households(): BelongsToMany
+    {
+        return $this->belongsToMany(Household::class)->withPivot('role', 'joined_at');
+    }
+
     /**
-     * IDs of all non-deleted lists the user is currently a member of.
+     * Open household invitations for the user's verified address (accepted or declined on the households page).
+     * None with HOUSEHOLDS_DRIVER=account-manager, households are managed there.
+     */
+    public function householdInvitations(): Builder
+    {
+        return HouseholdInvitation::pending()
+            ->where('email', mb_strtolower($this->email))
+            ->unless($this->hasVerifiedEmail() && Household::managedLocally(), fn (Builder $query) => $query->whereRaw('1 = 0'))
+            ->whereNotIn('household_id', $this->households()->select('households.id'));
+    }
+
+    /**
+     * IDs of all non-deleted lists the user can access: shared by email (or own), or shared
+     * with a household the user is a member of. Resolved at runtime, so it does not depend on
+     * the sync rows of household members.
      */
     public function accessibleListIds(): Builder
     {
         return ShoppingList::query()
             ->select('shopping_lists.id')
-            ->join('shopping_list_user', 'shopping_list_user.shopping_list_id', '=', 'shopping_lists.id')
-            ->where('shopping_list_user.user_id', $this->id)
-            ->whereNull('shopping_list_user.deleted_at');
+            ->where(function (Builder $query) {
+                $query->whereExists(fn ($sub) => $sub->from('shopping_list_user')
+                    ->whereColumn('shopping_list_user.shopping_list_id', 'shopping_lists.id')
+                    ->where('shopping_list_user.user_id', $this->id)
+                    ->where('shopping_list_user.direct', true)
+                    ->whereNull('shopping_list_user.deleted_at'))
+                    ->orWhereExists(fn ($sub) => $sub->from('shopping_list_household')
+                        ->join('household_user', 'household_user.household_id', '=', 'shopping_list_household.household_id')
+                        ->whereColumn('shopping_list_household.shopping_list_id', 'shopping_lists.id')
+                        ->where('household_user.user_id', $this->id));
+            });
     }
 }
