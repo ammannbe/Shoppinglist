@@ -29,7 +29,7 @@ Shoppinglist: offline-first PWA for shared shopping lists. One Laravel app serve
 - Existing data: migration `2026_11_10_090000_remove_local_login_from_linked_accounts` (passwords, passkeys, remember tokens, reset tokens and sessions of linked accounts; linked users log in again once). Unlinked accounts are untouched; accounts without password and without `oidc_sub` can still use "Forgot your password?".
 - Emergency addresses (`AUTH_LOCAL_EMERGENCY_EMAILS`) must stay unlinked (with `AUTH_LOCAL_ENABLED=false` they are the only password login). Way back (provider gone, lost provider account): `users:unlink-oidc {emails*} {--all}` unlinks without password (mirrored households become pending), the users then use "Forgot your password?".
 - Tests: `OidcLinkedAccountTest` (shared Socialite mock `Tests\Feature\Concerns\MocksOidcProvider`).
-- Temporary diagnostics (users signed out after a while): `LogRejectedRememberCookie` logs why a remember cookie did not sign in (reason, path, IP, user agent; once per cookie and 10 min), `User::booted()` logs every `remember_token` change (sha256 fingerprints, trace, request or command). Tests `AuthDiagnosticsTest`. Remove all of it once the cause is found.
+- Remember-me for accounts without password: `User::getAuthPassword()` returns `''` instead of null, because Laravel's `SessionGuard::userFromRecaller()` refuses users whose password is not a string (linked users were signed out whenever the session expired). Same in RecipeManager, Chorelist and AccountManager. Tests `RememberLoginTest`.
 
 ### OIDC login button and local test
 
