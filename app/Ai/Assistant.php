@@ -157,9 +157,10 @@ class Assistant
      * @param  array{categories?: list<string>, units?: list<string>, complexities?: list<string>}|null  $vocabulary  of the recipe app
      * @param  list<string>  $exclude  names of dishes already suggested
      * @param  list<string>  $seasonal  foods in season in Switzerland this month
+     * @param  list<string>  $rejected  names of dishes the user rejected
      * @return array{picks: list<array<string, mixed>>, ideas: list<array<string, mixed>>}
      */
-    public function suggest(array $offers, array $pantry, array $candidates, int $servings, int $count, bool $ideas, ?string $wishes, string $language, ?array $vocabulary = null, array $exclude = [], array $seasonal = []): array
+    public function suggest(array $offers, array $pantry, array $candidates, int $servings, int $count, bool $ideas, ?string $wishes, string $language, ?array $vocabulary = null, array $exclude = [], array $seasonal = [], array $rejected = []): array
     {
         $complexities = ($vocabulary['complexities'] ?? []) ?: self::COMPLEXITIES;
         $categories = $vocabulary['categories'] ?? [];
@@ -183,6 +184,7 @@ class Assistant
             .'"complexity" is how hard the recipe is. "reason" is one short sentence why it fits. '
             .'"uses_offers" and "uses_pantry" contain the exact names from the input. Vary the dishes. '
             .($exclude !== [] ? 'The user already has these dishes, suggest different ones: '.implode('; ', $exclude).'. ' : '')
+            .($rejected !== [] ? 'The user rejected these dishes, never suggest them (or the same dish under another name) again: '.implode('; ', $rejected).'. ' : '')
             .'Write in '.$language.'.',
             [OpenAiClient::text(json_encode(compact('offers', 'pantry', 'candidates', 'wishes', 'seasonal'), JSON_UNESCAPED_UNICODE))],
             'suggestions',

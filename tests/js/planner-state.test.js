@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-    allowedStep, builtRecipe, migrateState, plannerSelection, recipePayload, remoteIsNewer, selectedOfferIds, stepAllowed, stepTrail, suggestionExclude,
-    syncedState, queueUsed, unbuiltRecipes, withoutPlanned, withoutUsed,
+    allowedStep, builtRecipe, linkImportedSuggestions, migrateState, newSuggestions, plannerSelection, recipePayload, rejectSuggestion, REJECTED_LIMIT,
+    remoteIsNewer, selectedOfferIds, stepAllowed, stepTrail, suggestionExclude, suggestionRequest, SYNCED_KEYS, syncedState, queueUsed, unbuiltRecipes,
+    withoutPlanned, withoutUsed,
 } from '../../resources/js/planner-state.js';
 
 const empty = { offerIds: [], pantry: [], planned: [], items: [] };
@@ -132,6 +133,98 @@ describe('suggestionExclude', () => {
     it('lists recipe ids and names of the given suggestions', () => {
         expect(suggestionExclude([{ recipe_id: 5, name: 'Lasagne' }, { recipe_id: null, name: 'Omelette' }]))
             .toEqual({ recipe_ids: [5], names: ['Lasagne', 'Omelette'] });
+    });
+});
+
+describe('rejected suggestions', () => {
+    const suggestions = [
+        { key: 'recipe-5', recipe_id: 5, name: 'Lasagne' },
+        { key: 'idea-1', name: 'Omelette', ingredients: [] },
+    ];
+
+    it('removes a rejected suggestion and remembers it for the run', () => {
+        const result = rejectSuggestion(suggestions, [], suggestions[1]);
+
+        expect(result.suggestions).toEqual([suggestions[0]]);
+        expect(result.rejected).toEqual([{ key: 'idea-1', name: 'Omelette', recipe_id: null }]);
+        expect(rejectSuggestion(result.suggestions, result.rejected, suggestions[0]).rejected.map((each) => each.key)).toEqual(['idea-1', 'recipe-5']);
+    });
+
+    it('keeps the latest rejected ones only', () => {
+        const rejected = Array.from({ length: REJECTED_LIMIT }, (_, index) => ({ key: `idea-${index}`, name: `Gericht ${index}`, recipe_id: null }));
+        const result = rejectSuggestion([], rejected, { key: 'idea-new', name: 'Neu' });
+
+        expect(result.rejected).toHaveLength(REJECTED_LIMIT);
+        expect(result.rejected[0].key).toBe('idea-1');
+        expect(result.rejected.at(-1).key).toBe('idea-new');
+    });
+
+    it('is part of the synced state and of older states', () => {
+        expect(SYNCED_KEYS).toContain('rejected');
+        expect(syncedState({ rejected: [{ key: 'idea-1', name: 'Omelette', recipe_id: null }] })).toEqual({ rejected: [{ key: 'idea-1', name: 'Omelette', recipe_id: null }] });
+        expect(migrateState({ offerIds: [], builtRecipes: [], rejected: 'broken' }).rejected).toEqual([]);
+        expect(migrateState({ offerIds: [], builtRecipes: [] })).not.toHaveProperty('rejected');
+    });
+});
+
+describe('suggestionRequest', () => {
+    it('sends the planned and shown recipes as exclude and the rejected ones separately', () => {
+        expect(suggestionRequest({
+            planned: [{ key: 'recipe-7', recipe_id: 7, name: 'Chili' }],
+            suggestions: [{ key: 'idea-1', name: 'Omelette' }],
+            rejected: [{ key: 'recipe-5', recipe_id: 5, name: 'Lasagne' }, { key: 'idea-2', name: 'Tacos', recipe_id: null }],
+        })).toEqual({
+            exclude: { recipe_ids: [7], names: ['Chili', 'Omelette'] },
+            rejected: { recipe_ids: [5], names: ['Lasagne', 'Tacos'] },
+        });
+    });
+
+    it('sends nothing for a fresh search', () => {
+        expect(suggestionRequest({ planned: [], suggestions: [], rejected: [] })).toEqual({ exclude: undefined, rejected: undefined });
+    });
+});
+
+describe('newSuggestions', () => {
+    it('leaves out planned, shown and rejected recipes', () => {
+        const found = [
+            { key: 'recipe-5', recipe_id: 5, name: 'Lasagne' },
+            { key: 'recipe-6', recipe_id: 6, name: 'Chili' },
+            { key: 'recipe-7', recipe_id: 7, name: 'Risotto' },
+            { key: 'idea-9', name: ' omelette ' },
+            { key: 'idea-10', name: 'Burger' },
+            { key: 'idea-10', name: 'Burger' },
+            { key: 'idea-11', name: 'Tacos' },
+        ];
+
+        expect(newSuggestions(found, {
+            planned: [{ key: 'recipe-6', recipe_id: 6, name: 'Chili' }],
+            suggestions: [{ key: 'idea-1', name: 'Omelette' }],
+            rejected: [{ key: 'recipe-5', recipe_id: 5, name: 'Lasagne' }, { key: 'idea-2', name: 'Tacos', recipe_id: null }],
+        }).map((each) => each.key)).toEqual(['recipe-7', 'idea-10']);
+    });
+});
+
+describe('linkImportedSuggestions', () => {
+    const suggestions = [
+        { key: 'idea-1', source: 'ai', name: 'Omelette', ingredients: [{ name: 'Eier' }], instructions: '1.', category: 'Eier', complexity: 'simple', savedUrl: 'https://recipes.test/import?draft=a', servings: 3, reason: 'Eier' },
+        { key: 'recipe-5', source: 'recipes', recipe_id: 5, name: 'Lasagne' },
+    ];
+
+    it('turns an imported idea into the own recipe', () => {
+        const linked = linkImportedSuggestions(suggestions, [
+            { id: 'p1', key: 'recipe-8', source: 'recipes', recipe_id: 8, name: 'Omelette mit Kräutern', url: 'https://recipes.test/recipes/8', idea_key: 'idea-1' },
+        ]);
+
+        expect(linked).toEqual([
+            { key: 'recipe-8', source: 'recipes', recipe_id: 8, name: 'Omelette mit Kräutern', url: 'https://recipes.test/recipes/8', savedUrl: null, servings: 3, reason: 'Eier' },
+            suggestions[1],
+        ]);
+    });
+
+    it('keeps the suggestions when nothing was imported and drops a duplicate own recipe', () => {
+        expect(linkImportedSuggestions(suggestions, [{ key: 'idea-1', source: 'ai' }])).toBe(suggestions);
+        expect(linkImportedSuggestions(suggestions, [{ key: 'recipe-5', source: 'recipes', recipe_id: 5, name: 'Lasagne', idea_key: 'idea-1' }]).map((each) => each.key))
+            .toEqual(['recipe-5']);
     });
 });
 

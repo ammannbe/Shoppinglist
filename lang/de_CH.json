@@ -761,5 +761,10 @@
     "Add “:name” to a list": "«:name» auf eine Liste setzen",
     "Add to list": "Auf Liste",
     "“:name” added to “:list”": "«:name» zu «:list» hinzugefügt",
-    "“:name” is already open on this list.": "«:name» ist auf dieser Liste schon offen."
+    "“:name” is already open on this list.": "«:name» ist auf dieser Liste schon offen.",
+    "Reject": "Ablehnen",
+    "Reject “:name”": "«:name» ablehnen",
+    ":count rejected": ":count abgelehnt",
+    "Remove found recipes": "Gefundene Rezepte entfernen",
+    "Remove the found recipes? Planned recipes stay planned.": "Gefundene Rezepte entfernen? Geplante Rezepte bleiben geplant."
 }

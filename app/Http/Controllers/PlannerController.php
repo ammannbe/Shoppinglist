@@ -11,9 +11,11 @@ use App\Recipes\RecipeIngredients;
 use App\Recipes\RecipesClient;
 use App\Recipes\RecipesException;
 use App\Support\Seasons;
+use Carbon\Exceptions\InvalidFormatException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 /**
@@ -71,13 +73,18 @@ class PlannerController extends Controller
             $month = Seasons::month();
             [$candidates, $urls, $warning, $foods] = $this->candidates($user, $offers, $pantry, $month);
             $seasonal = Seasons::names($month, $foods);
-            $excludedIds = $data['exclude']['recipe_ids'] ?? [];
+            // Shown, planned or rejected recipes are not offered again.
+            $excludedIds = [...$data['exclude']['recipe_ids'] ?? [], ...$data['rejected']['recipe_ids'] ?? []];
             $candidates = array_values(array_filter($candidates, fn (array $candidate) => ! in_array($candidate['id'], $excludedIds, true)));
+            $rejected = array_values(array_unique($data['rejected']['names'] ?? []));
             $result = $this->assistant->suggest(
                 $offers, $pantry, $candidates, (int) $data['servings'], (int) $data['count'],
                 (bool) $data['ideas'] || $candidates === [], $data['wishes'] ?? null, $this->language(),
-                $this->vocabulary($user), $data['exclude']['names'] ?? [], $seasonal,
+                $this->vocabulary($user), $data['exclude']['names'] ?? [], $seasonal, $rejected,
             );
+            // An idea named like one shown or rejected (the AI may repeat itself) is left out.
+            $known = array_map(fn (string $name) => mb_strtolower(trim($name)), [...$data['exclude']['names'] ?? [], ...$rejected]);
+            $result['ideas'] = array_values(array_filter($result['ideas'], fn (array $idea) => ! in_array(mb_strtolower(trim((string) ($idea['name'] ?? ''))), $known, true)));
             $names = array_column($candidates, 'name', 'id');
             $seasonOf = array_column($candidates, 'season', 'id');
 
@@ -243,10 +250,26 @@ class PlannerController extends Controller
         if (filled($data['key'] ?? null) && $url !== null) {
             $saved = PlannedRecipe::where('user_id', $user->id)->where('key', $data['key'])->first()
                 ?? PlannedRecipe::remember($user, [[...$data, 'source' => 'ai']])[0];
-            $saved->update(['draft_url' => $url]);
+            // The draft id: once imported there, the entry becomes the own recipe (RecipeDrafts).
+            $draftId = $result['data']['id'] ?? null;
+            $saved->update([
+                'draft_url' => $url,
+                'draft_id' => is_string($draftId) && Str::isUuid($draftId) ? $draftId : null,
+                'draft_expires_at' => $this->draftExpiry($result['data']['expires_at'] ?? null),
+            ]);
         }
 
         return response()->json(['url' => $url, 'recipe' => $saved?->toClient()]);
+    }
+
+    /** Expiry of a draft as sent by the recipe app (24 h if missing or invalid). */
+    private function draftExpiry(mixed $value): Carbon
+    {
+        try {
+            return is_string($value) && $value !== '' ? Carbon::parse($value) : now()->addDay();
+        } catch (InvalidFormatException) {
+            return now()->addDay();
+        }
     }
 
     /**

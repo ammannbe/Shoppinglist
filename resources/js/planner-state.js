@@ -9,7 +9,10 @@ export const STEPS = ['offers', 'pantry', 'recipes', 'list'];
  * and the current step stay on the device. The planned recipes are saved recipes on the server
  * (planned_recipes), not part of the state.
  */
-export const SYNCED_KEYS = ['offerIds', 'pantry', 'servings', 'count', 'ideas', 'wishes', 'suggestions', 'items', 'builtRecipes', 'target', 'listName'];
+export const SYNCED_KEYS = ['offerIds', 'pantry', 'servings', 'count', 'ideas', 'wishes', 'suggestions', 'rejected', 'items', 'builtRecipes', 'target', 'listName'];
+
+/** Rejected suggestions remembered per planner run (the server takes 100 names and ids). */
+export const REJECTED_LIMIT = 100;
 
 /**
  * Whether a step can be opened: recipes need selected offers, pantry items or planned recipes,
@@ -72,6 +75,8 @@ export function migrateState(state) {
     if (Array.isArray(migrated.suggestions)) {
         migrated.suggestions = suggestions.map(({ selected, saved, planned_id: plannedId, ...suggestion }) => suggestion);
     }
+    // Older states have no rejected suggestions.
+    if ('rejected' in migrated && !Array.isArray(migrated.rejected)) migrated.rejected = [];
 
     return migrated;
 }
@@ -112,12 +117,87 @@ export function withoutPlanned(suggestions, planned) {
     return suggestions.filter((suggestion) => !keys.has(suggestion.key));
 }
 
-/** Recipes not to suggest again (`exclude` of POST /planner/suggestions). */
+/** Recipes not to suggest again (`exclude` of POST /planner/suggestions, max. 100 each: the latest). */
 export function suggestionExclude(suggestions) {
     return {
-        recipe_ids: suggestions.map((suggestion) => suggestion.recipe_id).filter(Boolean),
-        names: suggestions.map((suggestion) => suggestion.name),
+        recipe_ids: suggestions.map((suggestion) => suggestion.recipe_id).filter(Boolean).slice(-REJECTED_LIMIT),
+        names: suggestions.map((suggestion) => suggestion.name).slice(-REJECTED_LIMIT),
     };
+}
+
+function nameKey(name) {
+    return String(name ?? '').trim().toLowerCase();
+}
+
+/**
+ * Rejects a suggestion: it leaves the suggestions and is remembered for the planner run (synced,
+ * `rejected`: { key, name, recipe_id }), the oldest go beyond REJECTED_LIMIT.
+ *
+ * @returns {{ suggestions: object[], rejected: object[] }}
+ */
+export function rejectSuggestion(suggestions, rejected, suggestion) {
+    const entry = { key: suggestion.key, name: suggestion.name, recipe_id: suggestion.recipe_id ?? null };
+
+    return {
+        suggestions: (suggestions ?? []).filter((each) => each.key !== suggestion.key),
+        rejected: [...(rejected ?? []).filter((each) => each.key !== suggestion.key), entry].slice(-REJECTED_LIMIT),
+    };
+}
+
+/**
+ * What a search sends besides offers and options: the planned and shown recipes (`exclude`) and
+ * the rejected ones (`rejected`), so every search finds further recipes.
+ */
+export function suggestionRequest({ planned = [], suggestions = [], rejected = [] }) {
+    const shown = [...planned, ...suggestions];
+
+    return {
+        exclude: shown.length ? suggestionExclude(shown) : undefined,
+        rejected: rejected.length ? suggestionExclude(rejected) : undefined,
+    };
+}
+
+/**
+ * Suggestions of a search that are new: not planned, not shown and not rejected (own recipes by
+ * recipe id, ideas by name, each key once).
+ */
+export function newSuggestions(found, { planned = [], suggestions = [], rejected = [] }) {
+    const known = [...planned, ...suggestions, ...rejected];
+    const keys = new Set(known.map((recipe) => recipe.key));
+    const recipeIds = new Set(known.map((recipe) => recipe.recipe_id).filter(Boolean));
+    const names = new Set(known.map((recipe) => nameKey(recipe.name)));
+    const added = [];
+    for (const suggestion of found ?? []) {
+        const repeated = suggestion.recipe_id ? recipeIds.has(suggestion.recipe_id) : names.has(nameKey(suggestion.name));
+        if (keys.has(suggestion.key) || repeated) continue;
+        keys.add(suggestion.key);
+        added.push(suggestion);
+    }
+
+    return added;
+}
+
+/**
+ * Suggestions with the AI ideas imported in the recipe app meanwhile replaced by the own recipe
+ * (the saved recipe names the idea's key as `idea_key`, RecipeDrafts on the server). Returns the
+ * same array when nothing changed.
+ *
+ * @param {object[]} suggestions
+ * @param {object[]} recipes saved recipes of GET /planned-recipes
+ */
+export function linkImportedSuggestions(suggestions, recipes) {
+    const imported = new Map((recipes ?? []).filter((recipe) => recipe.idea_key && recipe.source === 'recipes').map((recipe) => [recipe.idea_key, recipe]));
+    if (!(suggestions ?? []).some((suggestion) => imported.has(suggestion.key))) return suggestions;
+    const linked = suggestions.map((suggestion) => {
+        const recipe = imported.get(suggestion.key);
+        if (!recipe) return suggestion;
+        const { ingredients, instructions, category, complexity, savedUrl, draft_url: draftUrl, ...rest } = suggestion;
+
+        return { ...rest, key: recipe.key, source: 'recipes', recipe_id: recipe.recipe_id, name: recipe.name, url: recipe.url ?? null, savedUrl: null };
+    });
+    const seen = new Set();
+
+    return linked.filter((suggestion) => !seen.has(suggestion.key) && seen.add(suggestion.key));
 }
 
 /** Fields of a suggestion the server saves (POST /planned-recipes, recipes of POST /planner/list). */

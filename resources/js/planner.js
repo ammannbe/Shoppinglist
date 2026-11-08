@@ -5,8 +5,8 @@ import { offerReader } from './offers.js';
 import { closeDialogThen } from './layers.js';
 import { offerMatches, shortDate, uuid7 } from './helpers.js';
 import {
-    allowedStep, builtRecipe, migrateState, plannerSelection, queueUsed, recipePayload, remoteIsNewer, selectedOfferIds, STEPS, stepAllowed, stepTrail,
-    suggestionExclude, SYNCED_KEYS, syncedState, unbuiltRecipes, withoutPlanned, withoutUsed,
+    allowedStep, builtRecipe, linkImportedSuggestions, migrateState, newSuggestions, plannerSelection, queueUsed, recipePayload, rejectSuggestion, remoteIsNewer,
+    selectedOfferIds, STEPS, stepAllowed, stepTrail, suggestionRequest, SYNCED_KEYS, syncedState, unbuiltRecipes, withoutPlanned, withoutUsed,
 } from './planner-state.js';
 import { mergePantry, pantryEntries } from './pantry.js';
 import { listRecipes } from './recipe-links.js';
@@ -100,9 +100,10 @@ function initialState() {
         ideas: true,
         wishes: '',
         suggestions: [],
+        // Suggestions rejected in this run ({ key, name, recipe_id }): never suggested again until
+        // "Start over" or "Remove found recipes".
+        rejected: [],
         warning: null,
-        // The warning belongs to "suggest more" (shown below that button).
-        warningMore: false,
         items: [],
         // Recipes the items were built from, { name, url, key } (key: saved recipe).
         builtRecipes: [],
@@ -227,6 +228,8 @@ export function planner({ addItems, merges, lists, open, navigate, pantries = ()
                 if (this.step) this.pullState();
                 else this.pushState();
                 if (localStorage.getItem(USED_KEY)) sendUsedRecipes();
+                // Back from the recipe app (an idea imported there becomes the own recipe).
+                if (this.step && navigator.onLine && Alpine.store('sync').user?.verified) this.loadPlanned();
             };
             document.addEventListener('visibilitychange', resume);
             window.addEventListener('online', resume);
@@ -529,13 +532,12 @@ export function planner({ addItems, merges, lists, open, navigate, pantries = ()
         },
 
         /**
-         * New suggestions replace the shown ones (planning saves the ones to keep); with `more`
-         * they are added to the shown ones, which are left out. Planned recipes are left out.
+         * Searches further recipes: they are added to the shown ones; planned, shown and rejected
+         * recipes are left out ("Remove found recipes" starts afresh).
          */
-        async suggest(more = false) {
-            await this.run(more ? 'more' : 'suggest', this.$t('Looking for recipes …'), async () => {
-                const kept = more ? this.suggestions : [];
-                const excluded = [...this.planned, ...kept];
+        async suggest() {
+            await this.run('suggest', this.$t('Looking for recipes …'), async () => {
+                const shown = this.suggestions.length > 0;
                 const result = await api.post('/planner/suggestions', {
                     offers: this.offerPayload(),
                     pantry: this.pantryPayload(),
@@ -543,17 +545,35 @@ export function planner({ addItems, merges, lists, open, navigate, pantries = ()
                     count: Number(this.count) || 5,
                     ideas: this.ideas,
                     wishes: this.wishes.trim() || null,
-                    exclude: excluded.length ? suggestionExclude(excluded) : undefined,
+                    ...suggestionRequest(this),
                 });
-                const known = new Set(kept.map((suggestion) => suggestion.key));
                 // Not saved until planned (or imported into the recipe app).
-                const added = withoutPlanned(result.suggestions, this.planned).filter((suggestion) => !known.has(suggestion.key)).map((suggestion) => ({
+                const added = newSuggestions(result.suggestions, this).map((suggestion) => ({
                     ...suggestion, servings: Number(this.servings) || 4, savedUrl: null,
                 }));
-                this.suggestions = [...kept, ...added];
-                this.warning = more && !added.length ? this.$t('No further recipes found.') : result.warning;
-                this.warningMore = more;
+                this.suggestions = [...this.suggestions, ...added];
+                this.warning = shown && !added.length ? this.$t('No further recipes found.') : result.warning;
             });
+        },
+
+        /** Rejects a suggestion: it disappears and is not suggested again in this planner run. */
+        reject(suggestion) {
+            const done = () => Object.assign(this, rejectSuggestion(this.suggestions, this.rejected, suggestion));
+            if (this.detail?.key === suggestion.key) closeDialogThen(this.$refs.recipeDialog, done);
+            else done();
+        },
+
+        /** Whether the recipe is a shown suggestion (it can be rejected). */
+        isSuggestion(recipe) {
+            return !recipe.planned && this.suggestions.some((each) => each.key === recipe.key);
+        },
+
+        /** Removes the found and the rejected recipes, the next search starts afresh; planned ones stay. */
+        clearFound() {
+            if (!confirm(this.$t('Remove the found recipes? Planned recipes stay planned.'))) return;
+            this.suggestions = [];
+            this.rejected = [];
+            this.warning = null;
         },
 
         // ---- own recipes (step 3): a recipe of the recipe app found by name, or a typed dish
@@ -615,8 +635,11 @@ export function planner({ addItems, merges, lists, open, navigate, pantries = ()
         async loadPlanned() {
             await sendUsedRecipes();
             try {
-                const planned = (await api.get('/planned-recipes')).recipes.filter((recipe) => recipe.planned);
-                this.setPlanned(withoutUsed(planned, readJson(USED_KEY, [])));
+                const { recipes } = await api.get('/planned-recipes');
+                this.setPlanned(withoutUsed(recipes.filter((recipe) => recipe.planned), readJson(USED_KEY, [])));
+                // Ideas imported in the recipe app meanwhile are own recipes now.
+                const linked = linkImportedSuggestions(this.suggestions, recipes);
+                if (linked !== this.suggestions) this.suggestions = withoutPlanned(linked, this.planned);
             } catch {
                 // Offline or server error: the last loaded ones stay.
             }

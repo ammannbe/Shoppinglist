@@ -289,6 +289,46 @@ class PlannerTest extends TestCase
         });
     }
 
+    public function test_rejected_recipes_are_not_suggested_again(): void
+    {
+        Http::fake([
+            'recipes.test/api/foods' => Http::response(['data' => [['id' => 1, 'name' => 'Hackfleisch']]]),
+            'recipes.test/api/vocabulary' => Http::response(['data' => ['categories' => [], 'units' => [], 'complexities' => []]]),
+            'recipes.test/api/recipes/search' => Http::response(['data' => [
+                ['id' => 5, 'name' => 'Lasagne', 'url' => 'https://recipes.test/recipes/5', 'food_ids' => [1]],
+                ['id' => 6, 'name' => 'Chili', 'url' => 'https://recipes.test/recipes/6', 'food_ids' => [1]],
+            ]]),
+            'openai.test/*' => Http::sequence()
+                ->push($this->ai(['matches' => [['product' => 'Rindshackfleisch', 'food_id' => 1]]]))
+                ->push($this->ai(['picks' => [['recipe_id' => 6, 'reason' => 'x', 'uses_offers' => [], 'uses_pantry' => []]], 'ideas' => [
+                    ['name' => ' tacos ', 'reason' => 'repeated', 'servings' => 2, 'ingredients' => [], 'instructions' => '1.', 'uses_offers' => [], 'uses_pantry' => []],
+                    ['name' => 'Omelette', 'reason' => 'shown', 'servings' => 2, 'ingredients' => [], 'instructions' => '1.', 'uses_offers' => [], 'uses_pantry' => []],
+                    ['name' => 'Burger', 'reason' => 'x', 'servings' => 2, 'ingredients' => [], 'instructions' => '1.', 'uses_offers' => [], 'uses_pantry' => []],
+                ]])),
+        ]);
+
+        $suggestions = $this->actingAs($this->connected())->postJson('/planner/suggestions', [
+            'offers' => [['name' => 'Rindshackfleisch']], 'pantry' => [], 'servings' => 2, 'count' => 3, 'ideas' => true,
+            'exclude' => ['names' => ['Omelette']],
+            'rejected' => ['recipe_ids' => [5], 'names' => ['Lasagne', 'Tacos']],
+        ])->assertOk()->json('suggestions');
+
+        // The rejected recipe is not a candidate, the AI is told about the rejected dishes, repeated ideas are dropped.
+        $this->assertSame(['Chili', 'Burger'], array_column($suggestions, 'name'));
+        Http::assertSent(function (Request $request) {
+            if (! str_contains($request->url(), 'openai.test') || ! str_contains($request['instructions'] ?? '', 'combine several offers')) {
+                return false;
+            }
+
+            return array_column(json_decode($request['input'][0]['content'][0]['text'], true)['candidates'], 'id') === [6]
+                && str_contains($request['instructions'], 'The user rejected these dishes, never suggest them (or the same dish under another name) again: Lasagne; Tacos.');
+        });
+
+        $this->actingAs($this->connected())->postJson('/planner/suggestions', [
+            'offers' => [], 'pantry' => [], 'servings' => 2, 'count' => 3, 'ideas' => true, 'rejected' => ['recipe_ids' => ['x']],
+        ])->assertUnprocessable()->assertJsonValidationErrors('rejected.recipe_ids.0');
+    }
+
     public function test_suggestions_without_recipe_app_are_ideas_only(): void
     {
         Http::fake(['openai.test/*' => Http::response($this->ai(['picks' => [], 'ideas' => []]))]);

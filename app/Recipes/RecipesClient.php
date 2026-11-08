@@ -72,9 +72,9 @@ class RecipesClient
      *
      * @throws RecipesException
      */
-    public function get(User $user, string $path, array $query = []): array
+    public function get(User $user, string $path, array $query = [], int $timeout = 20): array
     {
-        return $this->request($user, fn (string $token) => Http::withToken($token)->acceptJson()->timeout(20)->get($this->url($path), $query));
+        return $this->request($user, fn (string $token) => Http::withToken($token)->acceptJson()->timeout($timeout)->get($this->url($path), $query));
     }
 
     /**

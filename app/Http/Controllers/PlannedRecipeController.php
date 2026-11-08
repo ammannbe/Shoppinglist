@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StorePlannedRecipeRequest;
 use App\Models\Offer;
 use App\Models\PlannedRecipe;
+use App\Recipes\RecipeDrafts;
 use App\Recipes\RecipeIngredients;
 use App\Recipes\RecipesClient;
 use App\Recipes\RecipesException;
@@ -23,8 +24,11 @@ use Illuminate\Support\Carbon;
  */
 class PlannedRecipeController extends Controller
 {
-    public function index(Request $request): JsonResponse
+    public function index(Request $request, RecipeDrafts $drafts): JsonResponse
     {
+        // AI ideas imported in the recipe app meanwhile become the own recipes (throttled, failures ignored).
+        $drafts->resolve($request->user());
+
         return response()->json(['recipes' => PlannedRecipe::where('user_id', $request->user()->id)
             ->latest('updated_at')->limit(PlannedRecipe::LIMIT)->get()
             ->map(fn (PlannedRecipe $recipe) => $recipe->toClient())]);

@@ -162,11 +162,6 @@
 
     {{-- 3. Recipes --}}
     <x-planner-step number="3" title="$t('Recipes')" x-show="step === 'recipes'">
-        <button type="button" class="button flex w-full items-center justify-center gap-2 py-3 text-lg" :disabled="busy || (!selectedOffers.length && !selectedPantry.length)" @click="suggest()">
-            <x-spinner x-show="busyKey === 'suggest'" />
-            <span x-text="label('suggest', $t('Suggest recipes'))"></span>
-        </button>
-        <p x-show="!selectedOffers.length && !selectedPantry.length" class="text-sm text-stone-500" x-text="$t('Select offers or add what is at home first.')"></p>
         {{-- Rarely changed: servings, number, wishes and AI ideas --}}
         <details class="group/options rounded-lg border border-stone-200">
             <summary class="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-sm text-stone-600">
@@ -194,8 +189,14 @@
                 </label>
             </div>
         </details>
+        {{-- One search button: every search adds further recipes (shown, planned and rejected ones are left out) --}}
+        <button type="button" class="button flex w-full items-center justify-center gap-2 py-3 text-lg" :disabled="busy || (!selectedOffers.length && !selectedPantry.length)" @click="suggest()">
+            <x-spinner x-show="busyKey === 'suggest'" />
+            <span x-text="label('suggest', suggestions.length ? $t('Suggest more recipes') : $t('Suggest recipes'))"></span>
+        </button>
+        <p x-show="!selectedOffers.length && !selectedPantry.length" class="text-sm text-stone-500" x-text="$t('Select offers or add what is at home first.')"></p>
         <x-planner-error key="suggest" />
-        <p x-show="warning && !warningMore" class="notice" x-text="warning"></p>
+        <p x-show="warning" class="notice" x-text="warning"></p>
 
         {{-- Season calendar of the recipe app (the suggestions prefer foods in season) --}}
         <a x-show="recipes?.url" :href="`${recipes?.url}/season`" target="_blank" rel="noopener"
@@ -283,7 +284,9 @@
                             <input x-model.number="suggestion.servings" type="number" min="1" max="20" inputmode="numeric" class="field w-full px-2 text-center text-sm" :title="$t('Servings')">
                         </label>
                     </div>
-                    <div class="mt-3 flex justify-end">
+                    <div class="mt-3 flex justify-end gap-2">
+                        <button type="button" class="button-secondary px-3 py-1.5 text-sm text-stone-600" :disabled="busy" @click="reject(suggestion)"
+                            :aria-label="$t('Reject “:name”', { name: suggestion.name })" x-text="$t('Reject')"></button>
                         <button type="button" class="button-secondary inline-flex items-center gap-2 px-3 py-1.5 text-sm" :disabled="busy" @click="plan(suggestion)"
                             :aria-label="$t('Plan “:name”', { name: suggestion.name })">
                             <x-spinner x-show="busyKey === `plan:${suggestion.key}`" />
@@ -294,12 +297,11 @@
                 </div>
             </template>
         </div>
-        <button type="button" x-show="suggestions.length" class="button-secondary flex w-full items-center justify-center gap-2" :disabled="busy" @click="suggest(true)">
-            <x-spinner x-show="busyKey === 'more'" />
-            <span x-text="label('more', $t('Suggest more recipes'))"></span>
-        </button>
-        <x-planner-error key="more" />
-        <p x-show="warning && warningMore" class="notice" x-text="warning"></p>
+        {{-- Removes the found and the rejected recipes (the next search starts afresh); planned ones stay --}}
+        <div x-show="suggestions.length || rejected.length" class="flex flex-wrap items-center justify-between gap-2 text-sm text-stone-500">
+            <span x-text="rejected.length ? $t(':count rejected', { count: rejected.length }) : ''"></span>
+            <button type="button" class="underline underline-offset-2 hover:text-stone-700" :disabled="busy" @click="clearFound()" x-text="$t('Remove found recipes')"></button>
+        </div>
 
         {{-- Details of a suggestion or a planned recipe: plan it (or take it out), import an AI idea into the recipe app --}}
         <x-recipe-dialog>
@@ -316,7 +318,8 @@
                 <x-spinner x-show="busyKey === `unplan:${detail.id}`" />
                 <span x-text="label(`unplan:${detail.id}`, $t('Unplan'))"></span>
             </button>
-            <button type="button" x-show="!detail.planned" class="button ml-auto inline-flex items-center gap-2" :disabled="busy" @click="plan(detail)">
+            <button type="button" x-show="isSuggestion(detail)" class="button-secondary ml-auto" :disabled="busy" @click="reject(detail)" x-text="$t('Reject')"></button>
+            <button type="button" x-show="!detail.planned" class="button inline-flex items-center gap-2" :class="isSuggestion(detail) ? '' : 'ml-auto'" :disabled="busy" @click="plan(detail)">
                 <x-spinner x-show="busyKey === `plan:${detail.key}`" />
                 <span x-text="label(`plan:${detail.key}`, $t('Plan'))"></span>
             </button>

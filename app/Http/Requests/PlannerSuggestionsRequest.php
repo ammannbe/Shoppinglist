@@ -23,6 +23,12 @@ class PlannerSuggestionsRequest extends FormRequest
             'exclude.recipe_ids.*' => ['integer'],
             'exclude.names' => ['sometimes', 'array', 'max:100'],
             'exclude.names.*' => ['string', 'max:255'],
+            // Rejected by the user in this planner run: never suggested again, the AI is told so.
+            'rejected' => ['sometimes', 'array'],
+            'rejected.recipe_ids' => ['sometimes', 'array', 'max:100'],
+            'rejected.recipe_ids.*' => ['integer'],
+            'rejected.names' => ['sometimes', 'array', 'max:100'],
+            'rejected.names.*' => ['string', 'max:255'],
         ];
     }
 

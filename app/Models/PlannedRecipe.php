@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\DB;
 
 /**
  * A planner suggestion the user planned or put on a shopping list (Recipes tab), see PlannedRecipeController.
@@ -16,7 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * `planned_at`: when it was planned, the date of the offers in `uses_offers`; `used_at`: last
  * time it went into a shopping list.
  */
-#[Fillable(['key', 'source', 'recipe_id', 'name', 'url', 'servings', 'data', 'draft_url', 'planned', 'planned_at', 'used_at'])]
+#[Fillable(['key', 'source', 'recipe_id', 'name', 'url', 'servings', 'data', 'draft_url', 'draft_id', 'draft_expires_at', 'planned', 'planned_at', 'used_at'])]
 class PlannedRecipe extends Model
 {
     use HasUuids;
@@ -29,7 +30,7 @@ class PlannedRecipe extends Model
 
     protected function casts(): array
     {
-        return ['data' => 'array', 'planned' => 'boolean', 'planned_at' => 'datetime', 'used_at' => 'datetime'];
+        return ['data' => 'array', 'planned' => 'boolean', 'planned_at' => 'datetime', 'used_at' => 'datetime', 'draft_expires_at' => 'datetime'];
     }
 
     public function user(): BelongsTo
@@ -105,6 +106,51 @@ class PlannedRecipe extends Model
         }
 
         return $recipes->all();
+    }
+
+    /**
+     * The AI idea was imported in the recipe app (App\Recipes\RecipeDrafts): the entry becomes that
+     * own recipe (key `recipe-<id>` like remember()), keeping its id (items link to it), the plan and
+     * what it uses; ingredients come from the recipe app (null: loaded when needed), the details of
+     * the idea and the import link go. `idea_key` keeps the old key for the planner's suggestions.
+     * Another entry of the same recipe is merged into this one (its plan and last use) and removed.
+     *
+     * @param  list<array<string, mixed>>|null  $ingredients
+     */
+    public function becomeOwnRecipe(int $recipeId, string $name, ?string $url, ?array $ingredients): void
+    {
+        DB::transaction(function () use ($recipeId, $name, $url, $ingredients) {
+            $key = 'recipe-'.$recipeId;
+            $other = self::where('user_id', $this->user_id)->where('key', $key)->whereKeyNot($this->id)->lockForUpdate()->first();
+            if ($other !== null) {
+                if ($other->planned && ! $this->planned) {
+                    $this->planned = true;
+                    $this->planned_at = $other->planned_at;
+                }
+                if ($other->used_at !== null && ($this->used_at === null || $other->used_at->gt($this->used_at))) {
+                    $this->used_at = $other->used_at;
+                }
+                $other->delete();
+            }
+
+            $data = array_intersect_key($this->data ?? [], array_flip(['reason', 'uses_offers', 'uses_pantry', 'uses_season']));
+            if ($ingredients !== null) {
+                $data['ingredients'] = $ingredients;
+            }
+            $data['idea_key'] = $this->key;
+
+            $this->fill([
+                'key' => $key,
+                'source' => 'recipes',
+                'recipe_id' => $recipeId,
+                'name' => mb_substr($name, 0, 255),
+                'url' => $url,
+                'data' => $data,
+                'draft_url' => null,
+                'draft_id' => null,
+                'draft_expires_at' => null,
+            ])->save();
+        });
     }
 
     /**
