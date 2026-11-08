@@ -114,16 +114,16 @@
         {{-- Lists --}}
         <section x-show="route.view === 'lists'">
             <form @submit.prevent="createList()" class="mb-4 space-y-2">
-                {{-- Kind of the new list: a shopping list or a pantry (what is at home) --}}
-                <div class="flex gap-1.5" role="radiogroup" :aria-label="$t('Kind of list')">
+                {{-- Tabs: shopping lists or pantries (what is at home); a new list gets the kind of the tab --}}
+                <div class="flex gap-1.5" role="tablist" :aria-label="$t('Kind of list')">
                     <template x-for="kind in ['shopping', 'pantry']" :key="kind">
-                        <button type="button" role="radio" class="rounded-full border px-3 py-1 text-sm" :aria-checked="newListKind === kind"
-                            :class="newListKind === kind ? 'border-emerald-700 bg-emerald-700 text-white' : 'border-stone-300 bg-white'"
-                            @click="newListKind = kind" x-text="kind === 'pantry' ? $t('Pantry') : $t('Shopping list')"></button>
+                        <button type="button" role="tab" class="rounded-full border px-3 py-1 text-sm" :aria-selected="listKind === kind"
+                            :class="listKind === kind ? 'border-emerald-700 bg-emerald-700 text-white' : 'border-stone-300 bg-white'"
+                            @click="setListKind(kind)" x-text="kind === 'pantry' ? $t('Pantry') : $t('Shopping lists')"></button>
                     </template>
                 </div>
                 <div class="flex gap-2">
-                    <input x-model="newListName" class="field min-w-0 flex-1" :placeholder="newListKind === 'pantry' ? $t('New pantry, e.g. Kitchen') : $t('New list')" :aria-label="$t('New list')" enterkeyhint="done">
+                    <input x-model="newListName" class="field min-w-0 flex-1" :placeholder="listKind === 'pantry' ? $t('New pantry, e.g. Kitchen') : $t('New list')" :aria-label="$t('New list')" enterkeyhint="done">
                     <button class="button shrink-0 px-3 min-[400px]:px-4" :aria-label="$t('Add')">
                         <span class="hidden min-[400px]:inline" x-text="$t('Add')"></span>
                         <svg viewBox="0 0 24 24" class="size-6 min-[400px]:hidden"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
@@ -131,23 +131,18 @@
                 </div>
             </form>
 
-            <p x-show="!lists.length" class="py-8 text-center text-stone-500" x-text="$t('No lists yet.')"></p>
+            <p x-show="!shownLists.length" class="py-8 text-center text-stone-500" x-text="listKind === 'pantry' ? $t('No pantry yet.') : $t('No lists yet.')"></p>
 
-            <x-sort-select x-show="lists.length > 1" value="$store.prefs.list_sort" change="$store.prefs.set('list_sort', $event.target.value)" />
+            <x-sort-select x-show="shownLists.length > 1" value="$store.prefs.list_sort" change="$store.prefs.set('list_sort', $event.target.value)" />
 
             {{-- Hold a row and move it (touch) or drag it (mouse) to change the order. --}}
-            <ul x-show="lists.length" class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white" @row-move="moveRow('lists', $event.detail)">
-                <template x-for="item in lists" :key="item.id">
+            <ul x-show="shownLists.length" class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white" @row-move="moveRow('lists', $event.detail)">
+                <template x-for="item in shownLists" :key="item.id">
                     <x-swipe-row actions="listActions(item)" x-bind:data-sort-id="item.id">
                         <a :href="`#/list/${item.id}`" class="flex min-w-0 flex-1 items-center gap-3 py-3 pl-4 pointer-coarse:pr-4 pointer-fine:pr-3" draggable="false">
                             <span class="min-w-0 flex-1">
                                 <span class="flex min-w-0 items-center gap-2">
                                     <span class="truncate font-medium" x-text="item.name"></span>
-                                    {{-- Pantry: what is at home --}}
-                                    <span x-show="item.kind === 'pantry'" class="flex shrink-0 items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">
-                                        <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3h8v3H8zM7 6h10a1 1 0 0 1 1 1v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V7a1 1 0 0 1 1-1zM6 11h12"/></svg>
-                                        <span x-text="$t('Pantry')"></span>
-                                    </span>
                                 </span>
                                 <span x-show="item.is_owner === false" class="block truncate text-xs text-stone-500"
                                     x-text="item.households?.length ? $t('Shared by :email via :household', { email: item.owner_email, household: item.households.map((household) => household.name).join(', ') }) : $t('Shared by :email', { email: item.owner_email })"></span>

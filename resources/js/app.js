@@ -34,6 +34,8 @@ const STORE_FILTER_KEY = 'shoppinglist.store-filter';
 const OFFER_LIST_KEY = 'shoppinglist.offer-list';
 // Shopping list a pantry item was last restocked to (device only): used without asking.
 const RESTOCK_LIST_KEY = 'shoppinglist.restock-list';
+// Tab of the lists overview (shopping lists or pantries), device only.
+const LIST_KIND_KEY = 'shoppinglist.list-kind';
 const USER_KEY = 'shoppinglist.user';
 
 const api = createApi();
@@ -133,7 +135,7 @@ Alpine.data('shoppinglist', () => ({
     route: { view: 'lists', id: null },
     newListName: '',
     // Kind of the next new list: shopping or pantry.
-    newListKind: 'shopping',
+    listKind: localStorage.getItem(LIST_KIND_KEY) === 'pantry' ? 'pantry' : 'shopping',
     newItemText: '',
     // Shop (tag) for new items, chosen before typing; kept until changed.
     newItemStore: '',
@@ -209,6 +211,15 @@ Alpine.data('shoppinglist', () => ({
         return Alpine.store('data').lists
             .filter((list) => !Alpine.store('undo').hidden(list.id))
             .sort(compareBy(Alpine.store('prefs').list_sort, byName, byName));
+    },
+    /** Lists of the overview tab: shopping lists or pantries. */
+    get shownLists() {
+        const pantry = this.listKind === 'pantry';
+        return this.lists.filter((list) => isPantry(list) === pantry);
+    },
+    setListKind(kind) {
+        this.listKind = kind;
+        localStorage.setItem(LIST_KIND_KEY, kind);
     },
     get list() {
         return this.lists.find((list) => list.id === this.route.id) ?? null;
@@ -597,8 +608,7 @@ Alpine.data('shoppinglist', () => ({
         const name = this.newListName.trim();
         if (!name) return;
         this.newListName = '';
-        const id = await this.insertList(name, this.newListKind);
-        this.newListKind = 'shopping';
+        const id = await this.insertList(name, this.listKind);
         location.hash = `#/list/${id}`;
     },
 
@@ -1182,9 +1192,10 @@ Alpine.data('shoppinglist', () => ({
      */
     async moveRow(kind, { from, to }) {
         const ids = (kind === 'lists' ? this.lists : this.openItems).map((doc) => doc.id);
-        if (kind === 'items' && this.shownOpenItems.length !== this.openItems.length) {
-            // Filtered by shop: move it next to the row it was dropped on, hidden rows stay put.
-            const shown = this.shownOpenItems.map((doc) => doc.id);
+        const shownDocs = kind === 'lists' ? this.shownLists : this.shownOpenItems;
+        if (shownDocs.length !== ids.length) {
+            // Filtered (lists by kind, items by shop): move it next to the row it was dropped on, hidden rows stay put.
+            const shown = shownDocs.map((doc) => doc.id);
             const [moved, target] = [shown[from], shown[to]];
             ids.splice(ids.indexOf(moved), 1);
             ids.splice(ids.indexOf(target) + (to > from ? 1 : 0), 0, moved);
