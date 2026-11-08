@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Casts\EncryptedArrayOrNull;
+use App\Http\Middleware\LogRejectedRememberCookie;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Contracts\Translation\HasLocalePreference;
@@ -15,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Log;
 use Laravel\Passkeys\Contracts\PasskeyUser;
 use Laravel\Passkeys\PasskeyAuthenticatable;
 use LogicException;
@@ -32,6 +34,29 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
         static::saving(function (User $user): void {
             if ($user->isLinkedToOidc() && $user->password !== null && $user->isDirty(['password', 'oidc_sub'])) {
                 throw new LogicException('An account linked to the OIDC login cannot have a password.');
+            }
+        });
+
+        // Temporary diagnostics (with App\Http\Middleware\LogRejectedRememberCookie): who rotates the remember token.
+        static::updating(function (User $user): void {
+            if ($user->isDirty('remember_token')) {
+                $fingerprint = fn (?string $token): ?string => $token ? substr(hash('sha256', $token), 0, 8) : null;
+
+                Log::warning('Remember token changed', [
+                    'user_id' => $user->getKey(),
+                    'old' => $fingerprint($user->getOriginal('remember_token')),
+                    'new' => $fingerprint($user->remember_token),
+                    'trace' => collect(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 60))
+                        ->filter(fn (array $frame): bool => isset($frame['file']) && ! str_contains($frame['file'], '/vendor/laravel/framework/src/Illuminate/Database/')
+                            && ! str_contains($frame['file'], '/vendor/laravel/framework/src/Illuminate/Events/')
+                            && ! str_contains($frame['file'], '/vendor/laravel/framework/src/Illuminate/Pipeline/')
+                            && ! str_contains($frame['file'], '/vendor/laravel/framework/src/Illuminate/Routing/Pipeline'))
+                        ->take(12)
+                        ->map(fn (array $frame): string => str_replace(base_path().'/', '', $frame['file']).':'.$frame['line'])
+                        ->values()
+                        ->all(),
+                    ...LogRejectedRememberCookie::context(app()->runningInConsole() ? null : request()),
+                ]);
             }
         });
 
