@@ -46,6 +46,7 @@ class ListResource extends SyncResource
         return [
             'id' => $list->id,
             'name' => $list->name,
+            'kind' => $list->kind,
             'item_sort' => $list->item_sort,
             'owner_email' => $list->owner->email,
             'is_owner' => $isOwner,
@@ -77,7 +78,12 @@ class ListResource extends SyncResource
                 return null;
             }
 
-            $list = new ShoppingList(['name' => $new['name'], 'item_sort' => $new['item_sort'] ?? null]);
+            // Clients from before the pantry lists send no kind.
+            $list = new ShoppingList([
+                'name' => $new['name'],
+                'kind' => $new['kind'] ?? ShoppingList::DEFAULT_KIND,
+                'item_sort' => $new['item_sort'] ?? null,
+            ]);
             $list->id = $new['id'];
             $list->owner()->associate($user);
             $list->save();
@@ -121,6 +127,10 @@ class ListResource extends SyncResource
         }
 
         $list->name = $new['name'];
+        // Only the owner changes the kind; members and older clients (no kind) keep the stored one.
+        if (isset($new['kind']) && $list->isOwnedBy($user)) {
+            $list->kind = $new['kind'];
+        }
         $list->item_sort = $new['item_sort'] ?? null;
         $list->version = $this->nextVersion($list, $new);
         $list->save();

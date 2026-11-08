@@ -14,10 +14,19 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
-#[Fillable(['name', 'item_sort'])]
+#[Fillable(['name', 'kind', 'item_sort'])]
 class ShoppingList extends Model
 {
     use HasFactory, Syncable;
+
+    /**
+     * Kinds of lists: a shopping list, or a pantry (what is at home; checked items are used up).
+     */
+    public const KINDS = ['shopping', 'pantry'];
+
+    public const DEFAULT_KIND = 'shopping';
+
+    protected $attributes = ['kind' => self::DEFAULT_KIND];
 
     protected static function booted(): void
     {

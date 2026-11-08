@@ -113,12 +113,22 @@
     <main x-show="$store.sync.status !== 'broken'" class="mx-auto max-w-xl px-3 pt-4 pb-[calc(2rem+env(safe-area-inset-bottom))]">
         {{-- Lists --}}
         <section x-show="route.view === 'lists'">
-            <form @submit.prevent="createList()" class="mb-4 flex gap-2">
-                <input x-model="newListName" class="field min-w-0 flex-1" :placeholder="$t('New list')" :aria-label="$t('New list')" enterkeyhint="done">
-                <button class="button shrink-0 px-3 min-[400px]:px-4" :aria-label="$t('Add')">
-                    <span class="hidden min-[400px]:inline" x-text="$t('Add')"></span>
-                    <svg viewBox="0 0 24 24" class="size-6 min-[400px]:hidden"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
-                </button>
+            <form @submit.prevent="createList()" class="mb-4 space-y-2">
+                {{-- Kind of the new list: a shopping list or a pantry (what is at home) --}}
+                <div class="flex gap-1.5" role="radiogroup" :aria-label="$t('Kind of list')">
+                    <template x-for="kind in ['shopping', 'pantry']" :key="kind">
+                        <button type="button" role="radio" class="rounded-full border px-3 py-1 text-sm" :aria-checked="newListKind === kind"
+                            :class="newListKind === kind ? 'border-emerald-700 bg-emerald-700 text-white' : 'border-stone-300 bg-white'"
+                            @click="newListKind = kind" x-text="kind === 'pantry' ? $t('Pantry') : $t('Shopping list')"></button>
+                    </template>
+                </div>
+                <div class="flex gap-2">
+                    <input x-model="newListName" class="field min-w-0 flex-1" :placeholder="newListKind === 'pantry' ? $t('New pantry, e.g. Kitchen') : $t('New list')" :aria-label="$t('New list')" enterkeyhint="done">
+                    <button class="button shrink-0 px-3 min-[400px]:px-4" :aria-label="$t('Add')">
+                        <span class="hidden min-[400px]:inline" x-text="$t('Add')"></span>
+                        <svg viewBox="0 0 24 24" class="size-6 min-[400px]:hidden"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+                    </button>
+                </div>
             </form>
 
             <p x-show="!lists.length" class="py-8 text-center text-stone-500" x-text="$t('No lists yet.')"></p>
@@ -131,7 +141,14 @@
                     <x-swipe-row actions="listActions(item)" x-bind:data-sort-id="item.id">
                         <a :href="`#/list/${item.id}`" class="flex min-w-0 flex-1 items-center gap-3 py-3 pl-4 pointer-coarse:pr-4 pointer-fine:pr-3" draggable="false">
                             <span class="min-w-0 flex-1">
-                                <span class="block truncate font-medium" x-text="item.name"></span>
+                                <span class="flex min-w-0 items-center gap-2">
+                                    <span class="truncate font-medium" x-text="item.name"></span>
+                                    {{-- Pantry: what is at home --}}
+                                    <span x-show="item.kind === 'pantry'" class="flex shrink-0 items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">
+                                        <svg viewBox="0 0 24 24" class="size-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3h8v3H8zM7 6h10a1 1 0 0 1 1 1v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V7a1 1 0 0 1 1-1zM6 11h12"/></svg>
+                                        <span x-text="$t('Pantry')"></span>
+                                    </span>
+                                </span>
                                 <span x-show="item.is_owner === false" class="block truncate text-xs text-stone-500"
                                     x-text="item.households?.length ? $t('Shared by :email via :household', { email: item.owner_email, household: item.households.map((household) => household.name).join(', ') }) : $t('Shared by :email', { email: item.owner_email })"></span>
                                 <span x-show="item.is_owner !== false && (item.members?.length || item.households?.length)" class="block truncate text-xs text-stone-500"
@@ -157,7 +174,7 @@
                 <div>
                     <form @submit.prevent="addItem()" class="mb-4 flex gap-2">
                         {{-- Shop of the new items (native picker on top of the badge), kept until changed --}}
-                        <label class="field relative flex shrink-0 cursor-pointer items-center px-2" :title="newItemStore ? storeLabel(newItemStore) : $t('Shop')">
+                        <label x-show="!inPantry" class="field relative flex shrink-0 cursor-pointer items-center px-2" :title="newItemStore ? storeLabel(newItemStore) : $t('Shop')">
                             <template x-if="newItemStore"><x-store-badge tag="newItemStore" class="!mr-0" /></template>
                             <svg x-show="!newItemStore" viewBox="0 0 24 24" class="size-5 text-stone-500" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                 <path d="M4 9l1.5-5h13L20 9M4 9h16v11H4zM9 20v-6h6v6"/>
@@ -198,7 +215,7 @@
                         </div>
                     </template>
 
-                    <p x-show="!openItems.length" class="py-6 text-center text-stone-500" x-text="$t('Nothing to buy.')"></p>
+                    <p x-show="!openItems.length" class="py-6 text-center text-stone-500" x-text="inPantry ? $t('Nothing at home yet.') : $t('Nothing to buy.')"></p>
 
                     <x-sort-select x-show="openItems.length > 1" value="itemSort" change="setItemSort($event.target.value)" />
 
@@ -231,8 +248,8 @@
                     <div x-show="doneItems.length" class="mt-6">
                         <div class="mb-2 flex items-center justify-between">
                             <button type="button" class="text-sm font-medium text-stone-600" @click="showDone = !showDone"
-                                x-text="`${$t('Done')} (${doneItems.length}) ${showDone ? '▾' : '▸'}`"></button>
-                            <button type="button" class="text-sm text-stone-600 underline" @click="clearDone()" x-text="$t('Clear done')"></button>
+                                x-text="`${inPantry ? $t('Used up') : $t('Done')} (${doneItems.length}) ${showDone ? '▾' : '▸'}`"></button>
+                            <button type="button" class="text-sm text-stone-600 underline" @click="clearDone()" x-text="inPantry ? $t('Clear used up') : $t('Clear done')"></button>
                         </div>
                         <ul x-show="showDone" class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
                             <template x-for="item in doneItems" :key="item.id">
@@ -395,7 +412,7 @@
                     </label>
                 </div>
                 {{-- Shops: picked ones as chips; a typed unknown shop becomes an own shop without code --}}
-                <div>
+                <div x-show="!inPantry">
                     <label for="edit-store" class="label" x-text="$t('Shops')"></label>
                     <div x-show="editing.stores.length" class="mb-2 flex flex-wrap gap-1.5">
                         <template x-for="tag in editing.stores" :key="tag">
@@ -424,7 +441,7 @@
                     {{-- Grows with the text (field-sizing), line breaks are kept --}}
                     <textarea x-model="editing.note" rows="1" class="field block max-h-40 w-full resize-none field-sizing-content" maxlength="255"></textarea>
                 </label>
-                <p x-show="editing.recipes.length" class="text-sm">
+                <p x-show="editing.recipes.length && !inPantry" class="text-sm">
                     <span class="text-stone-500" x-text="$t('Recipes') + ': '"></span>
                     <template x-for="(recipe, index) in editing.recipes" :key="index">
                         <span>
@@ -526,6 +543,17 @@
                     <span class="label" x-text="$t('Name')"></span>
                     <input x-model="renamingDoc.name" class="field w-full" required>
                 </label>
+                {{-- Kind of a list (owner only) --}}
+                <div x-show="renamingDoc.kind" role="radiogroup" :aria-label="$t('Kind of list')">
+                    <span class="label" x-text="$t('Kind of list')"></span>
+                    <div class="flex gap-1.5">
+                        <template x-for="kind in ['shopping', 'pantry']" :key="kind">
+                            <button type="button" role="radio" class="rounded-full border px-3 py-1 text-sm" :aria-checked="renamingDoc.kind === kind"
+                                :class="renamingDoc.kind === kind ? 'border-emerald-700 bg-emerald-700 text-white' : 'border-stone-300 bg-white'"
+                                @click="renamingDoc.kind = kind" x-text="kind === 'pantry' ? $t('Pantry') : $t('Shopping list')"></button>
+                        </template>
+                    </div>
+                </div>
                 <label x-show="renamingDoc.collection === 'stores'" class="block">
                     <span class="label" x-text="$t('Code')"></span>
                     <input x-model="renamingDoc.code" class="field w-full" maxlength="10" :placeholder="$t('Optional, otherwise the name is shown')">
@@ -574,6 +602,25 @@
                 </template>
                 <div class="flex justify-end">
                     <button type="button" class="button-secondary" @click="$refs.offerToListDialog.close()" x-text="$t('Cancel')"></button>
+                </div>
+            </div>
+        </template>
+    </dialog>
+
+    {{-- Restock a pantry item: pick the shopping list (several, none used yet) or create one (none exists) --}}
+    <dialog x-ref="restockDialog" class="dialog" @close="restocking = null">
+        <template x-if="restocking">
+            <div class="space-y-4">
+                <h2 class="font-semibold" x-text="$t('Restock “:name” on', { name: restocking.name })"></h2>
+                <p x-show="!shoppingLists.length" class="text-sm text-stone-600" x-text="$t('You have no shopping list yet.')"></p>
+                <ul class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200">
+                    <template x-for="target in shoppingLists" :key="target.id">
+                        <li><button type="button" class="block w-full truncate px-4 py-3 text-left hover:bg-stone-50" @click="restockTo(restocking, target.id)" x-text="target.name"></button></li>
+                    </template>
+                    <li><button type="button" class="block w-full truncate px-4 py-3 text-left text-emerald-800 hover:bg-stone-50" @click="restockTo(restocking, '')" x-text="'+ ' + $t('New shopping list')"></button></li>
+                </ul>
+                <div class="flex justify-end">
+                    <button type="button" class="button-secondary" @click="$refs.restockDialog.close()" x-text="$t('Cancel')"></button>
                 </div>
             </div>
         </template>

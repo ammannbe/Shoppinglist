@@ -31,4 +31,27 @@ describe('local database upgrade', () => {
         expect(item).toMatchObject({ name: 'Hackfleisch', stores: ['M'], version: 3, recipes: [{ name: 'Lasagne', url: 'https://recipes.test/5', key: null }] });
         await db.remove();
     });
+
+    it('migrates lists stored before the pantry lists to shopping lists', async () => {
+        const storage = getRxStorageMemory();
+        const name = `migrationlists${Date.now()}`;
+
+        // Lists schema version 3 (before the kind).
+        const old = await createRxDatabase({ name, storage, multiInstance: false });
+        const { kind, ...properties } = schemas.lists.properties;
+        await old.addCollections({
+            ...Object.fromEntries(['items', 'products', 'units', 'stores'].map((collection) => [collection, { schema: schemas[collection], migrationStrategies: schemas.migrations[collection] }])),
+            lists: {
+                schema: { ...schemas.lists, version: 3, properties },
+                migrationStrategies: Object.fromEntries([1, 2, 3].map((v) => [v, schemas.migrations.lists[v]])),
+            },
+        });
+        await old.lists.insert({ id: '0190a0b0-0000-7000-8000-000000000003', name: 'Migros', item_sort: null, members: [], households: [], position: 1, version: 2, updated_at: null });
+        await old.close();
+
+        const db = await createDatabase({ storage, name, multiInstance: false });
+        const list = (await db.lists.findOne('0190a0b0-0000-7000-8000-000000000003').exec()).toJSON();
+        expect(list).toMatchObject({ name: 'Migros', kind: 'shopping', version: 2 });
+        await db.remove();
+    });
 });

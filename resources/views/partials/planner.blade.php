@@ -4,7 +4,8 @@
     indicator on top and "Back"/"Next" at the bottom. Needs a connection.
 --}}
 <section x-show="route.view === 'planner'" class="space-y-4 pb-20"
-    x-data="planner({ addItems: (target, name, items, merge) => addPlannedItems(target, name, items, merge), merges: (target, items) => plannedMerges(target, items).size, lists: () => lists, open: (hash) => openFromLists(hash), navigate: (hash, options) => navigate(hash, options) })">
+    x-data="planner({ addItems: (target, name, items, merge) => addPlannedItems(target, name, items, merge), merges: (target, items) => plannedMerges(target, items).size, lists: () => shoppingLists, open: (hash) => openFromLists(hash), navigate: (hash, options) => navigate(hash, options),
+        pantries: () => pantryLists, pantryItems: (listId) => itemsOf(listId), amountText: (item) => amount(item), savePantry: (target, entries) => savePantryItems(target, entries) })">
     {{-- Opened without the feature (e.g. an old link): the requests would be refused (EnsureAiFeature) --}}
     <p x-show="$store.sync.user?.assistant_locked" class="notice" role="alert" x-text="$t('The AI features are not enabled for your account.')"></p>
 
@@ -142,6 +143,21 @@
             </label>
         </div>
         <x-planner-error key="pantry" />
+        {{-- Pantry lists: take their open items, save the entries into one (RxDB, works offline) --}}
+        <div class="flex flex-wrap gap-2">
+            <button type="button" x-show="pantrySources.length" class="button-secondary" @click="loadFromPantry()" x-text="$t('Take from pantry')"></button>
+            <button type="button" x-show="selectedPantry.length" class="button-secondary" @click="saveToPantry()" x-text="$t('Save to pantry')"></button>
+        </div>
+        <div x-show="pantryPick" class="space-y-2 rounded-lg border border-stone-200 p-3">
+            <p class="text-sm font-medium" x-text="pantryPick === 'save' ? $t('Save into which pantry?') : $t('Take from which pantry?')"></p>
+            <ul class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
+                <template x-for="source in pantrySources" :key="source.id">
+                    <li><button type="button" class="block w-full truncate px-4 py-3 text-left hover:bg-stone-50" @click="pantryPick === 'save' ? saveToPantry(source.id) : loadFromPantry(source.id)" x-text="source.name"></button></li>
+                </template>
+                <li x-show="pantryPick === 'save'"><button type="button" class="block w-full truncate px-4 py-3 text-left text-emerald-800 hover:bg-stone-50" @click="saveToPantry('')" x-text="'+ ' + $t('New pantry')"></button></li>
+            </ul>
+            <button type="button" class="text-sm text-stone-600 underline" @click="pantryPick = null" x-text="$t('Cancel')"></button>
+        </div>
     </x-planner-step>
 
     {{-- 3. Recipes --}}

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ShoppingList;
 use App\Sync\ItemResource;
 use App\Sync\ListResource;
 use App\Sync\ProductResource;
@@ -70,6 +71,8 @@ class SyncController extends Controller
             '*.newDocumentState.done' => ['nullable', 'boolean'],
             '*.newDocumentState.position' => ['nullable', 'numeric'],
             '*.newDocumentState.item_sort' => ['nullable', Rule::in(PreferenceController::SORTS)],
+            // Lists: shopping or pantry, clients from before the pantry lists send none.
+            '*.newDocumentState.kind' => ['nullable', Rule::in(ShoppingList::KINDS)],
             '*.newDocumentState.image' => ['nullable', 'uuid'],
         ]);
 

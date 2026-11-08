@@ -8,12 +8,14 @@ const syncFields = {
 };
 
 export const lists = {
-    version: 3,
+    version: 4,
     primaryKey: 'id',
     type: 'object',
     properties: {
         id: uuid,
         name: { type: 'string', maxLength: 255 },
+        // shopping or pantry (what is at home: checked items are used up), set by the owner.
+        kind: { type: 'string', default: 'shopping' },
         // Sort of the items: manual, name_asc, name_desc, newest, oldest (null: manual).
         item_sort: { type: ['string', 'null'] },
         owner_email: { type: ['string', 'null'] },
@@ -122,6 +124,7 @@ export const migrations = {
         // Version 1 briefly existed without item_sort (development builds only).
         2: (doc) => ({ ...doc, item_sort: doc.item_sort ?? null }),
         3: (doc) => ({ households: [], ...doc }),
+        4: (doc) => ({ kind: 'shopping', ...doc }),
     },
     items: {
         1: (doc) => ({ ...doc, position: null, image: null }),

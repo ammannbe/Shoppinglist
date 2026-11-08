@@ -17,6 +17,8 @@ describe('local migrations', () => {
         const household = { id: 'h', name: 'Familie Muster' };
         expect(schemas.migrations.lists[3]({ id: 'l', name: 'Coop', households: [household] })).toMatchObject({ households: [household] });
         expect(schemas.migrations.lists[3]({ id: 'l', name: 'Coop' })).toMatchObject({ households: [] });
+        expect(schemas.migrations.lists[4]({ id: 'l', name: 'Coop' })).toMatchObject({ kind: 'shopping' });
+        expect(schemas.migrations.lists[4]({ id: 'l', name: 'Küche', kind: 'pantry' })).toMatchObject({ kind: 'pantry' });
     });
 
     it('turn the single shop of an item into a list', () => {

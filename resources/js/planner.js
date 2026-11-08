@@ -8,6 +8,7 @@ import {
     allowedStep, builtRecipe, migrateState, plannerSelection, queueUsed, recipePayload, remoteIsNewer, selectedOfferIds, STEPS, stepAllowed, stepTrail,
     suggestionExclude, SYNCED_KEYS, syncedState, unbuiltRecipes, withoutPlanned, withoutUsed,
 } from './planner-state.js';
+import { mergePantry, pantryEntries } from './pantry.js';
 import { listRecipes } from './recipe-links.js';
 import { requests } from './requests.js';
 
@@ -135,8 +136,12 @@ function groupByStore(offers) {
  * @param {() => object[]} options.lists lists to add to
  * @param {(hash: string) => void} options.open opens a page next to the lists (shoppinglist.openFromLists)
  * @param {(hash: string, options: object) => void} options.navigate shoppinglist.navigate (history aware)
+ * @param {() => object[]} options.pantries pantry lists (step "At home")
+ * @param {(listId: string) => object[]} options.pantryItems items of a list
+ * @param {(item: object) => string} options.amountText formatted amount and unit of an item
+ * @param {(target: string, entries: object[]) => Promise<number>} options.savePantry saves entries into a pantry list ('' = new one)
  */
-export function planner({ addItems, merges, lists, open, navigate }) {
+export function planner({ addItems, merges, lists, open, navigate, pantries = () => [], pantryItems = () => [], amountText = () => '', savePantry = async () => 0 }) {
     const stored = migrateState(readJson(STORAGE_KEY, {}));
     // Synced state as last sent or received (JSON), to notice real changes.
     let syncedJson = null;
@@ -153,6 +158,8 @@ export function planner({ addItems, merges, lists, open, navigate }) {
         syncMeta: readSyncMeta(stored),
         offerText: '',
         newPantryItem: '',
+        // Pantry list to choose in step 2 (device only): 'load' ("Take from pantry") or 'save' ("Save to pantry"), null: closed.
+        pantryPick: null,
         // Offers of the pool (GET /offers), null until loaded.
         savedOffers: null,
         // Search in step 1 (device only, not synced): filters the offers by name and brand.
@@ -469,8 +476,40 @@ export function planner({ addItems, merges, lists, open, navigate }) {
         },
 
         addPantry(items) {
-            const known = new Set(this.pantry.map((item) => item.name.toLowerCase()));
-            this.pantry = [...this.pantry, ...items.filter((item) => !known.has(item.name.toLowerCase())).map((item) => ({ ...item, selected: true }))];
+            this.pantry = mergePantry(this.pantry, items);
+        },
+
+        /** Pantry lists of the user (RxDB, shared ones too). */
+        get pantrySources() {
+            return pantries();
+        },
+
+        /**
+         * "Take from pantry": the open (not used up) items of a pantry list, selected; with several
+         * pantry lists the user picks one first.
+         */
+        loadFromPantry(listId = null) {
+            const sources = this.pantrySources;
+            const list = listId ? sources.find((each) => each.id === listId) : sources.length === 1 ? sources[0] : null;
+            if (!list) {
+                this.pantryPick = 'load';
+                return;
+            }
+            this.pantryPick = null;
+            const before = this.pantry.length;
+            this.addPantry(pantryEntries(pantryItems(list.id), amountText));
+            Alpine.store('notice').show(this.$t(':count taken from “:list”', { count: this.pantry.length - before, list: list.name }));
+        },
+
+        /** "Save to pantry": the selected entries into a pantry list (picked, or a new one); names open there are skipped. */
+        async saveToPantry(listId = null) {
+            const sources = this.pantrySources;
+            if (listId === null && sources.length !== 1) {
+                this.pantryPick = 'save';
+                return;
+            }
+            this.pantryPick = null;
+            await savePantry(listId ?? sources[0].id, this.selectedPantry.map(({ name, amount }) => ({ name, amount })));
         },
 
         addPantryItem() {

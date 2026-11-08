@@ -12,6 +12,7 @@ import { closeDialogThen, closeLayersOnBack } from './layers.js';
 import { createLightboxStore } from './lightbox.js';
 import { createPrefsStore } from './prefs.js';
 import { offersPool } from './offers.js';
+import { isPantry, pantryItemsToSave, pantryLists, restockItem, restockTarget, shoppingLists } from './pantry.js';
 import { clearPlannerState, planner } from './planner.js';
 import { clearRecipeCache, recipeHistory } from './recipe-history.js';
 import { joinRecipes, plainRecipes } from './recipe-links.js';
@@ -31,6 +32,8 @@ const OWNER_KEY = 'shoppinglist.owner';
 const STORE_FILTER_KEY = 'shoppinglist.store-filter';
 // List an offer was last added to (device only): offered first.
 const OFFER_LIST_KEY = 'shoppinglist.offer-list';
+// Shopping list a pantry item was last restocked to (device only): used without asking.
+const RESTOCK_LIST_KEY = 'shoppinglist.restock-list';
 const USER_KEY = 'shoppinglist.user';
 
 const api = createApi();
@@ -129,6 +132,8 @@ const SORTS = ['manual', 'name_asc', 'name_desc', 'newest', 'oldest'];
 Alpine.data('shoppinglist', () => ({
     route: { view: 'lists', id: null },
     newListName: '',
+    // Kind of the next new list: shopping or pantry.
+    newListKind: 'shopping',
     newItemText: '',
     // Shop (tag) for new items, chosen before typing; kept until changed.
     newItemStore: '',
@@ -140,6 +145,8 @@ Alpine.data('shoppinglist', () => ({
     duplicate: null,
     // Item being moved to another list (dialog).
     moving: null,
+    // Pantry item to restock when the shopping list has to be picked or created (dialog).
+    restocking: null,
     // Offer being added to a list (dialog, offers pool and planner step 1) and the list asked to merge into.
     addingOffer: null,
     offerMergeList: null,
@@ -205,6 +212,30 @@ Alpine.data('shoppinglist', () => ({
     },
     get list() {
         return this.lists.find((list) => list.id === this.route.id) ?? null;
+    },
+    /** Lists items are bought on (not pantries), e.g. for offers, the planner and "Restock". */
+    get shoppingLists() {
+        return shoppingLists(this.lists);
+    },
+    get pantryLists() {
+        return pantryLists(this.lists);
+    },
+    /** The open list is a pantry: checked means used up, no shops and recipe links. */
+    get inPantry() {
+        return isPantry(this.list);
+    },
+    /** Shops and recipes shown in a row (none in a pantry, the item keeps them). */
+    rowStores(item) {
+        return this.inPantry ? [] : item.stores ?? [];
+    },
+    rowRecipes(item) {
+        return this.inPantry ? [] : item.recipes ?? [];
+    },
+    /** Label of the checkbox of a row: amount and name, in a pantry "used up". */
+    checkLabel(item) {
+        const name = [this.amount(item), item.name].filter(Boolean).join(' ');
+
+        return this.inPantry ? this.$t('Used up: :name', { name }) : name;
     },
     get shareList() {
         return this.lists.find((list) => list.id === this.shareListId) ?? null;
@@ -375,14 +406,8 @@ Alpine.data('shoppinglist', () => ({
      * Adds the planned items to a list (new one without target). With `merge`, items already open
      * on the list with the same unit (or g/kg, ml/dl/l) get the amount added and the recipes and shops of both.
      */
-    async addPlannedItems(target, name, items, merge = false) {
-        let listId = target;
-        if (!listId) {
-            listId = uuid7();
-            await db.lists.insert({
-                id: listId, name, owner_email: Alpine.store('sync').user?.email ?? null, is_owner: true, members: [], position: nextPosition(this.lists),
-            });
-        }
+    async addPlannedItems(target, name, items, merge = false, kind = 'shopping') {
+        const listId = target || await this.insertList(name, kind);
         const merges = merge ? this.plannedMerges(target, items) : new Map();
         let position = nextPosition(this.itemsOf(listId)) ?? 0;
         for (const [index, item] of items.entries()) {
@@ -439,7 +464,10 @@ Alpine.data('shoppinglist', () => ({
     },
 
     itemActions(item) {
+        const pantry = isPantry(Alpine.store('data').lists.find((list) => list.id === item.shopping_list_id));
+
         return [
+            ...(pantry ? [{ label: this.$t('Restock'), icon: 'restock', run: () => this.restock(item) }] : []),
             { label: this.$t('Edit'), icon: 'edit', run: () => this.edit(item) },
             ...(this.lists.length > 1 ? [{ label: this.$t('Move to list'), icon: 'move', run: () => this.openMove(item) }] : []),
             { label: this.$t('Delete'), icon: 'delete', danger: true, run: () => this.deleteItem(item) },
@@ -568,12 +596,20 @@ Alpine.data('shoppinglist', () => ({
     async createList() {
         const name = this.newListName.trim();
         if (!name) return;
-        const id = uuid7();
         this.newListName = '';
-        await db.lists.insert({
-            id, name, owner_email: Alpine.store('sync').user?.email ?? null, is_owner: true, members: [], position: nextPosition(this.lists),
-        });
+        const id = await this.insertList(name, this.newListKind);
+        this.newListKind = 'shopping';
         location.hash = `#/list/${id}`;
+    },
+
+    /** New own list (shopping or pantry) at the end of the lists, returns its id. */
+    async insertList(name, kind = 'shopping') {
+        const id = uuid7();
+        await db.lists.insert({
+            id, name, kind, owner_email: Alpine.store('sync').user?.email ?? null, is_owner: true, members: [], position: nextPosition(this.lists),
+        });
+
+        return id;
     },
 
     startRename() {
@@ -593,7 +629,11 @@ Alpine.data('shoppinglist', () => ({
      * Rename dialog for lists (overview), products, units and shops (with code).
      */
     openRename(doc, collection) {
-        this.renamingDoc = { collection, id: doc.id, name: doc.name, code: doc.code ?? null, icon: doc.icon ?? null };
+        this.renamingDoc = {
+            collection, id: doc.id, name: doc.name, code: doc.code ?? null, icon: doc.icon ?? null,
+            // The kind of a list is changed by its owner only (the server keeps it for members).
+            kind: collection === 'lists' && doc.is_owner !== false ? doc.kind ?? 'shopping' : null,
+        };
         this.$nextTick(() => this.$refs.renameDialog.showModal());
     },
 
@@ -609,7 +649,7 @@ Alpine.data('shoppinglist', () => ({
         const duplicate = collection !== 'lists' && Alpine.store('data')[collection].some((entry) => entry.id !== id
             && !Alpine.store('undo').hidden(entry.id) && sameName(entry.name, name));
         if (duplicate) await doc?.remove();
-        else await doc?.incrementalPatch({ name });
+        else await doc?.incrementalPatch(this.renamingDoc.kind ? { name, kind: this.renamingDoc.kind } : { name });
         this.$refs.renameDialog.close();
     },
 
@@ -653,7 +693,7 @@ Alpine.data('shoppinglist', () => ({
             id: uuid7(),
             shopping_list_id: this.route.id,
             ...parsed,
-            stores: this.newItemStore ? [this.newItemStore] : [],
+            stores: this.newItemStore && !this.inPantry ? [this.newItemStore] : [],
             image: ownProduct(parsed.name)?.image ?? null,
             position: nextPosition(this.itemsOf(this.route.id)),
             creator_email: Alpine.store('sync').user?.email ?? null,
@@ -826,6 +866,7 @@ Alpine.data('shoppinglist', () => ({
 
     /** Tags of the shops on the open items of the list, in the order of the shop list. */
     get listStoreTags() {
+        if (this.inPantry) return [];
         const tags = [...new Set(this.openItems.flatMap((item) => item.stores ?? []))];
         const order = (tag) => {
             const index = this.stores.findIndex((store) => store.id === this.storeByTag(tag)?.id);
@@ -997,7 +1038,7 @@ Alpine.data('shoppinglist', () => ({
     get offerLists() {
         const last = localStorage.getItem(OFFER_LIST_KEY);
 
-        return [...this.lists].sort((a, b) => (b.id === last) - (a.id === last));
+        return [...this.shoppingLists].sort((a, b) => (b.id === last) - (a.id === last));
     },
 
     /** The entry of an offer: its name, the shop as tag and the offer details as note (Offer::note on the server). */
@@ -1022,6 +1063,65 @@ Alpine.data('shoppinglist', () => ({
         this.$refs.offerToListDialog.close();
         const list = this.lists.find((each) => each.id === id)?.name ?? this.$t('Shopping list');
         Alpine.store('notice').show(this.$t('“:name” added to “:list”', { name: item.name, list }));
+    },
+
+    // ---- restocking a pantry item: a copy onto a shopping list, the pantry item is used up
+
+    /** Restocks to the last used (or only) shopping list, otherwise asks for one (dialog). */
+    async restock(item) {
+        const target = restockTarget(this.shoppingLists, localStorage.getItem(RESTOCK_LIST_KEY));
+        if (target.action === 'add') return this.restockTo(item, target.list.id);
+        this.restocking = item;
+        this.$nextTick(() => this.$refs.restockDialog.showModal());
+    },
+
+    /**
+     * Copies the item (name, amount, unit, photo) onto the shopping list ('' = a new one) unless it
+     * is open there already, and marks it used up in the pantry; undo removes the copy.
+     */
+    async restockTo(item, target) {
+        if (this.restocking) this.$refs.restockDialog.close();
+        const listId = target || await this.insertList(this.$t('Shopping list'));
+        localStorage.setItem(RESTOCK_LIST_KEY, listId);
+        const listName = this.lists.find((list) => list.id === listId)?.name ?? this.$t('Shopping list');
+        const open = this.itemsOf(listId).some((each) => !each.done && sameName(each.name, item.name));
+        let copyId = null;
+        if (!open) {
+            copyId = uuid7();
+            await db.items.insert({
+                ...restockItem(item),
+                id: copyId,
+                shopping_list_id: listId,
+                stores: [],
+                note: null,
+                recipes: [],
+                position: nextPosition(this.itemsOf(listId)),
+                creator_email: Alpine.store('sync').user?.email ?? null,
+            });
+            await remember('products', item.name);
+        }
+        const message = open
+            ? this.$t('“:name” is already on “:list”', { name: item.name, list: listName })
+            : this.$t('“:name” added to “:list”', { name: item.name, list: listName });
+        Alpine.store('undo').schedule(item.id, message, async () => {
+            const doc = await db.items.findOne(item.id).exec();
+            if (doc && !doc.done) await doc.incrementalPatch({ done: true });
+        }, copyId && (async () => {
+            await (await db.items.findOne(copyId).exec())?.remove();
+        }));
+    },
+
+    // ---- pantry lists in the week planner ("At home")
+
+    /** Saves planner entries into a pantry list ('' = a new one); names open there are skipped. Returns the number added. */
+    async savePantryItems(target, entries) {
+        const items = target ? this.itemsOf(target) : [];
+        const added = pantryItemsToSave(entries, items, this.unitNames);
+        const listId = await this.addPlannedItems(target, this.$t('Pantry'), added, false, 'pantry');
+        const list = this.lists.find((each) => each.id === listId)?.name ?? this.$t('Pantry');
+        Alpine.store('notice').show(this.$t(':count saved to “:list”', { count: added.length, list }));
+
+        return added.length;
     },
 
     // ---- moving an item to another list
@@ -1117,7 +1217,7 @@ Alpine.data('shoppinglist', () => ({
 
     clearDone() {
         const ids = this.doneItems.map((item) => item.id);
-        Alpine.store('undo').schedule(ids, this.$t('Done items deleted'), async () => {
+        Alpine.store('undo').schedule(ids, this.inPantry ? this.$t('Used up items deleted') : this.$t('Done items deleted'), async () => {
             await db.items.bulkRemove(ids);
         });
     },

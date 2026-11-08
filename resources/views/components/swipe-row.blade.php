@@ -12,7 +12,7 @@
         :class="dragging || 'transition-[width] duration-200 motion-reduce:transition-none'">
         <template x-for="action in {{ $actions }}" :key="action.label">
             <button type="button" tabindex="-1" class="flex w-16 items-center text-white" :title="action.label" :aria-label="action.label"
-                :class="['shrink-0 justify-center', action.danger ? 'grow bg-red-600' : action.icon === 'share' ? 'bg-sky-700' : 'bg-stone-500', action.online && !$store.sync.online && 'opacity-50']"
+                :class="['shrink-0 justify-center', action.danger ? 'grow bg-red-600' : action.icon === 'share' ? 'bg-sky-700' : action.icon === 'restock' ? 'bg-emerald-700' : 'bg-stone-500', action.online && !$store.sync.online && 'opacity-50']"
                 @click="act(action.run)">
                 <svg viewBox="0 0 24 24" class="size-6 shrink-0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path x-show="action.icon === 'edit'" d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4"/>
@@ -20,6 +20,7 @@
                     <path x-show="action.icon === 'delete'" d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>
                     <path x-show="action.icon === 'leave'" d="M14 4h5v16h-5M10 8l-4 4 4 4M6 12h10"/>
                     <path x-show="action.icon === 'move'" d="M4 12h11M11 7l5 5-5 5M20 4v16"/>
+                    <g x-show="action.icon === 'restock'"><path d="M3 4h2l2.4 11h10.2L20 7H6.2"/><circle cx="9" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/></g>
                 </svg>
             </button>
         </template>
