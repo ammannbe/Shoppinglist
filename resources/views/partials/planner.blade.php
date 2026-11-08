@@ -82,14 +82,18 @@
                     </summary>
                     <ul class="divide-y divide-stone-100 border-t border-stone-200">
                         <template x-for="offer in group.offers" :key="offer.id">
-                            <li>
-                                <label class="flex cursor-pointer items-center gap-3 px-3 py-2" :class="isSelected(offer) || 'text-stone-500'">
+                            <li class="flex items-center pr-1">
+                                <label class="flex min-w-0 flex-1 cursor-pointer items-center gap-3 px-3 py-2" :class="isSelected(offer) || 'text-stone-500'">
                                     <input type="checkbox" class="size-5 shrink-0 accent-emerald-700" :checked="isSelected(offer)" @change="selectOffers([offer], $event.target.checked)">
                                     <span class="min-w-0 flex-1">
                                         <span class="block truncate" x-text="offer.name"></span>
                                         <span class="block truncate text-xs text-stone-500" x-text="[offer.brand, offer.discount, offer.price != null ? 'CHF ' + Number(offer.price).toFixed(2) : null].filter(Boolean).join(' · ')"></span>
                                     </span>
                                 </label>
+                                {{-- Straight onto a list, without the planner (offer details as note) --}}
+                                <button type="button" class="icon-button shrink-0 text-emerald-800" @click="openOfferToList(offer)" :aria-label="$t('Add “:name” to a list', { name: offer.name })" :title="$t('Add to list')">
+                                    <svg viewBox="0 0 24 24" class="size-5" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                </button>
                             </li>
                         </template>
                     </ul>

@@ -68,6 +68,9 @@
                             <span class="block truncate text-xs text-stone-500" x-text="details(offer)"></span>
                         </div>
                         <span x-show="offer.own && !offer.shared" class="shrink-0 rounded-full bg-stone-100 px-2 py-0.5 text-xs text-stone-600" x-text="$t('Private')"></span>
+                        <button type="button" class="icon-button text-emerald-800" @click="openOfferToList(offer)" :aria-label="$t('Add “:name” to a list', { name: offer.name })" :title="$t('Add to list')">
+                            <svg viewBox="0 0 24 24" class="size-5" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                        </button>
                         <button type="button" x-show="offer.own" class="icon-button" @click="openForm(offer)" :aria-label="$t('Edit')">
                             <svg viewBox="0 0 24 24" class="size-5"><path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
                         </button>

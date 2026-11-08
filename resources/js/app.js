@@ -29,6 +29,8 @@ const DEFAULT_STORES = [['Migros', 'M', ['CH']], ['Coop', 'C', ['CH']], ['Aldi',
 const OWNER_KEY = 'shoppinglist.owner';
 // Shop filter per list (device only): { listId: [tags] }.
 const STORE_FILTER_KEY = 'shoppinglist.store-filter';
+// List an offer was last added to (device only): offered first.
+const OFFER_LIST_KEY = 'shoppinglist.offer-list';
 const USER_KEY = 'shoppinglist.user';
 
 const api = createApi();
@@ -138,6 +140,9 @@ Alpine.data('shoppinglist', () => ({
     duplicate: null,
     // Item being moved to another list (dialog).
     moving: null,
+    // Offer being added to a list (dialog, offers pool and planner step 1) and the list asked to merge into.
+    addingOffer: null,
+    offerMergeList: null,
     catalogSearch: '',
     catalogLimit: CATALOG_PAGE,
     catalogLoading: false,
@@ -978,6 +983,45 @@ Alpine.data('shoppinglist', () => ({
     closeEdit() {
         this.$refs.editDialog.close();
         this.editing = null;
+    },
+
+    // ---- adding an offer to a list (offers pool, planner step 1); works offline like any item
+
+    openOfferToList(offer) {
+        this.addingOffer = offer;
+        this.offerMergeList = null;
+        this.$nextTick(() => this.$refs.offerToListDialog.showModal());
+    },
+
+    /** Lists to add an offer to, the last used one first. */
+    get offerLists() {
+        const last = localStorage.getItem(OFFER_LIST_KEY);
+
+        return [...this.lists].sort((a, b) => (b.id === last) - (a.id === last));
+    },
+
+    /** The entry of an offer: its name, the shop as tag and the offer details as note (Offer::note on the server). */
+    offerItem(offer) {
+        return { name: offer.name, amount: null, unit: null, stores: offer.store ? [offer.store] : [], note: offer.note ?? null, recipes: [] };
+    },
+
+    /**
+     * Adds the offer to a list ('' = a new list). If the product is already open there, asks first
+     * (`merge` null): true adds to the open entry (amount, shop, note), false adds a new entry.
+     */
+    async addOfferTo(listId, merge = null) {
+        const offer = this.addingOffer;
+        if (!offer) return;
+        const item = this.offerItem(offer);
+        if (merge === null && listId && this.plannedMerges(listId, [item]).size) {
+            this.offerMergeList = listId;
+            return;
+        }
+        const id = await this.addPlannedItems(listId, this.$t('Shopping list'), [item], Boolean(merge));
+        localStorage.setItem(OFFER_LIST_KEY, id);
+        this.$refs.offerToListDialog.close();
+        const list = this.lists.find((each) => each.id === id)?.name ?? this.$t('Shopping list');
+        Alpine.store('notice').show(this.$t('“:name” added to “:list”', { name: item.name, list }));
     },
 
     // ---- moving an item to another list

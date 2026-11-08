@@ -46,6 +46,18 @@ class OfferTest extends TestCase
         $this->assertSame(2, Offer::count());
     }
 
+    public function test_offers_come_with_the_note_of_a_list_entry(): void
+    {
+        $user = User::factory()->create();
+        $this->withHeader('Accept-Language', 'de-CH')->actingAs($user)->postJson('/offers', [
+            'name' => 'Kartoffeln', 'brand' => 'Bio', 'store' => 'M', 'discount' => '−30 %', 'price' => 3.95, 'regular_price' => 5.6, 'valid_until' => '2026-11-14',
+        ])->assertCreated()->assertJsonPath('offer.note', 'Aktion −30 %, Bio Kartoffeln, CHF 3.95 (statt 5.60), bis 14.11.');
+
+        // Without brand the product is the entry's name and left out.
+        $this->withHeader('Accept-Language', 'de-CH')->actingAs($user)->postJson('/offers', ['name' => 'Rüebli', 'store' => 'C', 'price' => 1.5])
+            ->assertCreated()->assertJsonPath('offer.note', 'Aktion, CHF 1.50');
+    }
+
     public function test_private_offers_are_only_visible_to_their_owner(): void
     {
         $user = User::factory()->create();

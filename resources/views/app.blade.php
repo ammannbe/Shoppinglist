@@ -547,6 +547,38 @@
         </template>
     </dialog>
 
+    {{-- Add an offer to a list (offers pool, planner step 1): the offer details become the note --}}
+    <dialog x-ref="offerToListDialog" class="dialog" @close="addingOffer = null; offerMergeList = null">
+        <template x-if="addingOffer">
+            <div class="space-y-4">
+                <div>
+                    <h2 class="font-semibold" x-text="$t('Add “:name” to', { name: addingOffer.name })"></h2>
+                    <p x-show="addingOffer.note" class="mt-1 text-sm text-stone-500" x-text="addingOffer.note"></p>
+                </div>
+                <template x-if="!offerMergeList">
+                    <ul class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200">
+                        <template x-for="target in offerLists" :key="target.id">
+                            <li><button type="button" class="block w-full truncate px-4 py-3 text-left hover:bg-stone-50" @click="addOfferTo(target.id)" x-text="target.name"></button></li>
+                        </template>
+                        <li><button type="button" class="block w-full truncate px-4 py-3 text-left text-emerald-800 hover:bg-stone-50" @click="addOfferTo('')" x-text="'+ ' + $t('New list')"></button></li>
+                    </ul>
+                </template>
+                <template x-if="offerMergeList">
+                    <div class="space-y-3">
+                        <p class="text-sm" x-text="$t('“:name” is already open on this list.', { name: addingOffer.name })"></p>
+                        <div class="flex flex-wrap justify-end gap-2">
+                            <button type="button" class="button-secondary" @click="addOfferTo(offerMergeList, false)" x-text="$t('Add anyway')"></button>
+                            <button type="button" class="button" @click="addOfferTo(offerMergeList, true)" x-text="$t('Merge')"></button>
+                        </div>
+                    </div>
+                </template>
+                <div class="flex justify-end">
+                    <button type="button" class="button-secondary" @click="$refs.offerToListDialog.close()" x-text="$t('Cancel')"></button>
+                </div>
+            </div>
+        </template>
+    </dialog>
+
     {{-- Move an item to another list --}}
     <dialog x-ref="moveDialog" class="dialog" @close="moving = null">
         <template x-if="moving">

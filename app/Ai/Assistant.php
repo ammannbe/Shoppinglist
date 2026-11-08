@@ -2,6 +2,7 @@
 
 namespace App\Ai;
 
+use App\Models\Offer;
 use App\Support\ShopRegions;
 use Illuminate\Http\UploadedFile;
 
@@ -260,7 +261,7 @@ class Assistant
                     'amount' => $this->roundForShopping($item['amount'] ?? null, $item['unit'] ?? null),
                     'unit' => $item['unit'] ?? null,
                     'store' => $offer['store'] ?? null,
-                    'note' => $offer ? $this->offerNote($offer, $item['name']) : null,
+                    'note' => $offer ? Offer::note($offer, $item['name']) : null,
                     'at_home' => (bool) ($item['at_home'] ?? false),
                     'recipes' => array_values($item['recipes'] ?? []),
                 ];
@@ -288,25 +289,6 @@ class Assistant
         };
 
         return round(ceil(round($amount / $step, 6)) * $step, 2);
-    }
-
-    /**
-     * "Aktion −30 %, Bio-Kartoffeln, CHF 3.95 (statt 5.65)"; the product only if it is not the item's name.
-     *
-     * @param  array<string, mixed>  $offer
-     */
-    private function offerNote(array $offer, string $name): string
-    {
-        // The item has the generic name ("Kartoffeln"), the note says which product is on offer ("Bio-Kartoffeln").
-        $product = trim(($offer['brand'] ?? '').' '.($offer['name'] ?? ''));
-        $parts = array_filter([
-            __('Offer').(filled($offer['discount'] ?? null) ? ' '.$offer['discount'] : ''),
-            mb_strtolower($product) !== mb_strtolower(trim($name)) ? $product : null,
-            isset($offer['price']) ? 'CHF '.number_format((float) $offer['price'], 2, '.', "'")
-                .(isset($offer['regular_price']) ? ' ('.__('instead of :price', ['price' => number_format((float) $offer['regular_price'], 2, '.', "'")]).')' : '') : null,
-        ]);
-
-        return mb_substr(implode(', ', $parts), 0, 255);
     }
 
     /**
