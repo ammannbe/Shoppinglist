@@ -21,8 +21,9 @@ export const SYNCED_KEYS = ['offerIds', 'pantry', 'servings', 'count', 'ideas', 
 export function stepAllowed(step, state) {
     const planned = (state.planned ?? []).length > 0;
     switch (step) {
+        // Always: own recipes can be added there without offers or pantry (the suggestions need them).
         case 'recipes':
-            return (state.offerIds ?? []).length > 0 || (state.pantry ?? []).some((item) => item.selected) || planned;
+            return true;
         case 'list':
             return planned || (state.items ?? []).length > 0;
         default:

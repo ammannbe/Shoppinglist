@@ -83,6 +83,15 @@ Alpine.store('notice', {
 
 Alpine.magic('t', () => (key, replace) => translate(Alpine.store('i18n').locale, key, replace));
 
+// Badge of a recipe by its source: AI idea, a dish typed in the planner or a recipe of the recipe app.
+Alpine.magic('recipeSource', () => (source) => {
+    const t = (key) => translate(Alpine.store('i18n').locale, key);
+    if (source === 'ai') return { label: t('AI idea'), badge: 'bg-violet-100 text-violet-800' };
+    if (source === 'custom') return { label: t('Own dish'), badge: 'bg-amber-100 text-amber-800' };
+
+    return { label: Alpine.store('sync').user?.recipes?.name ?? t('Recipe'), badge: 'bg-emerald-100 text-emerald-800' };
+});
+
 document.documentElement.lang = htmlLang(Alpine.store('i18n').locale);
 
 async function setLocale(locale) {

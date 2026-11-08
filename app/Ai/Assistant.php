@@ -233,7 +233,9 @@ class Assistant
             .'e.g. "Kürbis" ↔ "Butternusskürbis", "Kartoffeln" ↔ "Bio-Kartoffeln"), but keep the generic name for the entry '
             .'(e.g. "Kartoffeln", not "Bio-Kartoffeln"; the offer is linked by "offer"). '
             .'If it is in the pantry, set "at_home" true. '
-            .'"recipes" lists the recipe names that need it. Write in '.$language.'.',
+            .'"recipes" lists the recipe names that need it. '
+            .'A recipe without ingredients is a dish the user typed: use the usual ingredients of that dish for its servings. '
+            .'Write in '.$language.'.',
             [OpenAiClient::text(json_encode(compact('recipes', 'offers', 'pantry'), JSON_UNESCAPED_UNICODE))],
             'shopping_list',
             $this->object(['items' => $this->list($this->object([

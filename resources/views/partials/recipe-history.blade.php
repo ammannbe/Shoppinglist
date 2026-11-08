@@ -32,8 +32,8 @@
                                 <span class="flex flex-wrap items-center gap-2">
                                     <span class="font-medium" x-text="recipe.name"></span>
                                     <span class="rounded-full px-2 py-0.5 text-xs"
-                                        :class="recipe.source === 'ai' ? 'bg-violet-100 text-violet-800' : 'bg-emerald-100 text-emerald-800'"
-                                        x-text="recipe.source === 'ai' ? $t('AI idea') : ($store.sync.user?.recipes?.name ?? $t('Recipe'))"></span>
+                                        :class="$recipeSource(recipe.source).badge"
+                                        x-text="$recipeSource(recipe.source).label"></span>
                                     <span x-show="!recipe.planned && recipe.used_at" class="rounded-full bg-stone-100 px-2 py-0.5 text-xs text-stone-600"
                                         x-text="$t('On a list :date', { date: date(recipe.used_at) })"></span>
                                     {{-- Items linked to the recipe (on this device) --}}

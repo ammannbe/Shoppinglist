@@ -13,13 +13,9 @@ describe('stepAllowed', () => {
         expect(stepAllowed('unknown', empty)).toBe(false);
     });
 
-    it('needs selected offers, pantry items or planned recipes for the recipes', () => {
-        expect(stepAllowed('recipes', empty)).toBe(false);
+    it('always allows the recipes (own recipes need neither offers nor pantry)', () => {
+        expect(stepAllowed('recipes', empty)).toBe(true);
         expect(stepAllowed('recipes', { ...empty, offerIds: ['o1'] })).toBe(true);
-        expect(stepAllowed('recipes', { ...empty, pantry: [{ selected: false }] })).toBe(false);
-        expect(stepAllowed('recipes', { ...empty, pantry: [{ selected: true }] })).toBe(true);
-        // A recipe planned again from the Recipes tab.
-        expect(stepAllowed('recipes', { ...empty, planned: [{ id: 'r1' }] })).toBe(true);
     });
 
     it('needs planned recipes (or a built list) for the list', () => {
@@ -31,7 +27,7 @@ describe('stepAllowed', () => {
 
 describe('allowedStep', () => {
     it('falls back to the last step that can be opened', () => {
-        expect(allowedStep('list', empty)).toBe('pantry');
+        expect(allowedStep('list', empty)).toBe('recipes');
         expect(allowedStep('list', { ...empty, offerIds: ['o1'] })).toBe('recipes');
         expect(allowedStep('recipes', { ...empty, offerIds: ['o1'] })).toBe('recipes');
         expect(allowedStep('offers', empty)).toBe('offers');

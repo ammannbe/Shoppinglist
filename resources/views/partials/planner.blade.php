@@ -146,6 +146,7 @@
             <x-spinner x-show="busyKey === 'suggest'" />
             <span x-text="label('suggest', $t('Suggest recipes'))"></span>
         </button>
+        <p x-show="!selectedOffers.length && !selectedPantry.length" class="text-sm text-stone-500" x-text="$t('Select offers or add what is at home first.')"></p>
         {{-- Rarely changed: servings, number, wishes and AI ideas --}}
         <details class="group/options rounded-lg border border-stone-200">
             <summary class="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-sm text-stone-600">
@@ -193,6 +194,53 @@
         {{-- Planned recipes (saved; the list is built from them) --}}
         <x-planned-recipes />
 
+        {{-- Own recipe: one of the recipe app found by name, or the typed name as own dish (the AI adds its ingredients for the list) --}}
+        <details class="group/own rounded-lg border border-stone-200 bg-white" :open="ownQuery !== ''">
+            <summary class="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-sm">
+                <span class="font-medium" x-text="$t('Add your own recipe')"></span>
+                <span class="transition-transform group-open/own:rotate-90" aria-hidden="true">›</span>
+            </summary>
+            <div class="space-y-3 border-t border-stone-200 p-3">
+                <form class="flex gap-2" @submit.prevent="ownFound.length === 1 ? planOwn(ownFound[0]) : (ownFound.length ? null : planCustom())">
+                    <input x-model="ownQuery" @input="searchOwn()" class="field min-w-0 flex-1" maxlength="100" enterkeyhint="done"
+                        :placeholder="recipes?.connected ? $t('Search :name or type a dish', { name: recipes.name }) : $t('Dish, e.g. Spaghetti Bolognese')"
+                        :aria-label="$t('Add your own recipe')">
+                    <x-spinner x-show="ownBusy" class="self-center" />
+                </form>
+                <p x-show="ownError" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800" role="alert" x-text="ownError"></p>
+                <ul x-show="ownQuery.trim()" class="divide-y divide-stone-100 rounded-lg border border-stone-200">
+                    <template x-for="recipe in ownFound" :key="recipe.key">
+                        <li class="flex items-center gap-2 py-1.5 pl-3 pr-1.5">
+                            <span class="min-w-0 flex-1">
+                                <span class="block truncate text-sm font-medium" x-text="recipe.name"></span>
+                                <span class="block text-xs text-stone-500" x-text="recipes?.name"></span>
+                            </span>
+                            <button type="button" class="button-secondary inline-flex shrink-0 items-center gap-2 px-3 py-1.5 text-sm" :disabled="busy" @click="planOwn(recipe)"
+                                :aria-label="$t('Plan “:name”', { name: recipe.name })">
+                                <x-spinner x-show="busyKey === `plan:${recipe.key}`" />
+                                <span x-text="label(`plan:${recipe.key}`, $t('Plan'))"></span>
+                            </button>
+                        </li>
+                    </template>
+                    <li x-show="recipes?.connected && ownSearched && ownSearched === ownQuery.trim() && !ownFound.length" class="px-3 py-2 text-sm text-stone-500"
+                        x-text="$t('No recipe in :name matches.', { name: recipes?.name })"></li>
+                    <li class="flex items-center gap-2 py-1.5 pl-3 pr-1.5">
+                        <span class="min-w-0 flex-1">
+                            <span class="block truncate text-sm font-medium" x-text="ownQuery.trim()"></span>
+                            <span class="block text-xs text-stone-500" x-text="$t('Own dish, the AI adds the ingredients')"></span>
+                        </span>
+                        <button type="button" class="button-secondary inline-flex shrink-0 items-center gap-2 px-3 py-1.5 text-sm" :disabled="busy" @click="planCustom()"
+                            :aria-label="$t('Plan “:name”', { name: ownQuery.trim() })">
+                            <x-spinner x-show="busyKey?.startsWith('plan:custom-')" />
+                            <span x-text="busyKey?.startsWith('plan:custom-') ? busy : $t('Plan')"></span>
+                        </button>
+                    </li>
+                </ul>
+                <p x-show="error && errorKey?.startsWith('plan:') && (errorKey.startsWith('plan:custom-') || ownResults.some((recipe) => errorKey === `plan:${recipe.key}`))"
+                    class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800" role="alert" x-text="error"></p>
+            </div>
+        </details>
+
         {{-- Suggestions: tap opens the details; "Plan" saves one (Recipes tab), the list is built from the planned ones --}}
         <div class="space-y-3">
             <template x-for="suggestion in suggestions" :key="suggestion.key">
@@ -202,8 +250,8 @@
                             <span class="flex flex-wrap items-center gap-2">
                                 <span class="font-medium underline decoration-stone-300 underline-offset-2" x-text="suggestion.name"></span>
                                 <span class="rounded-full px-2 py-0.5 text-xs"
-                                    :class="suggestion.source === 'ai' ? 'bg-violet-100 text-violet-800' : 'bg-emerald-100 text-emerald-800'"
-                                    x-text="suggestion.source === 'ai' ? $t('AI idea') : recipes?.name"></span>
+                                    :class="$recipeSource(suggestion.source).badge"
+                                    x-text="$recipeSource(suggestion.source).label"></span>
                             </span>
                             <span class="block text-sm text-stone-600" x-text="suggestion.reason"></span>
                             <span x-show="suggestion.uses_offers?.length" class="block text-xs text-orange-800" x-text="$t('Offers') + ': ' + (suggestion.uses_offers ?? []).join(', ')"></span>

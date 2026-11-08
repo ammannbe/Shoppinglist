@@ -728,5 +728,13 @@
     "Done. Confirm the new address with the link we sent you.": "Erledigt. Bestätige die neue Adresse mit dem Link, den wir dir geschickt haben.",
     "Password changed.": "Passwort geändert.",
     "Your account has been deleted.": "Dein Konto wurde gelöscht.",
-    "Your lists without other members are deleted, shared lists go to another member. Your own products, shops and planned recipes are deleted too.": "Deine Listen ohne andere Mitglieder werden gelöscht, geteilte Listen gehen an ein anderes Mitglied. Deine eigenen Produkte, Läden und geplanten Rezepte werden ebenfalls gelöscht."
+    "Your lists without other members are deleted, shared lists go to another member. Your own products, shops and planned recipes are deleted too.": "Deine Listen ohne andere Mitglieder werden gelöscht, geteilte Listen gehen an ein anderes Mitglied. Deine eigenen Produkte, Läden und geplanten Rezepte werden ebenfalls gelöscht.",
+    "Own dish": "Eigenes Gericht",
+    "Add your own recipe": "Eigenes Rezept hinzufügen",
+    "Search :name or type a dish": "In :name suchen oder Gericht eingeben",
+    "Dish, e.g. Spaghetti Bolognese": "Gericht, z. B. Spaghetti Bolognese",
+    "No recipe in :name matches.": "Kein Rezept in :name gefunden.",
+    "Own dish, the AI adds the ingredients": "Eigenes Gericht, die KI ergänzt die Zutaten",
+    "The AI adds the usual ingredients when the shopping list is built.": "Die KI ergänzt die üblichen Zutaten, wenn die Einkaufsliste erstellt wird.",
+    "Connect :name first.": "Verbinde zuerst :name."
 }

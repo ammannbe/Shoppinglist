@@ -164,6 +164,37 @@ class PlannerController extends Controller
     }
 
     /**
+     * Own recipes of the recipe app by name, to plan one by hand (step 3). Same shape as the
+     * suggestions of the recipe app, so the client plans them with POST /planned-recipes.
+     */
+    public function searchRecipes(Request $request): JsonResponse
+    {
+        $data = $request->validate(['query' => ['required', 'string', 'min:2', 'max:100']]);
+        $user = $request->user();
+        $name = config('services.recipes.name');
+
+        if (! RecipesClient::connected($user)) {
+            return response()->json(['message' => __('Connect :name first.', ['name' => $name])], 409);
+        }
+
+        try {
+            $found = $this->recipes->post($user, '/api/recipes/search', ['query' => trim($data['query']), 'limit' => 20])['data'] ?? [];
+        } catch (RecipesException|ConnectionException $e) {
+            report($e);
+
+            return response()->json(['message' => __('The recipes of :name could not be loaded.', ['name' => $name])], 502);
+        }
+
+        return response()->json(['recipes' => array_values(array_map(fn (array $recipe) => [
+            'key' => 'recipe-'.$recipe['id'],
+            'source' => 'recipes',
+            'recipe_id' => $recipe['id'],
+            'name' => $recipe['name'],
+            'url' => $recipe['url'] ?? null,
+        ], array_filter($found, fn ($recipe) => is_array($recipe) && isset($recipe['id'], $recipe['name']))))]);
+    }
+
+    /**
      * Hand an AI recipe idea to the recipe app as a draft. The user checks and imports it there
      * (matching foods, units and the category), so nothing is created without a person.
      * An idea with a key is saved first if it is not yet (Recipes tab), so the import link is kept.

@@ -108,6 +108,9 @@ Route::middleware('auth')->group(function () {
             Route::post('recipes', [PlannerController::class, 'saveRecipe'])->name('recipes');
         });
 
+        // Own recipes by name for the planner (no AI request).
+        Route::post('planner/recipe-search', [PlannerController::class, 'searchRecipes'])->middleware('throttle:60,1')->name('planner.recipe-search');
+
         // Planner state across devices (no AI request, not rate limited like the planner).
         Route::get('planner/state', [PlannerStateController::class, 'show'])->name('planner.state.show');
         Route::put('planner/state', [PlannerStateController::class, 'update'])->name('planner.state.update');

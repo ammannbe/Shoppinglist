@@ -7,7 +7,7 @@
                 <button type="button" class="min-w-0 flex-1 py-2 text-left" @click="openDetail(recipe)" :aria-label="$t('Show “:name”', { name: recipe.name })">
                     <span class="block truncate font-medium" x-text="recipe.name"></span>
                     <span class="block truncate text-xs text-stone-500"
-                        x-text="[recipe.source === 'ai' ? $t('AI idea') : recipes?.name, recipe.servings ? $t(':count servings', { count: recipe.servings }) : null, isBuilt(recipe) ? $t('Ingredients in step 4') : null].filter(Boolean).join(' · ')"></span>
+                        x-text="[$recipeSource(recipe.source).label, recipe.servings ? $t(':count servings', { count: recipe.servings }) : null, isBuilt(recipe) ? $t('Ingredients in step 4') : null].filter(Boolean).join(' · ')"></span>
                 </button>
                 <x-spinner x-show="busyKey === `unplan:${recipe.id}`" />
                 <button type="button" class="icon-button shrink-0 text-stone-400" :disabled="busy" @click="unplan(recipe)"

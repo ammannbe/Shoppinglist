@@ -12,8 +12,8 @@
                     <h2 id="recipe-dialog-title" class="text-lg font-semibold leading-snug" x-text="detail.name"></h2>
                     <div class="flex flex-wrap items-center gap-2 text-xs">
                         <span class="rounded-full px-2 py-0.5"
-                            :class="detail.source === 'ai' ? 'bg-violet-100 text-violet-800' : 'bg-emerald-100 text-emerald-800'"
-                            x-text="detail.source === 'ai' ? $t('AI idea') : ($store.sync.user?.recipes?.name ?? $t('Recipe'))"></span>
+                            :class="$recipeSource(detail.source).badge"
+                            x-text="$recipeSource(detail.source).label"></span>
                         <span x-show="detail.servings" class="text-stone-500" x-text="$t(':count servings', { count: detail.servings })"></span>
                         <span x-show="detail.category" class="text-stone-500" x-text="detail.category"></span>
                     </div>
@@ -33,6 +33,7 @@
                     <p x-show="detail.uses_season?.length" class="text-lime-800" x-text="$t('In season') + ': ' + (detail.uses_season ?? []).join(', ')"></p>
                 </div>
 
+                <p x-show="detail.source === 'custom' && !detail.ingredients?.length" class="text-stone-600" x-text="$t('The AI adds the usual ingredients when the shopping list is built.')"></p>
                 <template x-if="detail.ingredients?.length">
                     <section>
                         <h3 class="mb-1 font-semibold" x-text="$t('Ingredients')"></h3>

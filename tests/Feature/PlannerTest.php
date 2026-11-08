@@ -572,6 +572,59 @@ class PlannerTest extends TestCase
             PlannedRecipe::find($saved['recipe-5'])->data['ingredients']);
     }
 
+    public function test_own_recipes_are_found_by_name(): void
+    {
+        Http::fake(['recipes.test/api/recipes/search' => Http::response(['data' => [
+            ['id' => 7, 'name' => 'Lasagne al forno', 'url' => 'https://recipes.test/recipes/7', 'matched_food_ids' => [], 'food_ids' => [1]],
+        ]])]);
+
+        $this->actingAs($this->connected())->postJson('/planner/recipe-search', ['query' => ' lasag '])
+            ->assertOk()
+            ->assertExactJson(['recipes' => [[
+                'key' => 'recipe-7', 'source' => 'recipes', 'recipe_id' => 7, 'name' => 'Lasagne al forno', 'url' => 'https://recipes.test/recipes/7',
+            ]]]);
+
+        Http::assertSent(fn (Request $request) => $request->url() === 'https://recipes.test/api/recipes/search'
+            && $request['query'] === 'lasag' && $request['limit'] === 20);
+    }
+
+    public function test_the_name_search_needs_a_connection_and_reports_failures(): void
+    {
+        $this->actingAs(User::factory()->create())->postJson('/planner/recipe-search', ['query' => 'Lasagne'])->assertStatus(409);
+        $this->actingAs($this->connected())->postJson('/planner/recipe-search', ['query' => 'L'])->assertJsonValidationErrors('query');
+
+        // An older recipe app without the name search refuses it.
+        Http::fake(['recipes.test/*' => Http::response(['message' => 'The food ids field is required.'], 422)]);
+        $this->actingAs($this->connected())->postJson('/planner/recipe-search', ['query' => 'Lasagne'])
+            ->assertStatus(502)
+            ->assertJsonPath('message', 'The recipes of Kochbuch could not be loaded.');
+    }
+
+    public function test_a_typed_dish_is_planned_and_the_ai_adds_its_ingredients_for_the_list(): void
+    {
+        Http::fake(['openai.test/*' => Http::response($this->ai(['items' => [
+            ['name' => 'Spaghetti', 'amount' => 500, 'unit' => 'g', 'offer' => null, 'at_home' => false, 'recipes' => ['Spaghetti Bolognese']],
+        ]]))]);
+        $user = $this->connected();
+        $key = 'custom-0190a0b0-0000-7000-8000-000000000002';
+
+        $this->actingAs($user)->postJson('/planned-recipes', ['source' => 'custom', 'key' => $key, 'name' => 'Spaghetti Bolognese', 'servings' => 3])
+            ->assertCreated()
+            ->assertJsonPath('recipe.source', 'custom')
+            ->assertJsonPath('recipe.planned', true);
+
+        $response = $this->actingAs($user)->postJson('/planner/list', ['offers' => [], 'pantry' => [], 'recipes' => [
+            ['source' => 'custom', 'key' => $key, 'name' => 'Spaghetti Bolognese', 'servings' => 3],
+        ]])->assertOk();
+
+        $response->assertJsonPath('items.0.recipes', ['Spaghetti Bolognese']);
+        $this->assertSame([['key' => $key, 'id' => PlannedRecipe::where('key', $key)->value('id')]], $response->json('recipes'));
+        Http::assertSent(fn (Request $request) => str_contains((string) $request->body(), 'A recipe without ingredients is a dish the user typed')
+            && str_contains((string) $request->body(), 'Spaghetti Bolognese'));
+        // A typed dish needs a key.
+        $this->actingAs($user)->postJson('/planned-recipes', ['source' => 'custom', 'name' => 'Risotto'])->assertJsonValidationErrors('key');
+    }
+
     public function test_older_clients_without_keys_build_lists_without_saving(): void
     {
         Http::fake(['openai.test/*' => Http::response($this->ai(['items' => []]))]);

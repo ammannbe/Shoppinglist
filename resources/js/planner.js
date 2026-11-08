@@ -3,7 +3,7 @@ import { createApi, HttpError } from './api.js';
 import { prepareForAi } from './image.js';
 import { offerReader } from './offers.js';
 import { closeDialogThen } from './layers.js';
-import { offerMatches, shortDate } from './helpers.js';
+import { offerMatches, shortDate, uuid7 } from './helpers.js';
 import {
     allowedStep, builtRecipe, migrateState, plannerSelection, queueUsed, recipePayload, remoteIsNewer, selectedOfferIds, STEPS, stepAllowed, stepTrail,
     suggestionExclude, SYNCED_KEYS, syncedState, unbuiltRecipes, withoutPlanned, withoutUsed,
@@ -163,6 +163,14 @@ export function planner({ addItems, merges, lists, open, navigate }) {
         mergeCount: null,
         // Suggestion shown in the recipe dialog (all details and actions).
         detail: null,
+        // Adding an own recipe in step 3 (device only, not synced): the typed name, the recipes
+        // of the recipe app found for it (POST /planner/recipe-search) and the query they belong to.
+        ownQuery: '',
+        ownResults: [],
+        ownSearched: '',
+        ownBusy: false,
+        ownError: null,
+        ownTimer: null,
         ...requests(),
         ...offerReader(),
 
@@ -259,7 +267,7 @@ export function planner({ addItems, merges, lists, open, navigate }) {
         get nextBlocked() {
             if (!this.nextStep || this.canOpen(this.nextStep)) return null;
 
-            return this.nextStep === 'recipes' ? this.$t('Select offers or add what is at home first.') : this.$t('Plan at least one recipe.');
+            return this.$t('Plan at least one recipe.');
         },
 
         /** Earlier steps go back in the history, later ones push the skipped steps first. */
@@ -507,6 +515,59 @@ export function planner({ addItems, merges, lists, open, navigate }) {
                 this.warning = more && !added.length ? this.$t('No further recipes found.') : result.warning;
                 this.warningMore = more;
             });
+        },
+
+        // ---- own recipes (step 3): a recipe of the recipe app found by name, or a typed dish
+
+        /** Searches the recipe app while typing (debounced); without a connection only the typed dish is offered. */
+        searchOwn() {
+            clearTimeout(this.ownTimer);
+            const query = this.ownQuery.trim();
+            if (query.length < 2 || !this.recipes?.connected) {
+                this.ownResults = [];
+                this.ownSearched = '';
+                this.ownError = null;
+                return;
+            }
+            // Not through run(): typing must not block the other buttons (or replace their progress).
+            this.ownTimer = setTimeout(async () => {
+                this.ownBusy = true;
+                this.ownError = null;
+                try {
+                    const { recipes } = await api.post('/planner/recipe-search', { query });
+                    // A slower answer of an older query must not replace the current one.
+                    if (this.ownQuery.trim() !== query) return;
+                    this.ownResults = recipes;
+                    this.ownSearched = query;
+                } catch (error) {
+                    this.ownError = error instanceof HttpError ? (error.body?.message ?? error.message) : this.$t('This needs an internet connection.');
+                } finally {
+                    this.ownBusy = false;
+                }
+            }, 350);
+        },
+
+        /** Found recipes that are not planned yet. */
+        get ownFound() {
+            return withoutPlanned(this.ownResults, this.planned);
+        },
+
+        /** Plans a recipe of the recipe app found by name. */
+        async planOwn(recipe) {
+            await this.plan({ uses_offers: [], uses_pantry: [], uses_season: [], ...recipe, servings: Number(this.servings) || 4 });
+        },
+
+        /** Plans the typed name as own dish: the AI adds the usual ingredients when the list is built. */
+        async planCustom() {
+            const name = this.ownQuery.trim();
+            if (!name) return;
+            const key = `custom-${uuid7()}`;
+            await this.plan({ key, source: 'custom', name, servings: Number(this.servings) || 4, uses_offers: [], uses_pantry: [], uses_season: [] });
+            if (this.planned.some((recipe) => recipe.key === key)) {
+                this.ownQuery = '';
+                this.ownResults = [];
+                this.ownSearched = '';
+            }
         },
 
         // ---- planned recipes (saved, planned_recipes; the list is built from them)
