@@ -1,6 +1,7 @@
 import Alpine from 'alpinejs';
 import { accountSettings } from './account.js';
 import { addRxPlugin } from 'rxdb/plugins/core';
+import { CATEGORY_LABELS, categoryOrder, categoryResolver, groupByCategory, moveCategory, sortByCategory } from './categories.js';
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
 import { createApi, HttpError } from './api.js';
 import { createDatabase, removeDatabase, startReplication } from './db/index.js';
@@ -128,8 +129,9 @@ const CATALOG_PAGE = 200;
 const byName = (a, b) => a.name.localeCompare(b.name, Alpine.store('i18n').locale.replace('_', '-'));
 const byId = (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
-// Sort options of the lists overview (per user) and of the items of a list (per list).
+// Sort options of the lists overview (per user) and of the items of a list (per list, also by category).
 const SORTS = ['manual', 'name_asc', 'name_desc', 'newest', 'oldest'];
+const ITEM_SORTS = [...SORTS, 'category'];
 
 Alpine.data('shoppinglist', () => ({
     route: { view: 'lists', id: null },
@@ -147,6 +149,8 @@ Alpine.data('shoppinglist', () => ({
     duplicate: null,
     // Item being moved to another list (dialog).
     moving: null,
+    // Product whose category is picked in the products view (dialog): { name, category }.
+    pickingCategory: null,
     // Pantry item to restock when the shopping list has to be picked or created (dialog).
     restocking: null,
     // Offer being added to a list (dialog, offers pool and planner step 1) and the list asked to merge into.
@@ -191,7 +195,7 @@ Alpine.data('shoppinglist', () => ({
             if (view === 'settings' && event) {
                 const from = new URL(event.oldURL).hash;
                 if (from.startsWith('#/list/')) this.settingsBack = from;
-                else if (!/^#\/(products|units|stores|install)/.test(from)) this.settingsBack = '#/';
+                else if (!/^#\/(products|units|stores|categories|install)/.test(from)) this.settingsBack = '#/';
             }
             // Any other path means the service worker served the app shell offline.
             this.route = location.pathname === '/' ? { view: view || 'lists', id } : { view: 'offline', id: null };
@@ -254,9 +258,11 @@ Alpine.data('shoppinglist', () => ({
     itemsOf(listId) {
         const sort = Alpine.store('data').lists.find((list) => list.id === listId)?.item_sort ?? 'manual';
 
-        return Alpine.store('data').items
+        const items = Alpine.store('data').items
             .filter((item) => item.shopping_list_id === listId && !Alpine.store('undo').hidden(item.id))
             .sort(compareBy(sort, byName, byId));
+
+        return sort === 'category' ? sortByCategory(items, categoryOf, this.categoryOrder) : items;
     },
     openCount(listId) {
         return this.itemsOf(listId).filter((item) => !item.done).length;
@@ -581,7 +587,7 @@ Alpine.data('shoppinglist', () => ({
     },
 
     get backLink() {
-        if (['products', 'units', 'stores', 'install'].includes(this.route.view)) return '#/settings';
+        if (['products', 'units', 'stores', 'categories', 'install'].includes(this.route.view)) return '#/settings';
         if (this.route.view === 'offers') return '#/planner/offers';
 
         return this.route.view === 'settings' ? this.settingsBack : '#/';
@@ -905,13 +911,72 @@ Alpine.data('shoppinglist', () => ({
 
         return this.openItems.filter((item) => !item.stores?.length || item.stores.some((tag) => filter.includes(tag)));
     },
+    /** Shown open items under category headings when sorted by category, otherwise one group without heading. */
+    get shownOpenGroups() {
+        if (this.itemSort !== 'category') return [{ key: null, items: this.shownOpenItems }];
+
+        return groupByCategory(this.shownOpenItems, categoryOf, this.categoryOrder);
+    },
+
+    // ---- product categories (sorting by category; resources/js/categories.js)
+
+    /** Category keys in the user's order (preferences.category_order, missing ones in the default order). */
+    get categoryOrder() {
+        return categoryOrder(Alpine.store('prefs').category_order);
+    },
+    categoryLabel(key) {
+        return this.$t(CATEGORY_LABELS[key] ?? CATEGORY_LABELS.other);
+    },
+    /** Category of a product name: its product's, otherwise guessed from the name (offline, local products). */
+    categoryOf(name) {
+        return categoryOf(name);
+    },
+    moveCategory(key, step) {
+        Alpine.store('prefs').set('category_order', moveCategory(this.categoryOrder, key, step));
+    },
+    resetCategoryOrder() {
+        Alpine.store('prefs').set('category_order', []);
+    },
+
+    /**
+     * Sets the category of a product name for all lists: an own product gets it, otherwise an own
+     * product is created (for a standard product an own copy, like the one carrying a photo).
+     * Back to the standard category, an own copy without photo is removed again.
+     */
+    async setProductCategory(name, category) {
+        name = name.trim();
+        if (!name) return;
+        const own = ownProduct(name);
+        const standard = Alpine.store('data').products.find((product) => product.is_public && sameName(product.name, name));
+        const standardCategory = standard && standard.category === category;
+        if (own) {
+            const doc = await db.products.findOne(own.id).exec();
+            if (standardCategory && !own.image) await doc?.remove();
+            else await doc?.incrementalPatch({ category: standardCategory ? null : category });
+            return;
+        }
+        if (standardCategory) return;
+        await db.products.insert({ id: uuid7(), name: standard?.name ?? name.slice(0, 255), category });
+    },
+
+    /** Category picker of the products view. */
+    openCategoryPicker(entry) {
+        this.pickingCategory = { name: entry.name, category: categoryOf(entry.name) };
+        this.$nextTick(() => this.$refs.categoryDialog.showModal());
+    },
+    async pickCategory(category) {
+        const { name } = this.pickingCategory;
+        this.$refs.categoryDialog.close();
+        await this.setProductCategory(name, category);
+    },
 
     async toggle(item) {
         await (await db.items.findOne(item.id).exec())?.incrementalPatch({ done: !item.done });
     },
 
     edit(item) {
-        this.editing = { ...item, amount: item.amount ?? '', stores: [...(item.stores ?? [])], storeText: '', recipes: item.recipes ?? [] };
+        const category = categoryOf(item.name);
+        this.editing = { ...item, amount: item.amount ?? '', stores: [...(item.stores ?? [])], storeText: '', recipes: item.recipes ?? [], category, shownCategory: category };
         this.$nextTick(() => this.$refs.editDialog.showModal());
     },
 
@@ -931,7 +996,7 @@ Alpine.data('shoppinglist', () => ({
     },
 
     async saveItem() {
-        const { id, name, amount, unit, note } = this.editing;
+        const { id, name, amount, unit, note, category, shownCategory } = this.editing;
         // A shop typed but not picked yet counts too.
         const typed = await this.storeTagFor(this.editing.storeText);
         // Plain arrays: RxDB cannot clone Alpine's proxies (BroadcastChannel to other tabs).
@@ -948,7 +1013,9 @@ Alpine.data('shoppinglist', () => ({
                 stores,
                 note: note?.trim().slice(0, 255) || null,
             });
-            await remember('products', name.trim());
+            // A changed category belongs to the product (all lists); creates it like remember() if needed.
+            if (category !== shownCategory) await this.setProductCategory(name, category);
+            else await remember('products', name.trim());
             if (unit?.trim() && !this.unitNames.some((known) => sameName(known, unit))) await remember('units', unit.trim());
         }
         this.closeEdit();
@@ -1000,9 +1067,9 @@ Alpine.data('shoppinglist', () => ({
         try {
             if (product?.image) await api.delete(`/products/${product.id}/image`);
             await this.applyImage(this.editing.name, null);
-            // Without its photo an own copy of a standard product is not needed anymore.
+            // Without its photo (and an own category) an own copy of a standard product is not needed anymore.
             const standard = Alpine.store('data').products.some((each) => each.is_public && sameName(each.name, product?.name ?? ''));
-            if (product && standard) await (await db.products.findOne(product.id).exec())?.remove();
+            if (product && standard && !product.category) await (await db.products.findOne(product.id).exec())?.remove();
         } catch {
             Alpine.store('notice').show(this.$t('This needs an internet connection.'));
         } finally {
@@ -1172,10 +1239,11 @@ Alpine.data('shoppinglist', () => ({
     // ---- sorting (lists overview: per user, items: per list)
 
     sorts: SORTS,
+    itemSorts: ITEM_SORTS,
 
     sortLabel(sort) {
         return {
-            manual: this.$t('Custom'), name_asc: 'A–Z', name_desc: 'Z–A', newest: this.$t('Newest'), oldest: this.$t('Oldest'),
+            manual: this.$t('Custom'), name_asc: 'A–Z', name_desc: 'Z–A', newest: this.$t('Newest'), oldest: this.$t('Oldest'), category: this.$t('By category'),
         }[sort];
     },
 
@@ -1189,12 +1257,13 @@ Alpine.data('shoppinglist', () => ({
 
     /**
      * A row was dragged (resources/js/swipe.js): the shown order becomes the custom order.
+     * `shown`: the rows of the dragged one's group (a category heading), default all shown rows.
      */
-    async moveRow(kind, { from, to }) {
+    async moveRow(kind, { from, to }, shown = null) {
         const ids = (kind === 'lists' ? this.lists : this.openItems).map((doc) => doc.id);
-        const shownDocs = kind === 'lists' ? this.shownLists : this.shownOpenItems;
+        const shownDocs = shown ?? (kind === 'lists' ? this.shownLists : this.shownOpenItems);
         if (shownDocs.length !== ids.length) {
-            // Filtered (lists by kind, items by shop): move it next to the row it was dropped on, hidden rows stay put.
+            // Filtered (lists by kind, items by shop) or grouped by category: move it next to the row it was dropped on, other rows stay put.
             const shown = shownDocs.map((doc) => doc.id);
             const [moved, target] = [shown[from], shown[to]];
             ids.splice(ids.indexOf(moved), 1);
@@ -1334,8 +1403,8 @@ async function remember(collection, name) {
 }
 
 /**
- * An own product with the name of a standard product only carries the user's photo of it:
- * the standard product is shown with that photo instead of listing both.
+ * An own product with the name of a standard product only carries the user's photo or category
+ * of it: the standard product is shown with them instead of listing both.
  */
 function withOwnImages(products) {
     // Like sameName: case and spaces are ignored, accents not.
@@ -1345,9 +1414,23 @@ function withOwnImages(products) {
 
     return products
         .filter((product) => product.is_public || !standard.has(key(product.name)))
-        .map((product) => (product.is_public && own.get(key(product.name))?.image
-            ? { ...product, image: own.get(key(product.name)).image }
-            : product));
+        .map((product) => {
+            const copy = product.is_public ? own.get(key(product.name)) : null;
+
+            return copy ? { ...product, image: copy.image ?? product.image, category: copy.category ?? product.category } : product;
+        });
+}
+
+/**
+ * Category of an item or product name (categories.js); the resolver is built again whenever
+ * the products change.
+ */
+let resolver = { products: null, resolve: null };
+function categoryOf(name) {
+    const products = Alpine.store('data').products;
+    if (resolver.products !== products) resolver = { products, resolve: categoryResolver(products) };
+
+    return resolver.resolve(name);
 }
 
 function ownProduct(name) {

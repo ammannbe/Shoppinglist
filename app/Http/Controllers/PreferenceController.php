@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\ProductCategories;
 use App\Support\ShopRegions;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -23,11 +24,16 @@ class PreferenceController extends Controller
         'country' => null,
         // Region per shop with regional offers (tag => App\Support\ShopRegions key); offers of other regions are hidden.
         'regions' => [],
+        // Order of the categories when items are sorted by category (keys; empty or missing ones: default order).
+        'category_order' => [],
     ];
 
     public const COUNTRIES = ['CH', 'DE', 'AT'];
 
     public const SORTS = ['manual', 'name_asc', 'name_desc', 'newest', 'oldest'];
+
+    /** Items of a list can also be grouped by product category (preferences.category_order). */
+    public const ITEM_SORTS = [...self::SORTS, 'category'];
 
     public function update(Request $request): Response
     {
@@ -38,6 +44,8 @@ class PreferenceController extends Controller
             'hidden_stores.*' => ['string', 'max:255'],
             'country' => ['sometimes', Rule::in(self::COUNTRIES)],
             'regions' => ['sometimes', 'array:'.implode(',', array_keys(ShopRegions::ALL))],
+            'category_order' => ['sometimes', 'array', 'max:'.count(ProductCategories::keys())],
+            'category_order.*' => ['string', 'distinct', Rule::in(ProductCategories::keys())],
             ...collect(ShopRegions::ALL)->mapWithKeys(fn (array $regions, string $tag) => ["regions.{$tag}" => ['nullable', Rule::in(array_keys($regions))]])->all(),
         ]);
         if (isset($validated['regions'])) {

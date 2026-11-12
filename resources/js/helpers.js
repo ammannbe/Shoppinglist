@@ -233,13 +233,15 @@ export function byPosition(fallback) {
 }
 
 /**
- * Comparator for a sort option: manual (position), name_asc, name_desc, newest, oldest.
+ * Comparator for a sort option: manual (position), name_asc, name_desc, newest, oldest, category
+ * (A–Z here, grouped by category afterwards: categories.js sortByCategory).
  * IDs are UUID v7, so they follow the creation time.
  */
 export function compareBy(sort, byName, fallback) {
     const byId = (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
     switch (sort) {
-        case 'name_asc': return byName;
+        case 'name_asc':
+        case 'category': return byName;
         case 'name_desc': return (a, b) => byName(b, a);
         case 'newest': return (a, b) => byId(b, a);
         case 'oldest': return byId;

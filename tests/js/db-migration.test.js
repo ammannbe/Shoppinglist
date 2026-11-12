@@ -54,4 +54,27 @@ describe('local database upgrade', () => {
         expect(list).toMatchObject({ name: 'Migros', kind: 'shopping', version: 2 });
         await db.remove();
     });
+
+    it('migrates products stored before the categories', async () => {
+        const storage = getRxStorageMemory();
+        const name = `migrationproducts${Date.now()}`;
+
+        // Products schema version 1 (before the category).
+        const old = await createRxDatabase({ name, storage, multiInstance: false });
+        const { category, ...properties } = schemas.products.properties;
+        await old.addCollections({
+            ...Object.fromEntries(['lists', 'items', 'units', 'stores'].map((collection) => [collection, { schema: schemas[collection], migrationStrategies: schemas.migrations[collection] }])),
+            products: {
+                schema: { ...schemas.products, version: 1, properties },
+                migrationStrategies: { 1: schemas.migrations.products[1] },
+            },
+        });
+        await old.products.insert({ id: '0190a0b0-0000-7000-8000-000000000004', name: 'Tofu', image: null, is_public: false, version: 2, updated_at: null });
+        await old.close();
+
+        const db = await createDatabase({ storage, name, multiInstance: false });
+        const product = (await db.products.findOne('0190a0b0-0000-7000-8000-000000000004').exec()).toJSON();
+        expect(product).toMatchObject({ name: 'Tofu', category: null, version: 2 });
+        await db.remove();
+    });
 });

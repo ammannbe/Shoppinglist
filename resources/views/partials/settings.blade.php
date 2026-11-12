@@ -47,6 +47,13 @@
             </span>
             <span aria-hidden="true">›</span>
         </a>
+        <a href="#/categories" class="flex items-center justify-between gap-3 p-4 hover:bg-stone-50">
+            <span>
+                <span class="block" x-text="`🧺 ${$t('Categories')}`"></span>
+                <span class="block text-sm text-stone-500" x-text="$t('Order when sorting by category')"></span>
+            </span>
+            <span aria-hidden="true">›</span>
+        </a>
         <a href="#/install" class="flex items-center justify-between gap-3 p-4 hover:bg-stone-50">
             <span>
                 <span class="block" x-text="`📲 ${$t('Install app')}`"></span>
@@ -171,4 +178,21 @@
             </template>
         </div>
     </div>
+</section>
+
+{{-- Order of the categories when the items are sorted by category (preferences.category_order) --}}
+<section x-show="route.view === 'categories'" class="space-y-4">
+    <p class="text-stone-600" x-text="$t('Sort a list by category to find the items faster in the shop. Put the categories in the order you walk through your shop.')"></p>
+    <ol class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
+        <template x-for="(key, index) in categoryOrder" :key="key">
+            <li class="flex items-center gap-2 py-1 pr-1 pl-4">
+                <span class="min-w-0 flex-1 truncate" x-text="categoryLabel(key)"></span>
+                <button type="button" class="grid size-11 place-items-center rounded-lg text-stone-600 hover:bg-stone-100 disabled:opacity-30" :disabled="index === 0"
+                    @click="moveCategory(key, -1)" :aria-label="$t('Move :name up', { name: categoryLabel(key) })">▲</button>
+                <button type="button" class="grid size-11 place-items-center rounded-lg text-stone-600 hover:bg-stone-100 disabled:opacity-30" :disabled="index === categoryOrder.length - 1"
+                    @click="moveCategory(key, 1)" :aria-label="$t('Move :name down', { name: categoryLabel(key) })">▼</button>
+            </li>
+        </template>
+    </ol>
+    <button type="button" class="button-secondary" @click="resetCategoryOrder()" x-text="$t('Reset order')"></button>
 </section>

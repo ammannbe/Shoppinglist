@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ShoppingList;
+use App\Support\ProductCategories;
 use App\Sync\ItemResource;
 use App\Sync\ListResource;
 use App\Sync\ProductResource;
@@ -70,10 +71,12 @@ class SyncController extends Controller
             '*.newDocumentState.note' => ['nullable', 'string', 'max:255'],
             '*.newDocumentState.done' => ['nullable', 'boolean'],
             '*.newDocumentState.position' => ['nullable', 'numeric'],
-            '*.newDocumentState.item_sort' => ['nullable', Rule::in(PreferenceController::SORTS)],
+            '*.newDocumentState.item_sort' => ['nullable', Rule::in(PreferenceController::ITEM_SORTS)],
             // Lists: shopping or pantry, clients from before the pantry lists send none.
             '*.newDocumentState.kind' => ['nullable', Rule::in(ShoppingList::KINDS)],
             '*.newDocumentState.image' => ['nullable', 'uuid'],
+            // Products: category key, clients from before the categories send none.
+            '*.newDocumentState.category' => ['nullable', Rule::in(ProductCategories::keys())],
         ]);
 
         abort_if(count($rows) > 500, 413);

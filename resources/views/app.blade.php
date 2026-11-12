@@ -39,6 +39,7 @@
                 <span x-show="route.view === 'products'" class="block truncate" x-text="$t('Products')"></span>
                 <span x-show="route.view === 'units'" class="block truncate" x-text="$t('Units')"></span>
                 <span x-show="route.view === 'stores'" class="block truncate" x-text="$t('Shops')"></span>
+                <span x-show="route.view === 'categories'" class="block truncate" x-text="$t('Categories')"></span>
                 <span x-show="route.view === 'offline'" class="block truncate" x-text="$t('Offline')"></span>
                 <template x-if="route.view === 'list' && list">
                     <span class="block min-w-0">
@@ -212,7 +213,7 @@
 
                     <p x-show="!openItems.length" class="py-6 text-center text-stone-500" x-text="inPantry ? $t('Nothing at home yet.') : $t('Nothing to buy.')"></p>
 
-                    <x-sort-select x-show="openItems.length > 1" value="itemSort" change="setItemSort($event.target.value)" />
+                    <x-sort-select x-show="openItems.length > 1" value="itemSort" change="setItemSort($event.target.value)" sorts="itemSorts" />
 
                     {{-- Filter by shop (this device): items without a shop are always shown --}}
                     <div x-show="listStoreTags.length > 1 || storeFilter.length" class="mb-3 flex flex-wrap items-center gap-1.5" role="group" :aria-label="$t('Filter by shop')">
@@ -231,14 +232,22 @@
                     <p x-show="shownOpenItems.length < openItems.length" class="mb-2 text-sm text-stone-500"
                         x-text="$t('Hidden (other shops): :count', { count: openItems.length - shownOpenItems.length })"></p>
 
-                    <ul class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white" x-show="shownOpenItems.length" @row-move="moveRow('items', $event.detail)">
-                        <template x-for="item in shownOpenItems" :key="item.id">
-                            <x-swipe-row actions="itemActions(item)" x-bind:data-sort-id="item.id">
-                                {{-- Checkbox checks off, tap on the row edits; delete/move via swipe, long press or "…" --}}
-                                <x-item-row />
-                            </x-swipe-row>
+                    {{-- Sorted by category: one group per category with its heading, otherwise one group without --}}
+                    <div class="space-y-4" x-show="shownOpenItems.length">
+                        <template x-for="group in shownOpenGroups" :key="group.key ?? 'all'">
+                            <div>
+                                <h2 x-show="group.key" class="mb-1.5 text-sm font-medium text-stone-600" x-text="categoryLabel(group.key)"></h2>
+                                <ul class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white" @row-move="moveRow('items', $event.detail, group.items)">
+                                    <template x-for="item in group.items" :key="item.id">
+                                        <x-swipe-row actions="itemActions(item)" x-bind:data-sort-id="item.id">
+                                            {{-- Checkbox checks off, tap on the row edits; delete/move via swipe, long press or "…" --}}
+                                            <x-item-row />
+                                        </x-swipe-row>
+                                    </template>
+                                </ul>
+                            </div>
                         </template>
-                    </ul>
+                    </div>
 
                     <div x-show="doneItems.length" class="mt-6">
                         <div class="mb-2 flex items-center justify-between">
@@ -312,6 +321,7 @@
                                     <span x-show="entry.code" class="grid h-5 min-w-5 shrink-0 place-items-center rounded bg-orange-100 px-1 text-xs font-semibold text-orange-800" x-text="entry.code"></span>
                                     <img x-show="entry.image" :src="imageUrl(entry.image, 'thumb')" @click.stop="openImage(entry.image)" :alt="$t('Show photo')" loading="lazy" decoding="async" class="size-10 shrink-0 cursor-zoom-in rounded-md bg-stone-100 object-cover">
                                     <span class="min-w-0 flex-1 truncate py-1" x-text="entry.name"></span>
+                                    <template x-if="route.view === 'products'"><x-category-button /></template>
                                 </span>
                             </x-swipe-row>
                         </template>
@@ -324,6 +334,7 @@
                                     <img x-show="entry.image" :src="imageUrl(entry.image, 'thumb')" @click="openImage(entry.image)" :alt="$t('Show photo')" loading="lazy" decoding="async" class="-my-1 size-10 shrink-0 cursor-zoom-in rounded-md bg-stone-100 object-cover">
                                     <img x-show="route.view === 'stores' && storeIconUrl(entry)" :src="storeIconUrl(entry)" alt="" class="h-6 w-auto max-w-20 shrink-0 rounded bg-white object-contain">
                                     <span class="min-w-0 flex-1 truncate" x-text="entry.name"></span>
+                                    <template x-if="route.view === 'products'"><x-category-button /></template>
                                     {{-- Standard shops can be hidden from the shop choice (per user) --}}
                                     <label x-show="route.view === 'stores'" class="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-stone-600">
                                         <input type="checkbox" class="size-4 accent-emerald-700" :checked="!storeHidden(entry)" @change="toggleStoreHidden(entry)">
@@ -406,6 +417,15 @@
                         </span>
                     </label>
                 </div>
+                {{-- Category of the product (all lists): from its product, otherwise guessed from the name --}}
+                <label class="block">
+                    <span class="label" x-text="$t('Category for all “:name”', { name: editing.name.trim() || '…' })"></span>
+                    <select x-model="editing.category" class="field w-full">
+                        <template x-for="key in categoryOrder" :key="key">
+                            <option :value="key" x-text="categoryLabel(key)" :selected="key === editing.category"></option>
+                        </template>
+                    </select>
+                </label>
                 {{-- Shops: picked ones as chips; a typed unknown shop becomes an own shop without code --}}
                 <div x-show="!inPantry">
                     <label for="edit-store" class="label" x-text="$t('Shops')"></label>
@@ -633,6 +653,29 @@
                 </ul>
                 <div class="flex justify-end">
                     <button type="button" class="button-secondary" @click="$refs.moveDialog.close()" x-text="$t('Cancel')"></button>
+                </div>
+            </div>
+        </template>
+    </dialog>
+
+    {{-- Category of a product (products view) --}}
+    <dialog x-ref="categoryDialog" class="dialog" @close="pickingCategory = null">
+        <template x-if="pickingCategory">
+            <div class="space-y-4">
+                <h2 class="font-semibold" x-text="$t('Category for all “:name”', { name: pickingCategory.name })"></h2>
+                <ul class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200">
+                    <template x-for="key in categoryOrder" :key="key">
+                        <li>
+                            <button type="button" class="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-stone-50" @click="pickCategory(key)"
+                                :aria-pressed="key === pickingCategory.category">
+                                <span x-text="categoryLabel(key)"></span>
+                                <span x-show="key === pickingCategory.category" class="text-emerald-700" aria-hidden="true">✓</span>
+                            </button>
+                        </li>
+                    </template>
+                </ul>
+                <div class="flex justify-end">
+                    <button type="button" class="button-secondary" @click="$refs.categoryDialog.close()" x-text="$t('Cancel')"></button>
                 </div>
             </div>
         </template>

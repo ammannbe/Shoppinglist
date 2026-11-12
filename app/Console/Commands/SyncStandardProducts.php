@@ -3,15 +3,18 @@
 namespace App\Console\Commands;
 
 use App\Models\Product;
+use App\Support\ProductCategories;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Standard products (public, no owner) from database/data/standard-products.csv: adds missing
- * ones, removes the ones no longer listed and deletes own products duplicating a standard one.
- * Own products with an image are kept, they carry the user's photo of the standard product.
+ * ones, sets their category, removes the ones no longer listed and deletes own products
+ * duplicating a standard one. Own products with an image or an own category are kept, they
+ * carry the user's photo or category of the standard product.
  * Idempotent; run by a migration whenever the list changes.
  */
 #[Signature('shoppinglist:standard-products {--dry-run : Only report what would change}')]
@@ -22,33 +25,46 @@ class SyncStandardProducts extends Command
 
     public function handle(): int
     {
-        $names = self::names();
+        $products = self::products();
         $dry = (bool) $this->option('dry-run');
-        $counts = ['added' => 0, 'removed' => 0, 'duplicates' => 0, 'kept with image' => 0];
+        // Earlier migrations run this command before the category column exists.
+        $categories = Schema::hasColumn('products', 'category');
+        $counts = ['added' => 0, 'category set' => 0, 'removed' => 0, 'duplicates' => 0, 'kept (image or category)' => 0];
 
-        DB::transaction(function () use ($names, $dry, &$counts) {
+        DB::transaction(function () use ($products, $dry, $categories, &$counts) {
             $public = Product::whereNull('owner_id')->get()->keyBy(fn (Product $product) => self::key($product->name));
 
-            foreach ($names as $key => $name) {
-                if (! $public->has($key)) {
+            foreach ($products as $key => ['name' => $name, 'category' => $category]) {
+                $product = $public->get($key);
+                if ($product === null) {
                     $counts['added']++;
-                    $dry || Product::create(['name' => $name]);
+                    $dry || Product::create(['name' => $name, ...($categories ? ['category' => $category] : [])]);
+                } elseif ($categories && $product->category !== $category) {
+                    $counts['category set']++;
+                    if (! $dry) {
+                        // A new version and timestamp, so the clients pull it again.
+                        $product->category = $category;
+                        $product->version++;
+                        $product->save();
+                    }
                 }
             }
 
             foreach ($public as $key => $product) {
-                if (! isset($names[$key])) {
+                if (! isset($products[$key])) {
                     $counts['removed']++;
                     $dry || $product->delete();
                 }
             }
 
-            Product::whereNotNull('owner_id')->lazyById()->each(function (Product $product) use ($names, $dry, &$counts) {
-                if (! isset($names[self::key($product->name)])) {
+            Product::whereNotNull('owner_id')->lazyById()->each(function (Product $product) use ($products, $dry, $categories, &$counts) {
+                $standard = $products[self::key($product->name)] ?? null;
+                if ($standard === null) {
                     return;
                 }
-                if ($product->image !== null) {
-                    $counts['kept with image']++;
+                $ownCategory = $categories && $product->category !== null && $product->category !== $standard['category'];
+                if ($product->image !== null || $ownCategory) {
+                    $counts['kept (image or category)']++;
 
                     return;
                 }
@@ -72,11 +88,21 @@ class SyncStandardProducts extends Command
      */
     public static function names(): array
     {
+        return array_map(fn (array $product) => $product['name'], self::products());
+    }
+
+    /**
+     * @return array<string, array{name: string, category: string|null}> key => name and category key
+     */
+    public static function products(): array
+    {
         $rows = array_map('str_getcsv', file(database_path(self::FILE), FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES));
         array_shift($rows);
 
-        return collect($rows)->map(fn (array $row) => trim($row[0]))->filter()
-            ->keyBy(fn (string $name) => self::key($name))->all();
+        return collect($rows)
+            ->map(fn (array $row) => ['name' => trim($row[0]), 'category' => ProductCategories::fromCsv($row[1] ?? null)])
+            ->filter(fn (array $product) => $product['name'] !== '')
+            ->keyBy(fn (array $product) => self::key($product['name']))->all();
     }
 
     /** Same product: case and spaces are ignored (like the client's sameName). */

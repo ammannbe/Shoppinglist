@@ -16,7 +16,7 @@ export const lists = {
         name: { type: 'string', maxLength: 255 },
         // shopping or pantry (what is at home: checked items are used up), set by the owner.
         kind: { type: 'string', default: 'shopping' },
-        // Sort of the items: manual, name_asc, name_desc, newest, oldest (null: manual).
+        // Sort of the items: manual, name_asc, name_desc, newest, oldest, category (null: manual).
         item_sort: { type: ['string', 'null'] },
         owner_email: { type: ['string', 'null'] },
         is_owner: { type: 'boolean', default: true },
@@ -71,7 +71,7 @@ export const items = {
 };
 
 export const products = {
-    version: 1,
+    version: 2,
     primaryKey: 'id',
     type: 'object',
     properties: {
@@ -79,6 +79,9 @@ export const products = {
         name: { type: 'string', maxLength: 255 },
         // Image id, uploaded via POST /products/{id}/image (see ImageController).
         image: { type: ['string', 'null'] },
+        // Category key (database/data/product-categories.json), null: none (an own copy of a
+        // standard product uses the standard one, see categories.js).
+        category: { type: ['string', 'null'], default: null },
         is_public: { type: 'boolean', default: false },
         ...syncFields,
     },
@@ -137,7 +140,7 @@ export const migrations = {
     },
     // Codes became optional.
     stores: { 1: (doc) => doc, 2: (doc) => ({ icon: null, countries: [], ...doc }) },
-    products: { 1: (doc) => ({ ...doc, image: null }) },
+    products: { 1: (doc) => ({ ...doc, image: null }), 2: (doc) => ({ category: null, ...doc }) },
     // Units were pull only, all of them public.
     units: { 1: (doc) => ({ ...doc, is_public: true, version: 1 }) },
 };

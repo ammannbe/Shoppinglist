@@ -19,6 +19,8 @@ describe('local migrations', () => {
         expect(schemas.migrations.lists[3]({ id: 'l', name: 'Coop' })).toMatchObject({ households: [] });
         expect(schemas.migrations.lists[4]({ id: 'l', name: 'Coop' })).toMatchObject({ kind: 'shopping' });
         expect(schemas.migrations.lists[4]({ id: 'l', name: 'Küche', kind: 'pantry' })).toMatchObject({ kind: 'pantry' });
+        expect(schemas.migrations.products[2]({ id: 'p', name: 'Milch' })).toMatchObject({ category: null });
+        expect(schemas.migrations.products[2]({ id: 'p', name: 'Milch', category: 'dairy' })).toMatchObject({ category: 'dairy' });
     });
 
     it('turn the single shop of an item into a list', () => {

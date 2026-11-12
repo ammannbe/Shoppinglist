@@ -1,0 +1,21 @@
+[
+    { "key": "fruit", "label": "Fruit", "csv": "Früchte" },
+    { "key": "vegetables", "label": "Vegetables", "csv": "Gemüse" },
+    { "key": "salad", "label": "Salad", "csv": "Salat" },
+    { "key": "herbs", "label": "Herbs", "csv": "Kräuter" },
+    { "key": "bread", "label": "Bread & bakery", "csv": "Brot & Backwaren" },
+    { "key": "dairy", "label": "Dairy", "csv": "Milchprodukte" },
+    { "key": "cheese", "label": "Cheese", "csv": "Käse" },
+    { "key": "meat_fish", "label": "Meat & fish", "csv": "Fleisch & Fisch" },
+    { "key": "spreads", "label": "Spreads", "csv": "Brotaufstrich" },
+    { "key": "pantry", "label": "Staples", "csv": "Vorräte" },
+    { "key": "spices_sauces", "label": "Spices & sauces", "csv": "Gewürze & Saucen" },
+    { "key": "sweets_snacks", "label": "Sweets & snacks", "csv": "Süsses & Snacks" },
+    { "key": "frozen", "label": "Frozen", "csv": "Tiefkühlprodukte" },
+    { "key": "drinks", "label": "Drinks", "csv": "Getränke" },
+    { "key": "household", "label": "Household", "csv": "Haushalt" },
+    { "key": "personal_care", "label": "Personal care", "csv": "Körperpflege" },
+    { "key": "baby", "label": "Baby", "csv": "Baby" },
+    { "key": "pet", "label": "Pets", "csv": "Haustier" },
+    { "key": "other", "label": "Other", "csv": "Sonstiges" }
+]

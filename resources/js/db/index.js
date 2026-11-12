@@ -15,7 +15,8 @@ export const SYNCED_COLLECTIONS = ['lists', 'items', 'products', 'units', 'store
 // collection's number here as well, so every client pulls the collection once more.
 // stores 2: icon and countries (schema version 2). items 2: recipes[].key (schema version 5).
 // lists 2: households (schema version 3). lists 3: kind (schema version 4).
-const REPLICATION_RUNS = { stores: 2, items: 2, lists: 3 };
+// products 2: category (schema version 2).
+const REPLICATION_RUNS = { stores: 2, items: 2, lists: 3, products: 2 };
 
 /**
  * Local database. Everything the UI shows is read from here, the

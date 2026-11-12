@@ -8,9 +8,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * Product suggestions: public ones (no owner) and the user's own.
+ * Product suggestions: public ones (no owner) and the user's own. `category`: key of
+ * App\Support\ProductCategories (null: none; an own copy of a standard product uses the standard one).
  */
-#[Fillable(['name'])]
+#[Fillable(['name', 'category'])]
 class Product extends Model
 {
     use Syncable;

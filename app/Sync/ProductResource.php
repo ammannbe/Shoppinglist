@@ -17,6 +17,17 @@ class ProductResource extends CatalogResource
      */
     protected function extraFields(Model $model): array
     {
-        return ['image' => $model->image];
+        return ['image' => $model->image, 'category' => $model->category];
+    }
+
+    /**
+     * Clients from before the categories send none: the stored category stays.
+     */
+    protected function attributes(array $new): array
+    {
+        return [
+            ...parent::attributes($new),
+            ...(array_key_exists('category', $new) ? ['category' => $new['category']] : []),
+        ];
     }
 }
