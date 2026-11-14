@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Auth\OidcAccount;
 use App\Auth\OidcLabel;
+use App\Auth\OidcNudge;
 use App\Households\AccountManagerLabel;
 use App\Models\User;
 use App\Services\UserDeletion;
@@ -57,6 +58,8 @@ class AccountController extends Controller
                 'signup_url' => config('login.oidc.signup_url'),
                 // Unlinking and deleting a linked account need a recent OIDC login (OidcAccount::SIGN_IN_TIMEOUT).
                 'confirmed' => $linked && app(OidcAccount::class)->hasRecentSignIn(),
+                // Banner "Link with …" (AUTH_OIDC_NUDGE): null or {days, dismissed_at}.
+                'nudge' => OidcNudge::state($user),
             ] : null,
             // Linked accounts manage their profile (name, address, password) in the AccountManager.
             'manager' => $linked && $managerUrl !== null ? ['name' => AccountManagerLabel::get(), 'url' => $managerUrl] : null,
@@ -82,6 +85,22 @@ class AccountController extends Controller
                 ? __('Last used :date', ['date' => $passkey->last_used_at->locale(app()->getLocale())->isoFormat('LL')])
                 : __('Added :date', ['date' => $passkey->created_at?->locale(app()->getLocale())->isoFormat('LL')]),
         ])->all());
+    }
+
+    /**
+     * "Later" on the banner "Link with …" (App\Auth\OidcNudge). The app hides it right away and sends this
+     * when it is online.
+     */
+    public function dismissOidcNudge(Request $request): JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        if (OidcNudge::applies($user)) {
+            OidcNudge::dismiss($user);
+        }
+
+        return response()->json(['nudge' => OidcNudge::state($user)]);
     }
 
     /**

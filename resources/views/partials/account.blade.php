@@ -1,7 +1,8 @@
 {{-- "Manage account" at the bottom of the settings (resources/js/account.js, AccountController). Part of the app shell:
      no user data here, everything comes from /me. All actions need a connection and are dimmed offline. --}}
 <template x-if="loggedIn && $store.sync.user?.account">
-    <div x-data="accountSettings" class="space-y-6">
+    {{-- account-dialog: "Link now" on the banner (partials/oidc-nudge.blade.php) opens the link dialog --}}
+    <div x-data="accountSettings" class="space-y-6" @account-dialog.window="$event.detail === 'link' && rows?.link && openAccountDialog('link')">
         <div>
             <h2 class="mb-2 text-sm font-medium text-stone-600" x-text="$t('Manage account')"></h2>
             <div class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">

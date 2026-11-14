@@ -25,3 +25,6 @@ Schedule::command('model:prune', ['--model' => [AccountManagerWebhookEvent::clas
 
 // ENTITLEMENTS_DRIVER / AUTH_ADMIN_SOURCE=account-manager: fallback for lost entitlements.changed webhooks.
 Schedule::command('entitlements:sync')->dailyAt('04:30')->withoutOverlapping();
+
+// ACCOUNT_MANAGER_REPORT_USERS: the full list of users (catches up lost single reports, removes deleted users).
+Schedule::command('account-manager:report-users')->dailyAt('04:45')->withoutOverlapping();

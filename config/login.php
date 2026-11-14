@@ -9,8 +9,10 @@ return [
     |
     | E-mail/password and passkey login of the app itself. When disabled, only
     | the addresses in "emergency_emails" may still sign in with a password
-    | (e.g. while the OpenID Connect provider is down). Registration follows
-    | AUTH_LOCAL_REGISTRATION (config/fortify.php). Password reset stays
+    | (e.g. while the OpenID Connect provider is down). Registration:
+    | AUTH_LOCAL_REGISTRATION=false removes the local registration (accounts
+    | only through the OpenID Connect provider, "Register" links go to
+    | AUTH_OIDC_SIGNUP_URL, App\Auth\Registration). Password reset stays
     | available, so that unlinked users without password can set one.
     | Accounts linked to the OpenID Connect login never log in with a
     | password or passkey (App\Auth\OidcAccount), so the emergency
@@ -20,6 +22,7 @@ return [
 
     'local' => [
         'enabled' => (bool) env('AUTH_LOCAL_ENABLED', true),
+        'registration' => (bool) env('AUTH_LOCAL_REGISTRATION', true),
         'emergency_emails' => array_values(array_filter(array_map(
             fn (string $email): string => mb_strtolower(trim($email)),
             explode(',', (string) env('AUTH_LOCAL_EMERGENCY_EMAILS', '')),
@@ -50,6 +53,11 @@ return [
 
         // Only users with this value in the "groups" claim may log in.
         'required_group' => env('AUTH_OIDC_REQUIRED_GROUP') ?: null,
+
+        // Banner "Link with …" for logged-in users without a linked account (App\Auth\OidcNudge).
+        'nudge' => (bool) env('AUTH_OIDC_NUDGE', false),
+        // Days until it comes back after "Later"; empty or 0: never again.
+        'nudge_days' => (int) env('AUTH_OIDC_NUDGE_DAYS') ?: null,
     ],
 
 ];

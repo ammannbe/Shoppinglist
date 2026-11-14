@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Casts\EncryptedArrayOrNull;
+use App\Models\Concerns\ReportsToAccountManager;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Contracts\Translation\HasLocalePreference;
@@ -24,7 +25,7 @@ use LogicException;
 class User extends Authenticatable implements HasLocalePreference, MustVerifyEmail, PasskeyUser
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable, PasskeyAuthenticatable;
+    use HasFactory, Notifiable, PasskeyAuthenticatable, ReportsToAccountManager;
 
     protected static function booted(): void
     {
@@ -53,6 +54,8 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
     {
         return [
             'email_verified_at' => 'datetime',
+            'oidc_nudge_dismissed_at' => 'datetime',
+            'last_login_at' => 'datetime',
             'password' => 'hashed',
             'preferences' => 'array',
             'recipes_connection' => EncryptedArrayOrNull::class,

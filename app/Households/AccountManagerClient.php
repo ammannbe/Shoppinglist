@@ -12,7 +12,8 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 /**
- * API of the AccountManager (docs/HOUSEHOLDS-API.md there, section 3, and docs/ENTITLEMENTS-API.md, section 4):
+ * API of the AccountManager (docs/HOUSEHOLDS-API.md there, section 3, docs/ENTITLEMENTS-API.md, section 4, and
+ * docs/SERVICE-USERS-API.md for the users of this app):
  * HTTP Basic with the service key and the service secret. Every failure is a AccountManagerUnavailable, 404 is an answer.
  *
  * @phpstan-type EntitlementSnapshot array{sub: string, status: string, admin: bool, features: list<string>, version: int}
@@ -153,6 +154,40 @@ class AccountManagerClient
     public function importStatus(): array
     {
         return $this->importStates($this->send(fn (PendingRequest $http) => $http->get('households/import')));
+    }
+
+    /**
+     * Upserts one user of this app (POST /api/service-users).
+     *
+     * @param  array{id: string, email: string, name: string|null, oidc_sub: string|null, last_login_at: string|null, created_at: string|null}  $user
+     */
+    public function upsertUser(array $user): void
+    {
+        $this->send(fn (PendingRequest $http) => $http->post('service-users', $user));
+    }
+
+    /**
+     * The user was deleted in this app (DELETE /api/service-users/{id}, also fine when unknown there).
+     */
+    public function deleteUser(string $id): void
+    {
+        $this->send(fn (PendingRequest $http) => $http->delete('service-users/'.rawurlencode($id)), allowNotFound: true);
+    }
+
+    /**
+     * One request of a full sync (PUT /api/service-users, max. 5000 users). All requests of one sync send the
+     * same start time; the AccountManager removes users not seen since then on the last one (complete).
+     *
+     * @param  list<array<string, mixed>>  $users
+     * @return array{upserted: int, removed: int}
+     */
+    public function syncUsers(array $users, bool $complete, string $startedAt): array
+    {
+        $response = $this->send(fn (PendingRequest $http) => $http
+            ->withHeaders(['X-Sync-Started-At' => $startedAt])
+            ->put('service-users', ['users' => $users, 'complete' => $complete]));
+
+        return ['upserted' => (int) $response->json('upserted', 0), 'removed' => (int) $response->json('removed', 0)];
     }
 
     /**

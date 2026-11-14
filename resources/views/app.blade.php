@@ -97,8 +97,11 @@
         </div>
         <p x-show="$store.sync.status === 'local'" class="notice mt-3">
             <span x-text="$t('Log in to sync your lists across devices and share them.')"></span>
-            <a href="/login" data-online class="font-medium underline" x-text="$t('Log in')"></a> ·
-            <a href="/register" data-online class="font-medium underline" x-text="$t('Register')"></a>
+            <a href="/login" data-online class="font-medium underline" x-text="$t('Log in')"></a>
+            {{-- AUTH_LOCAL_REGISTRATION=false: the provider's signup or no link (App\Auth\Registration) --}}
+            @if ($registerUrl = App\Auth\Registration::url())
+                · <a href="{{ $registerUrl }}" data-online class="font-medium underline" x-text="$t('Register')"></a>
+            @endif
         </p>
         <p x-show="$store.sync.status === 'expired'" class="notice mt-3">
             <span x-text="$t('Your session has expired. Please log in again.')"></span>
@@ -109,6 +112,7 @@
             <span x-text="$t('Please verify your email address to sync.')"></span>
             <a href="/email/verify" data-online class="font-medium underline" x-text="$t('Resend Verification Email')"></a>
         </p>
+        @include('partials.oidc-nudge')
     </div>
 
     <main x-show="$store.sync.status !== 'broken'" class="mx-auto max-w-xl px-3 pt-4 pb-[calc(2rem+env(safe-area-inset-bottom))]">

@@ -795,5 +795,9 @@
     "Reject “:name”": "«:name» ablehnen",
     ":count rejected": ":count abgelehnt",
     "Remove found recipes": "Gefundene Rezepte entfernen",
-    "Remove the found recipes? Planned recipes stay planned.": "Gefundene Rezepte entfernen? Geplante Rezepte bleiben geplant."
+    "Remove the found recipes? Planned recipes stay planned.": "Gefundene Rezepte entfernen? Geplante Rezepte bleiben geplant.",
+    "Later": "Später",
+    "Link now": "Jetzt verknüpfen",
+    "One account for all Narrenhaus apps: sign in once, households and unlocked features everywhere.": "Ein Konto für alle Narrenhaus-Apps: einmal anmelden, Haushalte und Freischaltungen überall.",
+    "Registering is not possible here.": "Eine Registrierung ist hier nicht möglich."
 }

@@ -85,7 +85,7 @@ class AccountTest extends TestCase
         $this->actingAs($user)->getJson('/me')->assertOk()
             ->assertJsonPath('account', [
                 'has_password' => true,
-                'oidc' => ['enabled' => true, 'provider' => 'Pocket ID', 'signup_url' => null, 'confirmed' => false],
+                'oidc' => ['enabled' => true, 'provider' => 'Pocket ID', 'signup_url' => null, 'confirmed' => false, 'nudge' => null],
                 'manager' => null,
                 'passkeys' => 1,
             ])

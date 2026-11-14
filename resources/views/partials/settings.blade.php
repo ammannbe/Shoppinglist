@@ -5,8 +5,11 @@
         <h2 class="mb-2 text-sm font-medium text-stone-600" x-text="$t('Account')"></h2>
         <p class="rounded-lg border border-stone-200 bg-white p-4">
             <span x-text="$t('Log in to sync your lists across devices and share them.')"></span>
-            <a href="/login" data-online class="font-medium underline" x-text="$t('Log in')"></a> ·
-            <a href="/register" data-online class="font-medium underline" x-text="$t('Register')"></a>
+            <a href="/login" data-online class="font-medium underline" x-text="$t('Log in')"></a>
+            {{-- AUTH_LOCAL_REGISTRATION=false: the provider's signup or no link (App\Auth\Registration) --}}
+            @if ($registerUrl = App\Auth\Registration::url())
+                · <a href="{{ $registerUrl }}" data-online class="font-medium underline" x-text="$t('Register')"></a>
+            @endif
         </p>
     </div>
 

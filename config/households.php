@@ -39,6 +39,10 @@ return [
         'key' => env('ACCOUNT_MANAGER_SERVICE_KEY'),
         'secret' => env('ACCOUNT_MANAGER_SECRET'),
         'report_shares' => (bool) env('ACCOUNT_MANAGER_REPORT_SHARES', true),
+        // Report the app's users to the AccountManager (App\Households\AccountManagerUsers): after login,
+        // registration, linking and profile changes, deletions, and daily account-manager:report-users.
+        // Independent of the driver, needs url, key and secret.
+        'report_users' => (bool) env('ACCOUNT_MANAGER_REPORT_USERS', false),
         'label' => env('ACCOUNT_MANAGER_LABEL'),
     ],
 

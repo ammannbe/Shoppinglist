@@ -83,6 +83,8 @@ Route::middleware('auth')->group(function () {
     Route::get('account/passkeys', [AccountController::class, 'passkeys'])->name('account.passkeys');
     Route::post('account/oidc', [OidcController::class, 'link'])->middleware('throttle:5,1')->name('oidc.link');
     Route::delete('account/oidc', [OidcController::class, 'destroy'])->name('oidc.unlink');
+    // "Later" on the banner "Link with …" (AUTH_OIDC_NUDGE).
+    Route::post('account/oidc-nudge', [AccountController::class, 'dismissOidcNudge'])->middleware('throttle:30,1')->name('oidc.nudge.dismiss');
 
     // Accepting proves the address (the link came by mail), so unverified users may accept.
     Route::post('households/invitations/{token}', [HouseholdInvitationController::class, 'accept'])

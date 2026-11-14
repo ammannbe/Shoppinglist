@@ -1,5 +1,6 @@
 import Alpine from 'alpinejs';
 import { accountSettings } from './account.js';
+import { oidcNudge } from './oidc-nudge.js';
 import { addRxPlugin } from 'rxdb/plugins/core';
 import { CATEGORY_LABELS, categoryOrder, categoryResolver, groupByCategory, moveCategory, sortByCategory } from './categories.js';
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
@@ -122,6 +123,7 @@ Alpine.data('planner', planner);
 Alpine.data('offersPool', offersPool);
 Alpine.data('recipeHistory', recipeHistory);
 Alpine.data('accountSettings', () => accountSettings({ ownerKey: OWNER_KEY }));
+Alpine.data('oidcNudge', () => oidcNudge());
 
 // The products/units/shops view renders this many rows at a time ("Show more" adds as many).
 const CATALOG_PAGE = 200;

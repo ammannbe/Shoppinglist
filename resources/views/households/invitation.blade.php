@@ -19,8 +19,8 @@
         @case ('guest')
             <p class="mb-4 text-sm">{{ __('Log in or register with :email to accept the invitation.', ['email' => $invitation->email]) }}</p>
             <a href="{{ route('login') }}" class="button mb-3 flex w-full items-center justify-center">{{ __('Log in') }}</a>
-            @if (Route::has('register'))
-                <a href="{{ route('register') }}" class="button-secondary flex w-full items-center justify-center">{{ __('Register') }}</a>
+            @if ($registerUrl = App\Auth\Registration::url())
+                <a href="{{ $registerUrl }}" class="button-secondary flex w-full items-center justify-center">{{ __('Register') }}</a>
             @endif
             @break
         @case ('other_account')

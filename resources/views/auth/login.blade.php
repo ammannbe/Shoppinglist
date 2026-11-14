@@ -38,8 +38,8 @@
 
         <p class="mt-6 flex justify-between text-sm">
             <a class="underline" href="{{ route('password.request') }}">{{ __('Forgot your password?') }}</a>
-            @if (Route::has('register'))
-                <a class="underline" href="{{ route('register') }}">{{ __('Register') }}</a>
+            @if ($registerUrl = App\Auth\Registration::url())
+                <a class="underline" href="{{ $registerUrl }}">{{ __('Register') }}</a>
             @endif
         </p>
     @endif

@@ -372,7 +372,7 @@ class OidcLinkedAccountTest extends TestCase
         $this->actingAs($user)->getJson('/me')
             ->assertJsonPath('linked', true)
             ->assertJsonPath('account.has_password', false)
-            ->assertJsonPath('account.oidc', ['enabled' => true, 'provider' => 'Pocket ID', 'signup_url' => null, 'confirmed' => false])
+            ->assertJsonPath('account.oidc', ['enabled' => true, 'provider' => 'Pocket ID', 'signup_url' => null, 'confirmed' => false, 'nudge' => null])
             ->assertJsonPath('account.passkeys', 0);
         $this->getJson(route('account.passkeys'))->assertForbidden();
         $this->postJson(route('oidc.link'))->assertForbidden();
