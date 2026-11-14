@@ -57,8 +57,20 @@ export default defineConfig({
                         expiration: { maxEntries: 500, maxAgeSeconds: 60 * 60 * 24 * 365 },
                         cacheableResponse: { statuses: [200] },
                     },
+                }, {
+                    // Images of announcements (AccountManager, public, a new image gets a new ?v=): the news offline.
+                    urlPattern: ({ url }) => /^\/announcements\/[^/]+\/image$/.test(url.pathname),
+                    handler: 'CacheFirst',
+                    options: {
+                        cacheName: 'announcement-images',
+                        expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 * 24 * 180 },
+                        // Cross-origin images without CORS are opaque (status 0).
+                        cacheableResponse: { statuses: [0, 200] },
+                    },
                 }],
                 cleanupOutdatedCaches: true,
+                // Push notifications of announcements (public/push-sw.js).
+                importScripts: ['/push-sw.js'],
             },
         }),
     ],

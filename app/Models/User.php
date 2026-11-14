@@ -19,13 +19,23 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Passkeys\Contracts\PasskeyUser;
 use Laravel\Passkeys\PasskeyAuthenticatable;
 use LogicException;
+use NotificationChannels\WebPush\HasPushSubscriptions;
 
 #[Fillable(['name', 'email', 'password', 'locale'])]
 #[Hidden(['password', 'remember_token', 'recipes_connection'])]
 class User extends Authenticatable implements HasLocalePreference, MustVerifyEmail, PasskeyUser
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable, PasskeyAuthenticatable, ReportsToAccountManager;
+    use HasFactory, HasPushSubscriptions, Notifiable, PasskeyAuthenticatable, ReportsToAccountManager;
+
+    /**
+     * Announcements by email: maintenance notices only until the user chooses (AnnouncementDispatcher).
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'announcement_emails' => 'maintenance',
+    ];
 
     protected static function booted(): void
     {

@@ -117,6 +117,56 @@
         </div>
     </fieldset>
 
+    {{-- Announcements (ANNOUNCEMENTS_DRIVER=account-manager): push on this device and news by email, both need consent --}}
+    <template x-if="loggedIn && announcementsEnabled">
+        <div>
+            <h2 class="mb-2 text-sm font-medium text-stone-600" x-text="`🔔 ${$t('News')}`"></h2>
+            <div class="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
+                <a href="#/news" class="flex items-center justify-between gap-3 p-4 hover:bg-stone-50">
+                    <span>
+                        <span class="block" x-text="$t('News')"></span>
+                        <span class="block text-sm text-stone-500" x-text="$store.announcements.unread
+                            ? $t(':count unread', { count: $store.announcements.unread })
+                            : $t('New features, hints and maintenance notices')"></span>
+                    </span>
+                    <span aria-hidden="true">›</span>
+                </a>
+                {{-- Push: a subscribed device is the consent (only used for announcements) --}}
+                <div x-show="$store.sync.user?.announcements?.push_key" class="space-y-2 p-4">
+                    <p x-text="$t('Push on this device')"></p>
+                    <template x-if="!$store.push.supported">
+                        <p class="text-sm text-stone-600" x-text="isIos && !$store.install.installed
+                            ? $t('On iPhone and iPad, push notifications only work once the app is added to the home screen (iOS 16.4 or newer).')
+                            : $t('This browser does not support push notifications.')"></p>
+                    </template>
+                    <template x-if="$store.push.supported">
+                        <div class="space-y-2">
+                            <p class="text-sm" :class="$store.push.subscribed ? 'text-emerald-700' : 'text-stone-600'"
+                                x-text="$store.push.subscribed ? $t('Push notifications are on for this device.') : $store.push.permission === 'denied'
+                                    ? $t('Notifications are blocked. Allow them in the settings of the browser or device.')
+                                    : $t('Get news as push notification on this device.')"></p>
+                            <button type="button" x-show="!$store.push.subscribed" class="button" :disabled="$store.push.busy || !$store.sync.online" @click="enablePush()" x-text="$t('Turn on push')"></button>
+                            <button type="button" x-show="$store.push.subscribed" class="button-secondary" :disabled="$store.push.busy" @click="disablePush()" x-text="$t('Turn off push')"></button>
+                        </div>
+                    </template>
+                </div>
+                <label class="block space-y-2 p-4">
+                    <span class="block" x-text="$t('News by email')"></span>
+                    <select class="field w-full" :disabled="busy || !$store.sync.online" @change="setAnnouncementEmails($event.target.value)">
+                        <template x-for="option in [
+                            { value: 'all', label: $t('All news') },
+                            { value: 'maintenance', label: $t('Only maintenance notices') },
+                            { value: 'none', label: $t('None') },
+                        ]" :key="option.value">
+                            <option :value="option.value" x-text="option.label" :selected="($store.sync.user?.announcements?.emails ?? 'maintenance') === option.value"></option>
+                        </template>
+                    </select>
+                    <span class="block text-sm text-stone-500" x-text="$t('Every email has a link to unsubscribe.')"></span>
+                </label>
+            </div>
+        </div>
+    </template>
+
     {{-- AI configured, but not unlocked for this account (Entitlements, shoppinglist.ai) --}}
     <p x-show="loggedIn && $store.sync.user?.assistant_locked" class="notice" x-text="$t('The AI features are not enabled for your account.')"></p>
 

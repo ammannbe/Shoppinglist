@@ -1,8 +1,12 @@
 <?php
 
 use App\Ai\OpenAiClient;
+use App\Announcements\AccountManagerAnnouncements;
+use App\Announcements\AnnouncementDispatcher;
 use App\Entitlements\Entitlements;
 use App\Http\Controllers\AccountController;
+use App\Http\Controllers\AnnouncementController;
+use App\Http\Controllers\AnnouncementUnsubscribeController;
 use App\Http\Controllers\Auth\OidcController;
 use App\Http\Controllers\HouseholdController;
 use App\Http\Controllers\HouseholdInvitationController;
@@ -16,6 +20,7 @@ use App\Http\Controllers\PlannedRecipeController;
 use App\Http\Controllers\PlannerController;
 use App\Http\Controllers\PlannerStateController;
 use App\Http\Controllers\PreferenceController;
+use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\RecipesConnectionController;
 use App\Http\Controllers\SyncController;
 use App\Http\Middleware\EnsureAiFeature;
@@ -23,6 +28,7 @@ use App\Models\Household;
 use App\Recipes\RecipesClient;
 use App\Support\Seasons;
 use App\Support\ShopRegions;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -36,6 +42,12 @@ Route::middleware('throttle:20,1')->group(function () {
     Route::get('auth/oidc/redirect', [OidcController::class, 'redirect'])->name('oidc.redirect');
     Route::get('auth/oidc/callback', [OidcController::class, 'callback'])->name('oidc.callback');
 });
+
+// Unsubscribe link of the announcement mails (signed, no login); POST is also the one-click unsubscribe (RFC 8058).
+Route::get('announcements/unsubscribe/{user}', [AnnouncementUnsubscribeController::class, 'show'])
+    ->middleware(['signed', 'throttle:30,1'])->name('announcements.unsubscribe');
+Route::post('announcements/unsubscribe/{user}', [AnnouncementUnsubscribeController::class, 'store'])
+    ->middleware(['signed', 'throttle:30,1'])->withoutMiddleware(ValidateCsrfToken::class);
 
 // Link of the household invitation mail, also for guests (they log in or register first).
 Route::get('households/invitations/{token}', [HouseholdInvitationController::class, 'show'])
@@ -67,6 +79,12 @@ Route::middleware('auth')->group(function () {
         // Week planner (AI): configured and unlocked for the user; locked: configured, but not for this account.
         'assistant' => OpenAiClient::enabledFor($request->user()),
         'assistant_locked' => OpenAiClient::enabled() && ! OpenAiClient::enabledFor($request->user()),
+        // Announcements (ANNOUNCEMENTS_DRIVER=account-manager): bell, banner, push (VAPID key) and the email setting.
+        'announcements' => AccountManagerAnnouncements::enabled() ? [
+            'push_key' => config('webpush.vapid.public_key') ?: null,
+            'push_devices' => $request->user()->pushSubscriptions()->count(),
+            'emails' => $request->user()->announcement_emails ?? AnnouncementDispatcher::EMAILS_MAINTENANCE,
+        ] : null,
         // The connected recipe app, null when not configured.
         'recipes' => RecipesClient::enabled() ? [
             'name' => config('services.recipes.name'),
@@ -85,6 +103,14 @@ Route::middleware('auth')->group(function () {
     Route::delete('account/oidc', [OidcController::class, 'destroy'])->name('oidc.unlink');
     // "Later" on the banner "Link with …" (AUTH_OIDC_NUDGE).
     Route::post('account/oidc-nudge', [AccountController::class, 'dismissOidcNudge'])->middleware('throttle:30,1')->name('oidc.nudge.dismiss');
+
+    // Announcements (bell, list "News", banner) and their settings; read state per user.
+    Route::get('announcements', [AnnouncementController::class, 'index'])->name('announcements.index');
+    Route::post('announcements/read', [AnnouncementController::class, 'mark'])->middleware('throttle:60,1')->name('announcements.mark');
+    Route::put('announcements/emails', [AnnouncementController::class, 'updateEmails'])->middleware('throttle:30,1')->name('announcements.emails');
+    // Web Push on this device (only used for announcements).
+    Route::post('push-subscriptions', [PushSubscriptionController::class, 'store'])->middleware('throttle:30,1')->name('push.store');
+    Route::delete('push-subscriptions', [PushSubscriptionController::class, 'destroy'])->middleware('throttle:30,1')->name('push.destroy');
 
     // Accepting proves the address (the link came by mail), so unverified users may accept.
     Route::post('households/invitations/{token}', [HouseholdInvitationController::class, 'accept'])

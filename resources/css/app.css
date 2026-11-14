@@ -72,6 +72,29 @@ html.row-held body {
         @apply rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-900;
     }
 
+    /* Text of an announcement (HTML of the AccountManager, partials/news.blade.php) */
+    .news-body {
+        @apply space-y-3 break-words text-stone-800;
+    }
+    .news-body a {
+        @apply text-emerald-700 underline;
+    }
+    .news-body ul {
+        @apply list-disc space-y-1 pl-5;
+    }
+    .news-body ol {
+        @apply list-decimal space-y-1 pl-5;
+    }
+    .news-body h1, .news-body h2, .news-body h3, .news-body h4 {
+        @apply font-semibold;
+    }
+    .news-body code {
+        @apply rounded bg-stone-100 px-1 text-sm;
+    }
+    .news-body blockquote {
+        @apply border-l-4 border-stone-200 pl-3 text-stone-600;
+    }
+
     .check {
         @apply mx-3 grid size-6 shrink-0 place-items-center rounded-full border-2 border-stone-300 hover:border-emerald-600;
     }

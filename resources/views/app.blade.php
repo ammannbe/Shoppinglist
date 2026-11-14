@@ -41,6 +41,7 @@
                 <span x-show="route.view === 'stores'" class="block truncate" x-text="$t('Shops')"></span>
                 <span x-show="route.view === 'categories'" class="block truncate" x-text="$t('Categories')"></span>
                 <span x-show="route.view === 'offline'" class="block truncate" x-text="$t('Offline')"></span>
+                <span x-show="route.view === 'news'" class="block truncate" x-text="$t('News')"></span>
                 <template x-if="route.view === 'list' && list">
                     <span class="block min-w-0">
                         <span x-show="renaming === null" x-text="list.name" @click="startRename()" class="block cursor-text truncate"></span>
@@ -74,6 +75,14 @@
                     broken: $t('Error'),
                 }[$store.sync.status]"></span>
             </span>
+
+            {{-- Announcements: bell with the unread news (resources/js/announcements.js) --}}
+            <a href="#/news" x-show="announcementsEnabled && (tab || route.view === 'list')" class="icon-button relative"
+                :aria-label="$store.announcements.unread ? $t('News (:count unread)', { count: $store.announcements.unread }) : $t('News')">
+                <svg viewBox="0 0 24 24" class="size-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+                <span x-show="$store.announcements.unread" class="absolute top-1 right-1 grid min-w-4 place-items-center rounded-full bg-red-600 px-1 text-[0.65rem] leading-4 font-semibold text-white"
+                    x-text="$store.announcements.unread > 9 ? '9+' : $store.announcements.unread" aria-hidden="true"></span>
+            </a>
 
             <a href="#/settings" x-show="tab || route.view === 'list'" class="icon-button" :aria-label="$t('Settings')">
                 <svg viewBox="0 0 24 24" class="size-6" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10.3 4.3c.4-1.7 3-1.7 3.4 0a1.7 1.7 0 0 0 2.6 1.1c1.5-.9 3.3.8 2.4 2.4a1.7 1.7 0 0 0 1 2.5c1.8.4 1.8 3 0 3.4a1.7 1.7 0 0 0-1 2.6c.9 1.5-.9 3.3-2.4 2.4a1.7 1.7 0 0 0-2.6 1c-.4 1.8-3 1.8-3.4 0a1.7 1.7 0 0 0-2.5-1c-1.6.9-3.3-.9-2.4-2.4a1.7 1.7 0 0 0-1.1-2.6c-1.7-.4-1.7-3 0-3.4a1.7 1.7 0 0 0 1.1-2.5c-.9-1.6.8-3.3 2.4-2.4a1.7 1.7 0 0 0 2.5-1.1z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -113,6 +122,7 @@
             <a href="/email/verify" data-online class="font-medium underline" x-text="$t('Resend Verification Email')"></a>
         </p>
         @include('partials.oidc-nudge')
+        @include('partials.announcement-banner')
     </div>
 
     <main x-show="$store.sync.status !== 'broken'" class="mx-auto max-w-xl px-3 pt-4 pb-[calc(2rem+env(safe-area-inset-bottom))]">
@@ -272,6 +282,7 @@
         </section>
 
         @include('partials.settings')
+        @include('partials.news')
 
         {{-- Products, units and shops suggested when adding items: own ones can be edited, public ones are read-only --}}
         <section x-show="['products', 'units', 'stores'].includes(route.view)" class="space-y-4">

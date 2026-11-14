@@ -12,6 +12,7 @@
     "require": {
         "php": "^8.3",
         "kovah/laravel-socialite-oidc": "^0.8.0",
+        "laravel-notification-channels/webpush": "^13.0",
         "laravel/fortify": "^1.41",
         "laravel/framework": "^13.17",
         "laravel/socialite": "^5.31",

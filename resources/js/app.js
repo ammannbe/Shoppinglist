@@ -1,5 +1,6 @@
 import Alpine from 'alpinejs';
 import { accountSettings } from './account.js';
+import { clearAnnouncements, createAnnouncementsStore } from './announcements.js';
 import { oidcNudge } from './oidc-nudge.js';
 import { addRxPlugin } from 'rxdb/plugins/core';
 import { CATEGORY_LABELS, categoryOrder, categoryResolver, groupByCategory, moveCategory, sortByCategory } from './categories.js';
@@ -9,6 +10,7 @@ import { createDatabase, removeDatabase, startReplication } from './db/index.js'
 import { byPosition, compareBy, csvFirstColumn, csvValue, formatAmount, mergedAmount, nextPosition, normalizeName, parseItemInput, sameName, uuid7 } from './helpers.js';
 import { hasPendingLocale, htmlLang, initialLocale, LOCALES, storeLocale, translate } from './i18n.js';
 import { registerServiceWorker } from './pwa.js';
+import { currentSubscription, pushPermission, pushSupported, subscribePush, unsubscribePush } from './push.js';
 import { shrinkIcon, shrinkImage } from './image.js';
 import { closeDialogThen, closeLayersOnBack } from './layers.js';
 import { createLightboxStore } from './lightbox.js';
@@ -69,6 +71,10 @@ Alpine.store('undo', createUndoStore());
 Alpine.store('prefs', createPrefsStore(api));
 Alpine.store('lightbox', createLightboxStore());
 Alpine.store('install', createInstallStore());
+// Announcements of the AccountManager (bell, news, banner), cached on the device.
+Alpine.store('announcements', createAnnouncementsStore({ api }));
+// Web Push on this device (announcements only).
+Alpine.store('push', { supported: pushSupported(), permission: pushPermission(), subscribed: false, busy: false });
 // New app version ready (service worker waiting).
 Alpine.store('update', {
     apply: null,
@@ -180,6 +186,8 @@ Alpine.data('shoppinglist', () => ({
     // Entries history.go() goes back (navigate), and the hash to open after that (openFromLists).
     navPops: 0,
     navAfter: null,
+    // News unread when the list was opened (highlighted while it stays open).
+    newsFresh: [],
 
     init() {
         const layers = closeLayersOnBack({ menuOpen: () => this.menu !== null, closeMenu: () => { this.menu = null; } });
@@ -206,6 +214,7 @@ Alpine.data('shoppinglist', () => ({
             this.duplicate = null;
             this.catalogSearch = '';
             this.catalogLimit = CATALOG_PAGE;
+            if (this.route.view === 'news') this.openNews(id);
         };
         window.addEventListener('hashchange', parse);
         parse();
@@ -590,6 +599,7 @@ Alpine.data('shoppinglist', () => ({
 
     get backLink() {
         if (['products', 'units', 'stores', 'categories', 'install'].includes(this.route.view)) return '#/settings';
+        if (this.route.view === 'news') return '#/';
         if (this.route.view === 'offers') return '#/planner/offers';
 
         return this.route.view === 'settings' ? this.settingsBack : '#/';
@@ -1362,12 +1372,93 @@ Alpine.data('shoppinglist', () => ({
         }, (error) => { this.shareError = error; });
     },
 
+    // ---- announcements (bell, news, banner) and their channels
+
+    get announcementsEnabled() {
+        return Boolean(Alpine.store('sync').user?.announcements);
+    },
+
+    /** Opening "News" marks all shown ones as read; #/news/<id> (push notification) scrolls to one. */
+    openNews(id = null) {
+        const store = Alpine.store('announcements');
+        this.newsFresh = store.news.filter((item) => !item.read_at).map((item) => item.id);
+        store.markAllRead();
+        if (id) this.$nextTick(() => document.getElementById(`news-${id}`)?.scrollIntoView({ block: 'start' }));
+    },
+
+    newsDate(ms) {
+        return new Date(ms).toLocaleDateString(Alpine.store('i18n').locale.replace('_', '-'), { day: 'numeric', month: 'long', year: 'numeric' });
+    },
+
+    newsType(type) {
+        return {
+            feature: { label: this.$t('New feature'), badge: 'bg-emerald-100 text-emerald-800' },
+            maintenance: { label: this.$t('Maintenance'), badge: 'bg-amber-100 text-amber-800' },
+        }[type] ?? { label: this.$t('Notice'), badge: 'bg-sky-100 text-sky-800' };
+    },
+
+    /** "More" on the banner: the news (or the link) and the banner is done. */
+    openBanner(item) {
+        Alpine.store('announcements').dismiss(item.id);
+        if (item.in_app) this.navigate(`#/news/${item.id}`);
+        else if (item.link) window.open(item.link, '_blank', 'noopener');
+    },
+
+    async setAnnouncementEmails(value) {
+        await this.online(async () => {
+            await api.put('/announcements/emails', { announcement_emails: value });
+            const user = Alpine.store('sync').user;
+            user.announcements = { ...user.announcements, emails: value };
+            localStorage.setItem(USER_KEY, JSON.stringify(user));
+        });
+    },
+
+    get isIos() {
+        return /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    },
+
+    async refreshPush() {
+        const push = Alpine.store('push');
+        push.permission = pushPermission();
+        push.subscribed = Boolean(await currentSubscription().catch(() => null));
+    },
+
+    async enablePush() {
+        const push = Alpine.store('push');
+        push.busy = true;
+        try {
+            await subscribePush(api, Alpine.store('sync').user?.announcements?.push_key);
+            Alpine.store('notice').show(this.$t('Push notifications are on for this device.'));
+        } catch (error) {
+            Alpine.store('notice').show(error?.message === 'denied'
+                ? this.$t('Notifications are blocked. Allow them in the settings of the browser or device.')
+                : this.$t('Push notifications could not be turned on.'));
+        } finally {
+            push.busy = false;
+            await this.refreshPush();
+        }
+    },
+
+    async disablePush() {
+        Alpine.store('push').busy = true;
+        try {
+            await unsubscribePush(api);
+        } catch {
+            Alpine.store('notice').show(this.$t('This needs an internet connection.'));
+        } finally {
+            Alpine.store('push').busy = false;
+            await this.refreshPush();
+        }
+    },
+
     // ---- settings
 
     setLocale,
 
     async logout() {
         await this.online(async () => {
+            // The device's push subscription belongs to this account.
+            await unsubscribePush(api).catch(() => {});
             await api.post('/logout');
             await wipeLocalData();
             location.replace('/');
@@ -1447,6 +1538,7 @@ async function wipeLocalData() {
     localStorage.removeItem(USER_KEY);
     clearPlannerState();
     clearRecipeCache();
+    clearAnnouncements();
 }
 
 async function boot() {
@@ -1505,11 +1597,13 @@ async function connect() {
             block(error.message);
         } else if (error instanceof HttpError && error.status === 401) {
             localStorage.removeItem(USER_KEY);
+            Alpine.store('announcements').clear();
             sync.user = null;
             sync.status = localStorage.getItem(OWNER_KEY) ? 'expired' : 'local';
         } else {
             // Offline: keep working with the local data and the last known account.
             sync.user = JSON.parse(localStorage.getItem(USER_KEY) ?? 'null');
+            Alpine.store('announcements').restore(sync.user);
             sync.status = 'offline';
             window.addEventListener('online', connect, { once: true });
         }
@@ -1524,6 +1618,7 @@ async function connect() {
         return;
     }
     localStorage.setItem(USER_KEY, JSON.stringify(sync.user));
+    Alpine.store('announcements').connect(sync.user);
 
     await Alpine.store('prefs').connect(sync.user);
 
@@ -1597,6 +1692,16 @@ document.addEventListener('click', (event) => {
     Alpine.store('notice').show(translate(Alpine.store('i18n').locale, 'This needs an internet connection.'));
 });
 
+// Announcements: newer ones when the app comes to the foreground or back online, marks made offline are sent.
+const refreshAnnouncements = () => document.visibilityState === 'visible' && Alpine.store('announcements').refresh();
+window.addEventListener('online', () => Alpine.store('announcements').refresh(true));
+document.addEventListener('visibilitychange', refreshAnnouncements);
+
+// A push notification was clicked while the app was open (public/push-sw.js).
+navigator.serviceWorker?.addEventListener('message', (event) => {
+    if (event.data?.type === 'navigate') location.href = event.data.url;
+});
+
 window.Alpine = Alpine;
 Alpine.start();
 // Back from "Connect with <recipe app>" (RecipesConnectionController): show the result once.
@@ -1616,6 +1721,7 @@ if (new URLSearchParams(location.search).get('deleted')) {
     localStorage.removeItem(USER_KEY);
     clearPlannerState();
     clearRecipeCache();
+    clearAnnouncements();
     removeDatabase({ storage: getRxStorageDexie() }).catch(() => {}).finally(() => {
         Alpine.store('notice').show(translate(Alpine.store('i18n').locale, 'Your account has been deleted.'));
         boot();
@@ -1624,3 +1730,4 @@ if (new URLSearchParams(location.search).get('deleted')) {
     boot();
 }
 registerServiceWorker((apply) => { Alpine.store('update').apply = apply; });
+pushSupported() && currentSubscription().then((subscription) => { Alpine.store('push').subscribed = Boolean(subscription); }).catch(() => {});

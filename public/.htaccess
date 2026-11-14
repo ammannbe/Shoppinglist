@@ -27,7 +27,7 @@
 # PWA manifest, the service worker must never be cached by the browser
 AddType application/manifest+json .webmanifest
 <IfModule mod_headers.c>
-    <Files "sw.js">
+    <FilesMatch "^(push-)?sw\.js$">
         Header set Cache-Control "no-cache"
-    </Files>
+    </FilesMatch>
 </IfModule>

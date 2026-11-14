@@ -191,6 +191,45 @@ class AccountManagerClient
     }
 
     /**
+     * Published announcements of this service (ANNOUNCEMENTS-API.md 3.2): without since all of them
+     * (complete list), with since the ones changed or published since then plus the deleted uuids.
+     *
+     * @return array{data: list<array<string, mixed>>, deleted: list<string>, server_time: string}
+     */
+    public function announcements(?string $since = null): array
+    {
+        $response = $this->send(fn (PendingRequest $http) => $http->get('announcements', array_filter(['since' => $since])));
+        $serverTime = $response->json('server_time');
+        $deleted = $response->json('deleted') ?? [];
+
+        if (! is_string($serverTime) || $serverTime === '' || ! is_array($deleted) || ! array_is_list($deleted)) {
+            throw new AccountManagerUnavailable('The AccountManager returned an unexpected answer.');
+        }
+
+        return [
+            'data' => array_values(array_filter($this->list($response->json('data')), 'is_array')),
+            'deleted' => array_values(array_map('strval', array_filter($deleted, 'is_string'))),
+            'server_time' => $serverTime,
+        ];
+    }
+
+    /**
+     * Delivery report of a package (ANNOUNCEMENTS-API.md 3.3): the same batch again replaces its numbers.
+     * False if the announcement is unknown there (404).
+     */
+    public function reportDeliveries(string $uuid, string $channel, int $sent, int $failed, string $batch): bool
+    {
+        $response = $this->send(fn (PendingRequest $http) => $http->post('announcements/'.rawurlencode($uuid).'/deliveries', [
+            'channel' => $channel,
+            'sent' => $sent,
+            'failed' => $failed,
+            'batch' => $batch,
+        ]), allowNotFound: true);
+
+        return ! $response->notFound();
+    }
+
+    /**
      * Validates a snapshot from a webhook or an API answer.
      *
      * @return array{uuid: string, name: string, version: int, members: list<array{sub: string, role: string}>, deleted?: bool}

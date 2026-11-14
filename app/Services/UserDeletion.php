@@ -21,7 +21,7 @@ use Illuminate\Support\Facades\Storage;
  *   (local households: an admin-less one goes to its longest member, an empty one is deleted;
  *   mirrored ones: the AccountManager decides);
  * - products, shops, offers, planned recipes, planner state, passkeys and sessions go with the user
- *   (FK cascades), photos of own products unless items of other lists still show them.
+ *   (FK cascades), push subscriptions, photos of own products unless items of other lists still show them.
  *
  * Idempotent: an already deleted user is not found again.
  */
@@ -45,6 +45,9 @@ class UserDeletion
                     ->where('user_id', $user->id)
                     ->delete();
             }
+
+            // Morph relation without foreign key (announcement reads and deliveries cascade).
+            $user->pushSubscriptions()->delete();
 
             $user->delete();
         });
