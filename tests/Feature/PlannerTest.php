@@ -6,7 +6,9 @@ use App\Ai\Assistant;
 use App\Http\Controllers\OfferController;
 use App\Models\PlannedRecipe;
 use App\Models\User;
+use App\Recipes\RecipesException;
 use App\Support\Seasons;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Encryption\Encrypter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -634,10 +636,17 @@ class PlannerTest extends TestCase
         $this->actingAs($this->connected())->postJson('/planner/recipe-search', ['query' => 'L'])->assertJsonValidationErrors('query');
 
         // An older recipe app without the name search refuses it.
+        $reported = null;
+        app(ExceptionHandler::class)->reportable(function (RecipesException $exception) use (&$reported): void {
+            $reported = $exception;
+        });
         Http::fake(['recipes.test/*' => Http::response(['message' => 'The food ids field is required.'], 422)]);
         $this->actingAs($this->connected())->postJson('/planner/recipe-search', ['query' => 'Lasagne'])
             ->assertStatus(502)
             ->assertJsonPath('message', 'The recipes of Kochbuch could not be loaded.');
+
+        // The log entry says why the recipe app refused it.
+        $this->assertSame(['recipes_response' => ['message' => 'The food ids field is required.']], $reported?->context());
     }
 
     public function test_a_typed_dish_is_planned_and_the_ai_adds_its_ingredients_for_the_list(): void

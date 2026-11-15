@@ -109,7 +109,7 @@ class RecipesClient
         }
 
         if ($response->failed()) {
-            throw new RecipesException('Request failed with status '.$response->status().'.', $response->status());
+            throw RecipesException::fromResponse($response);
         }
 
         return $response->json() ?? [];
