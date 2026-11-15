@@ -17,11 +17,20 @@ const PRODUCTS = [
 ];
 
 describe('categoryOrder', () => {
-    it('appends missing categories in the default order', () => {
+    it('puts a category added later after its predecessor in a saved order', () => {
+        const saved = CATEGORIES.filter((key) => key !== 'vegetarian').reverse();
+        const order = categoryOrder(saved);
+
+        expect(order).toHaveLength(CATEGORIES.length);
+        expect(order.indexOf('vegetarian')).toBe(order.indexOf('meat_fish') + 1);
+    });
+
+    it('adds missing categories after their predecessor in the default order', () => {
         expect(categoryOrder([])).toEqual(CATEGORIES);
         expect(categoryOrder(null)).toEqual(CATEGORIES);
         const order = categoryOrder(['bread', 'unknown', 'fruit', 'bread']);
-        expect(order.slice(0, 3)).toEqual(['bread', 'fruit', 'vegetables']);
+        expect(order.slice(0, 3)).toEqual(['bread', 'dairy', 'cheese']);
+        expect(order.slice(order.indexOf('fruit'), order.indexOf('fruit') + 2)).toEqual(['fruit', 'vegetables']);
         expect(order).toHaveLength(CATEGORIES.length);
     });
 
@@ -54,6 +63,9 @@ describe('categoryResolver', () => {
         expect(categoryOf('Vollkornbrot')).toBe('bread');
         expect(categoryOf('Bergkäse')).toBe('cheese');
         expect(categoryOf('Rinderhackfleisch')).toBe('meat_fish');
+        expect(categoryOf('Vegi-Schnitzel')).toBe('vegetarian');
+        expect(categoryOf('Sojahack')).toBe('vegetarian');
+        expect(categoryOf('Seitan Würfel')).toBe('vegetarian');
         expect(categoryOf('Kartoffeln')).toBe('vegetables');
     });
 
@@ -90,7 +102,7 @@ describe('sorting by category', () => {
         const sorted = sortByCategory([...items].sort(compareBy('category', byName)), categoryOf, categoryOrder([]));
         expect(sorted.map((item) => item.name)).toEqual(['Äpfel', 'Zitronen', 'Brot', 'Vollmilch', 'Grissini']);
 
-        const groups = groupByCategory(sorted, categoryOf, categoryOrder(['dairy']));
+        const groups = groupByCategory(sorted, categoryOf, categoryOrder(['dairy', ...CATEGORIES]));
         expect(groups.map((group) => group.key)).toEqual(['dairy', 'fruit', 'bread', 'other']);
         expect(groups[1].items.map((item) => item.name)).toEqual(['Äpfel', 'Zitronen']);
     });

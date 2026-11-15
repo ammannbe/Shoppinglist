@@ -23,7 +23,7 @@ class StandardProductsTest extends TestCase
         $user = User::factory()->create();
         $duplicate = $this->own($user, ' milch ');
         $withImage = $this->own($user, 'Eier', image: '0198f0f5-3b8f-7a8e-9c3e-1d2f3a4b5c6d');
-        $other = $this->own($user, 'Grissini');
+        $other = $this->own($user, 'Hausgemachter Sirup');
         $retired = Product::create(['name' => 'Gibt es nicht mehr']);
         Product::whereNull('owner_id')->where('name', 'Butter')->forceDelete();
 
@@ -41,9 +41,9 @@ class StandardProductsTest extends TestCase
         $this->artisan('shoppinglist:standard-products')->assertSuccessful();
         $this->assertSame($count, Product::count());
 
-        // The deletion reaches the client.
-        $this->actingAs($user)->getJson('/sync/products/pull?limit=500')->assertOk()
-            ->assertJsonFragment(['id' => $duplicate->id, '_deleted' => true]);
+        // The deletion reaches the client (pulled page by page like the client does).
+        $documents = $this->pullAll($user, 'products');
+        $this->assertContains(['id' => $duplicate->id, '_deleted' => true], array_map(fn (array $document): array => ['id' => $document['id'], '_deleted' => $document['_deleted']], $documents));
     }
 
     public function test_dry_run_changes_nothing(): void

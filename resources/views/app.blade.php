@@ -362,7 +362,9 @@
                     </div>
                 </div>
             </template>
-            <div x-show="catalog.length > shownCatalog.length" class="space-y-2 text-center">
+            {{-- Infinite scroll: the next rows load before this block comes into view; the search always covers all entries. --}}
+            <div x-show="catalog.length > shownCatalog.length" class="space-y-2 text-center"
+                x-init="new IntersectionObserver((entries) => entries.some((entry) => entry.isIntersecting) && catalog.length > shownCatalog.length && showMoreCatalog(), { rootMargin: '600px' }).observe($el)">
                 <p class="text-sm text-stone-500" x-text="$t('Showing :shown of :total.', { shown: shownCatalog.length, total: catalog.length })"></p>
                 <button type="button" class="button-secondary inline-flex items-center gap-2" @click="showMoreCatalog()" :disabled="catalogLoading" :aria-busy="catalogLoading">
                     <x-spinner x-show="catalogLoading" />

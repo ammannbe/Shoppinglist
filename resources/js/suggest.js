@@ -1,6 +1,6 @@
 import Alpine from 'alpinejs';
 import { normalizeName, seasonalFood, splitItemInput, suggestNames, usageOf } from './helpers.js';
-import { storeIconUrl, storeUsage } from './stores.js';
+import { rankStores, storeIconUrl, storeUsage } from './stores.js';
 
 /**
  * Suggestions below a text field, searched in the local products, units and shops.
@@ -66,25 +66,12 @@ export function suggestField({ source, get, set, units = () => [], stores = () =
         },
 
         /**
-         * Shops by name or code: exact, then start, then anywhere in the name; then the most
-         * used ones (recent items weigh more), then by name.
+         * Shops by name or code, all of them (`rankStores`): exact, then start, then anywhere
+         * in the name; then the most used ones (recent items weigh more), then by name.
          */
         storeOptions(query) {
-            const needle = normalizeName(query);
-            const usage = storeUsage(Alpine.store('data').items);
-            const matches = stores().map((store) => {
-                const name = normalizeName(store.name);
-                const code = normalizeName(store.code);
-                const rank = !needle || name === needle || (code && code === needle) ? 0
-                    : name.startsWith(needle) || (code && code.startsWith(needle)) ? 1
-                        : name.includes(needle) ? 2 : -1;
-
-                return { store, rank, score: usage.get(code || name) ?? 0 };
-            }).filter((match) => match.rank >= 0);
-            return matches
-                .sort((a, b) => a.rank - b.rank || b.score - a.score)
-                .slice(0, needle ? 8 : 12)
-                .map(({ store }) => ({ kind: 'store', name: store.name, code: store.code, icon: storeIconUrl(store), onList: false }));
+            return rankStores(stores(), query, storeUsage(Alpine.store('data').items))
+                .map((store) => ({ kind: 'store', name: store.name, code: store.code, icon: storeIconUrl(store), onList: false }));
         },
 
         get visible() {

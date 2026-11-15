@@ -7,6 +7,7 @@
     { "key": "dairy", "label": "Dairy", "csv": "Milchprodukte" },
     { "key": "cheese", "label": "Cheese", "csv": "Käse" },
     { "key": "meat_fish", "label": "Meat & fish", "csv": "Fleisch & Fisch" },
+    { "key": "vegetarian", "label": "Vegetarian & substitutes", "csv": "Vegi & Ersatzprodukte" },
     { "key": "spreads", "label": "Spreads", "csv": "Brotaufstrich" },
     { "key": "pantry", "label": "Staples", "csv": "Vorräte" },
     { "key": "spices_sauces", "label": "Spices & sauces", "csv": "Gewürze & Saucen" },

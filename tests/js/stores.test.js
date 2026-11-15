@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { inCountry, storeIconUrl, storeUsage } from '../../resources/js/stores.js';
+import { inCountry, rankStores, storeIconUrl, storeUsage } from '../../resources/js/stores.js';
 
 // UUID v7 with the creation time `ms`.
 const idAt = (ms) => `${ms.toString(16).padStart(12, '0').replace(/(.{8})(.{4})/, '$1-$2')}-7000-8000-000000000000`;
@@ -35,5 +35,23 @@ describe('shops', () => {
         expect(storeIconUrl({ icon: 'data:image/png;base64,AAAA' })).toBe('data:image/png;base64,AAAA');
         expect(storeIconUrl({ icon: 'unknown' })).toBeNull();
         expect(storeIconUrl({ icon: null })).toBeNull();
+    });
+});
+
+describe('rankStores', () => {
+    const stores = Array.from({ length: 20 }, (_, i) => ({ name: `Laden ${String(i + 1).padStart(2, '0')}`, code: '' }))
+        .concat([{ name: 'Migros', code: 'M' }, { name: 'Coop', code: 'C' }, { name: 'Volg', code: '' }]);
+
+    it('lists every shop without a search: most used first, then by name', () => {
+        const ranked = rankStores(stores, '', new Map([['m', 3], ['volg', 1]]));
+
+        expect(ranked).toHaveLength(stores.length);
+        expect(ranked.slice(0, 4).map((store) => store.name)).toEqual(['Migros', 'Volg', 'Coop', 'Laden 01']);
+    });
+
+    it('finds by code or name: exact, start, anywhere, and keeps all matches', () => {
+        expect(rankStores(stores, 'm', new Map()).map((store) => store.name)).toEqual(['Migros']);
+        expect(rankStores(stores, 'laden', new Map())).toHaveLength(20);
+        expect(rankStores(stores, 'olg', new Map()).map((store) => store.name)).toEqual(['Volg']);
     });
 });

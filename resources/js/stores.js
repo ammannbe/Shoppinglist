@@ -66,3 +66,29 @@ export function storeUsage(items, now = Date.now()) {
 
     return usage;
 }
+
+/**
+ * Shops of the shop choice for a search (name or code): exact, then start, then anywhere in the
+ * name; then the most used ones (`storeUsage`), then by name. Without a search all shops are
+ * listed, so every shop can be found by scrolling (the dropdown scrolls).
+ *
+ * @param {{name: string, code?: string}[]} stores
+ * @param {string} query
+ * @param {Map<string, number>} usage
+ */
+export function rankStores(stores, query, usage) {
+    const needle = normalizeName(query);
+
+    return stores.map((store) => {
+        const name = normalizeName(store.name);
+        const code = normalizeName(store.code);
+        const rank = !needle || name === needle || (code && code === needle) ? 0
+            : name.startsWith(needle) || (code && code.startsWith(needle)) ? 1
+                : name.includes(needle) ? 2 : -1;
+
+        return { store, name, rank, score: usage.get(code || name) ?? 0 };
+    })
+        .filter((match) => match.rank >= 0)
+        .sort((a, b) => a.rank - b.rank || b.score - a.score || a.name.localeCompare(b.name, 'de'))
+        .map(({ store }) => store);
+}

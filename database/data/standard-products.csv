@@ -27,6 +27,9 @@ Avocado,Früchte
 Granatapfel,Früchte
 Feigen,Früchte
 Datteln,Früchte
+Beeren,Früchte
+Früchte,Früchte
+Marroni,Früchte
 Tomaten,Gemüse
 Cherrytomaten,Gemüse
 Gurke,Gemüse
@@ -68,6 +71,9 @@ Champignons,Gemüse
 Pilze,Gemüse
 Ingwer,Gemüse
 Chili,Gemüse
+Gemüse,Gemüse
+Maiskolben,Gemüse
+Sauerkraut,Gemüse
 Kopfsalat,Salat
 Eisbergsalat,Salat
 Nüsslisalat,Salat
@@ -87,6 +93,8 @@ Rosmarin,Kräuter
 Thymian,Kräuter
 Oregano,Kräuter
 Salbei,Kräuter
+Kräuter,Kräuter
+Kresse,Kräuter
 Milch,Milchprodukte
 Vollmilch,Milchprodukte
 Laktosefreie Milch,Milchprodukte
@@ -111,6 +119,11 @@ Magerquark,Milchprodukte
 Hüttenkäse,Milchprodukte
 Buttermilch,Milchprodukte
 Eier,Milchprodukte
+Haferrahm,Milchprodukte
+Joghurt (vegan),Milchprodukte
+Magermilch,Milchprodukte
+Milchdrink,Milchprodukte
+Vanillecreme,Milchprodukte
 Käse,Käse
 Reibkäse,Käse
 Parmesan,Käse
@@ -130,6 +143,12 @@ Frischkäse,Käse
 Mascarpone,Käse
 Ricotta,Käse
 Sbrinz,Käse
+Grana Padano,Käse
+Grillkäse,Käse
+Pizzakäse,Käse
+Schmelzkäse,Käse
+Tête de Moine,Käse
+Zigerstöckli,Käse
 Hackfleisch,Fleisch & Fisch
 Rindshackfleisch,Fleisch & Fisch
 Poulet,Fleisch & Fisch
@@ -156,9 +175,31 @@ Räucherlachs,Fleisch & Fisch
 Thon,Fleisch & Fisch
 Fischstäbchen,Fleisch & Fisch
 Crevetten,Fleisch & Fisch
-Tofu,Fleisch & Fisch
 Schnitzel,Fleisch & Fisch
 Brätkügeli,Fleisch & Fisch
+Burger,Fleisch & Fisch
+Fisch,Fleisch & Fisch
+Fischfilet,Fleisch & Fisch
+Fleisch,Fleisch & Fisch
+Kalbfleisch,Fleisch & Fisch
+Landjäger,Fleisch & Fisch
+Pouletflügeli,Fleisch & Fisch
+Rohschinken,Fleisch & Fisch
+Schweinsfilet,Fleisch & Fisch
+Siedfleisch,Fleisch & Fisch
+Trockenfleisch,Fleisch & Fisch
+Tofu,Vegi & Ersatzprodukte
+Räuchertofu,Vegi & Ersatzprodukte
+Seitan,Vegi & Ersatzprodukte
+Tempeh,Vegi & Ersatzprodukte
+Falafel,Vegi & Ersatzprodukte
+Hummus,Vegi & Ersatzprodukte
+Fleischersatz,Vegi & Ersatzprodukte
+Vegi-Hack,Vegi & Ersatzprodukte
+Vegi-Burger,Vegi & Ersatzprodukte
+Vegi-Schnitzel,Vegi & Ersatzprodukte
+Vegi-Nuggets,Vegi & Ersatzprodukte
+Vegi-Aufschnitt,Vegi & Ersatzprodukte
 Brot,Brot & Backwaren
 Ruchbrot,Brot & Backwaren
 Halbweissbrot,Brot & Backwaren
@@ -177,6 +218,14 @@ Blätterteig,Brot & Backwaren
 Kuchenteig,Brot & Backwaren
 Pizzateig,Brot & Backwaren
 Flammkuchenteig,Brot & Backwaren
+Aufbackbrötli,Brot & Backwaren
+Burgerbrötli,Brot & Backwaren
+Grissini,Brot & Backwaren
+Kuchen,Brot & Backwaren
+Mürbeteig,Brot & Backwaren
+Panettone,Brot & Backwaren
+Pitabrot,Brot & Backwaren
+Weissbrot,Brot & Backwaren
 Teigwaren,Vorräte
 Spaghetti,Vorräte
 Penne,Vorräte
@@ -246,6 +295,40 @@ Griess,Vorräte
 Instant-Nudeln,Vorräte
 Mandelblättchen,Vorräte
 Sardinen,Vorräte
+Amaranth,Vorräte
+Asia-Nudeln,Vorräte
+Backerbsen,Vorräte
+Buchweizenmehl,Vorräte
+Cashewnüsse,Vorräte
+Chiasamen,Vorräte
+Couverture,Vorräte
+Cranberries,Vorräte
+Dinkelflocken,Vorräte
+Dörrfrüchte,Vorräte
+Ebly,Vorräte
+Erdnüsse,Vorräte
+Gehackte Tomaten,Vorräte
+Glasnudeln,Vorräte
+Hagelzucker,Vorräte
+Halbweissmehl,Vorräte
+Jasminreis,Vorräte
+Knöpfli,Vorräte
+Kokosflocken,Vorräte
+Kondensmilch,Vorräte
+Kürbiskerne,Vorräte
+Maultaschen,Vorräte
+Milchreis,Vorräte
+Noriblätter,Vorräte
+Pistazien,Vorräte
+Rote Linsen,Vorräte
+Schupfnudeln,Vorräte
+Schwarze Bohnen,Vorräte
+Sesam,Vorräte
+Suppe,Vorräte
+Süssstoff,Vorräte
+Tagliatelle,Vorräte
+Vollkornmehl,Vorräte
+Vollkornteigwaren,Vorräte
 Salz,Gewürze & Saucen
 Pfeffer,Gewürze & Saucen
 Paprika,Gewürze & Saucen
@@ -271,10 +354,25 @@ Sojasauce,Gewürze & Saucen
 Pesto,Gewürze & Saucen
 Zitronensaft,Gewürze & Saucen
 Guacamole,Gewürze & Saucen
+Balsamico bianco,Gewürze & Saucen
+Barbecuesauce,Gewürze & Saucen
+Bratensauce,Gewürze & Saucen
+Cocktailsauce,Gewürze & Saucen
+Kardamom,Gewürze & Saucen
+Kokosöl,Gewürze & Saucen
+Lebkuchengewürz,Gewürze & Saucen
+Meersalz,Gewürze & Saucen
+Nelken,Gewürze & Saucen
+Salsa,Gewürze & Saucen
+Sauce Hollandaise,Gewürze & Saucen
+Sternanis,Gewürze & Saucen
+Zimtstangen,Gewürze & Saucen
 Konfitüre,Brotaufstrich
 Nutella,Brotaufstrich
 Erdnussbutter,Brotaufstrich
 Brotaufstrich,Brotaufstrich
+Haselnussmus,Brotaufstrich
+Mandelmus,Brotaufstrich
 Schokolade,Süsses & Snacks
 Guetzli,Süsses & Snacks
 Chips,Süsses & Snacks
@@ -282,6 +380,17 @@ Salzstangen,Süsses & Snacks
 Popcorn,Süsses & Snacks
 Gummibärchen,Süsses & Snacks
 Glace,Süsses & Snacks
+Adventskalender,Süsses & Snacks
+Apérogebäck,Süsses & Snacks
+Cracker,Süsses & Snacks
+Halsbonbons,Süsses & Snacks
+Marzipan,Süsses & Snacks
+Meringues,Süsses & Snacks
+Pralinés,Süsses & Snacks
+Reiswaffeln,Süsses & Snacks
+Schoggihase,Süsses & Snacks
+Tortilla Chips,Süsses & Snacks
+Traubenzucker,Süsses & Snacks
 Wasser,Getränke
 Mineralwasser,Getränke
 Orangensaft,Getränke
@@ -303,18 +412,42 @@ Gin,Getränke
 Vodka,Getränke
 Tonic Water,Getränke
 Energy Drink,Getränke
+Ananassaft,Getränke
+Earl Grey,Getränke
+Ginger Ale,Getränke
+Glühwein,Getränke
+Kamillentee,Getränke
+Limonade,Getränke
+Panaché,Getränke
+Pfefferminztee,Getränke
+Punsch,Getränke
+Rivella,Getränke
+Rum,Getränke
+Schoggidrink,Getränke
+Sekt,Getränke
+Tequila,Getränke
+Wein,Getränke
+Whisky,Getränke
 Tiefkühlgemüse,Tiefkühlprodukte
 Tiefkühlpizza,Tiefkühlprodukte
 Pommes frites,Tiefkühlprodukte
 Rösti,Tiefkühlprodukte
 Spinat (tiefgekühlt),Tiefkühlprodukte
 Beeren (tiefgekühlt),Tiefkühlprodukte
+Chicken Nuggets,Tiefkühlprodukte
+Edamame,Tiefkühlprodukte
+Eiswürfel,Tiefkühlprodukte
+Frühlingsrollen,Tiefkühlprodukte
 Babynahrung,Baby
 Windeln,Baby
 Feuchttücher,Baby
+Nuggi,Baby
+Schoppenpulver,Baby
 Katzenfutter,Haustier
 Hundefutter,Haustier
 Katzenstreu,Haustier
+Katzenmilch,Haustier
+Vogelfutter,Haustier
 WC-Papier,Haushalt
 Haushaltspapier,Haushalt
 Taschentücher,Haushalt
@@ -343,6 +476,34 @@ Spülmaschinensalz,Haushalt
 Ofenreiniger,Haushalt
 Kompostsäckli,Haushalt
 WC-Steine,Haushalt
+Abfallmarken,Haushalt
+Abwaschlappen,Haushalt
+Ameisengift,Haushalt
+Anzündhilfe,Haushalt
+Brennpaste,Haushalt
+Brillenputztücher,Haushalt
+Destilliertes Wasser,Haushalt
+Feuchtes WC-Papier,Haushalt
+Feuerzeug,Haushalt
+Gallseife,Haushalt
+Geschirrtücher,Haushalt
+Glühbirnen,Haushalt
+Grillkohle,Haushalt
+Gummihandschuhe,Haushalt
+Imprägnierspray,Haushalt
+Insektenspray,Haushalt
+Javelwasser,Haushalt
+Kühlelemente,Haushalt
+Mottenschutz,Haushalt
+Raumduft,Haushalt
+Scheuermilch,Haushalt
+Spülmaschinenreiniger,Haushalt
+Staubsaugersäcke,Haushalt
+Teelichter,Haushalt
+WC-Bürste,Haushalt
+WC-Ente,Haushalt
+Zahnstocher,Haushalt
+Brennholz,Haushalt
 Zahnpasta,Körperpflege
 Zahnbürste,Körperpflege
 Zahnseide,Körperpflege
@@ -359,3 +520,34 @@ Wattepads,Körperpflege
 Pflaster,Körperpflege
 Mundwasser,Körperpflege
 Badeschaum,Körperpflege
+Gesichtscreme,Körperpflege
+Haarschaum,Körperpflege
+Handcreme,Körperpflege
+Hustensirup,Körperpflege
+Kinderzahnbürste,Körperpflege
+Kosmetiktücher,Körperpflege
+Magnesium,Körperpflege
+Schmerztabletten,Körperpflege
+Slipeinlagen,Körperpflege
+Tampons,Körperpflege
+Bleistifte,Sonstiges
+Blumen,Sonstiges
+Blumenerde,Sonstiges
+Couverts,Sonstiges
+Druckerpapier,Sonstiges
+Dübel,Sonstiges
+Dünger,Sonstiges
+Eierfarben,Sonstiges
+Geburtstagskarten,Sonstiges
+Geschenkbändeli,Sonstiges
+Geschenkpapier,Sonstiges
+Kabelbinder,Sonstiges
+Klebband,Sonstiges
+Lichterkette,Sonstiges
+Malerklebeband,Sonstiges
+Mehrfachstecker,Sonstiges
+Notizblock,Sonstiges
+Radiergummi,Sonstiges
+Weihnachtsbaum,Sonstiges
+Weihnachtskarten,Sonstiges
+Weissleim,Sonstiges

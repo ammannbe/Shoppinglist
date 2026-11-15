@@ -26,7 +26,7 @@ class ProductCategoryTest extends TestCase
 
     private function productDocument(User $user, string $id): ?array
     {
-        return collect($this->actingAs($user)->getJson('/sync/products/pull?limit=500')->json('documents'))->firstWhere('id', $id);
+        return collect($this->pullAll($user, 'products'))->firstWhere('id', $id);
     }
 
     private function own(User $user, string $name, ?string $category = null, ?string $image = null): Product

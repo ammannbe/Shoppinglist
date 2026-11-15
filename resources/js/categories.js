@@ -22,6 +22,7 @@ const KEYWORDS = {
     dairy: ['milch', 'joghurt', 'jogurt', 'rahm', 'sahne', 'butter', 'quark', 'eier', 'kefir', 'creme fraiche'],
     cheese: ['kase', 'mozzarella', 'parmesan', 'gruyere', 'emmentaler', 'feta', 'raclette', 'fondue', 'ricotta', 'mascarpone'],
     meat_fish: ['fleisch', 'wurst', 'schinken', 'speck', 'poulet', 'huhn', 'hahnchen', 'rind', 'schwein', 'kalb', 'lamm', 'hack', 'salami', 'cervelat', 'wienerli', 'aufschnitt', 'steak', 'fisch', 'lachs', 'crevetten'],
+    vegetarian: ['tofu', 'seitan', 'tempeh', 'falafel', 'hummus', 'quorn', 'planted', 'vegi', 'veggie', 'vegan', 'ersatz', 'sojahack', 'sojageschnetzeltes'],
     spreads: ['konfiture', 'marmelade', 'honig', 'aufstrich', 'nutella', 'erdnussbutter'],
     pantry: ['mehl', 'zucker', 'reis', 'teigwaren', 'pasta', 'spaghetti', 'nudel', 'hornli', 'linsen', 'kichererbsen', 'haferflocken', 'muesli', 'polenta', 'couscous', 'griess', 'hefe', 'olivenol', 'rapsol', 'konserve', 'kokosmilch'],
     spices_sauces: ['salz', 'pfeffer', 'gewurz', 'senf', 'ketchup', 'mayonnaise', 'sauce', 'essig', 'bouillon', 'curry', 'zimt', 'dressing'],
@@ -40,8 +41,8 @@ const MIN_PART = 4;
 const clean = (name) => String(name ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
 
 /**
- * The user's category order: known keys of the setting first, missing ones appended in the
- * default order.
+ * The user's category order: known keys of the setting in their order; missing ones (e.g. a
+ * category added later) right after the key before them in the default order.
  *
  * @param {string[]|null|undefined} saved preferences.category_order
  * @returns {string[]}
@@ -49,7 +50,14 @@ const clean = (name) => String(name ?? '').trim().replace(/\s+/g, ' ').toLowerCa
 export function categoryOrder(saved) {
     const known = [...new Set((Array.isArray(saved) ? saved : []).filter((key) => CATEGORIES.includes(key)))];
 
-    return [...known, ...CATEGORIES.filter((key) => !known.includes(key))];
+    const order = [...known];
+    CATEGORIES.forEach((key, index) => {
+        if (order.includes(key)) return;
+        const before = CATEGORIES.slice(0, index).findLast((previous) => order.includes(previous));
+        order.splice(before === undefined ? 0 : order.indexOf(before) + 1, 0, key);
+    });
+
+    return order;
 }
 
 /**
