@@ -1,4 +1,5 @@
-{{-- Signed unsubscribe link of the announcement mails (AnnouncementUnsubscribeController), works without login. --}}
+{{-- Signed unsubscribe link of the announcement mails (AnnouncementUnsubscribeController), works without login. Same page in
+     Shoppinglist and Chorelist. --}}
 <x-guest-layout :title="__('News by email')">
     @if ($done)
         <p class="mb-6 rounded-lg bg-green-100 px-4 py-3 text-sm text-green-800">
@@ -9,6 +10,7 @@
         <p class="mb-6 text-sm">
             {{ __('Unsubscribe :email from news by email (including maintenance notices)?', ['email' => $user->email]) }}
         </p>
+        {{-- Same signed URL; the route also takes the one-click POST of mail clients (no CSRF token there). --}}
         <form method="POST" action="{{ request()->fullUrl() }}">
             @csrf
             <x-button>{{ __('Unsubscribe') }}</x-button>

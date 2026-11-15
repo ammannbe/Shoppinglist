@@ -8,8 +8,9 @@ use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushMessage;
 
 /**
- * Web Push of an announcement (title and excerpt), sent by SendAnnouncementBatch through the
- * WebPushChannel; public/push-sw.js shows it and opens the news (or the link) on click.
+ * Web Push of an announcement (title and excerpt in the user's language), sent by App\Jobs\SendAnnouncementBatch
+ * through the WebPushChannel directly (it needs the delivery reports); public/push-sw.js shows it and opens the
+ * news (or the link) on click. Same payload as in Chorelist.
  */
 class AnnouncementPush extends Notification
 {
@@ -17,11 +18,11 @@ class AnnouncementPush extends Notification
 
     public function toWebPush(User $notifiable, Notification $notification): WebPushMessage
     {
-        $locale = $notifiable->locale;
+        $locale = $notifiable->preferredLocale() ?? (string) config('app.locale');
 
         return (new WebPushMessage)
             ->title((string) $this->announcement->text('title', $locale))
-            ->body((string) ($this->announcement->text('excerpt', $locale) ?? ''))
+            ->body((string) $this->announcement->text('excerpt', $locale))
             ->icon('/web-app-manifest-192x192.png')
             ->badge('/favicon-96x96.png')
             ->tag('announcement-'.$this->announcement->account_manager_uuid)

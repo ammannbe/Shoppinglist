@@ -6,14 +6,15 @@ use App\Announcements\AccountManagerAnnouncements;
 use App\Announcements\AnnouncementDispatcher;
 use App\Households\AccountManagerClient;
 use App\Households\AccountManagerUnavailable;
+use App\Mail\AnnouncementMail;
 use App\Models\Announcement;
 use App\Models\AnnouncementDelivery;
 use App\Models\User;
-use App\Notifications\AnnouncementMail;
 use App\Notifications\AnnouncementPush;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use NotificationChannels\WebPush\WebPushChannel;
 use Throwable;
 
@@ -79,7 +80,7 @@ class SendAnnouncementBatch implements ShouldQueue
     {
         try {
             if ($this->channel === AnnouncementDispatcher::EMAIL) {
-                $user->notifyNow(new AnnouncementMail($announcement));
+                Mail::to($user)->send(new AnnouncementMail($announcement, $user));
 
                 return AnnouncementDelivery::SENT;
             }

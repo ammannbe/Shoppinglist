@@ -73,25 +73,27 @@ html.row-held body {
     }
 
     /* Text of an announcement (HTML of the AccountManager, partials/news.blade.php) */
-    .news-body {
+    /* Body of an announcement (body_html of the AccountManager, partials/news.blade.php). Same rules in Shoppinglist
+       and Chorelist, only the accent colour differs. */
+    .announcement-body {
         @apply space-y-3 break-words text-stone-800;
     }
-    .news-body a {
+    .announcement-body a {
         @apply text-emerald-700 underline;
     }
-    .news-body ul {
+    .announcement-body ul {
         @apply list-disc space-y-1 pl-5;
     }
-    .news-body ol {
+    .announcement-body ol {
         @apply list-decimal space-y-1 pl-5;
     }
-    .news-body h1, .news-body h2, .news-body h3, .news-body h4 {
+    .announcement-body h1, .announcement-body h2, .announcement-body h3, .announcement-body h4 {
         @apply font-semibold;
     }
-    .news-body code {
+    .announcement-body code {
         @apply rounded bg-stone-100 px-1 text-sm;
     }
-    .news-body blockquote {
+    .announcement-body blockquote {
         @apply border-l-4 border-stone-200 pl-3 text-stone-600;
     }
 

@@ -80,6 +80,8 @@ export function createAnnouncementsStore({ api, storage = globalThis.localStorag
         email: null,
         items: [],
         pending: emptyPending(),
+        // Unread when "News" was opened (or arriving while it is open): marked "New" until it is opened again.
+        fresh: [],
         now: Date.now(),
 
         get news() {
@@ -100,6 +102,7 @@ export function createAnnouncementsStore({ api, storage = globalThis.localStorag
                 this.email = user?.email ?? null;
                 this.items = [];
                 this.pending = emptyPending();
+                this.fresh = [];
                 return;
             }
             this.email = stored.email;
@@ -162,9 +165,17 @@ export function createAnnouncementsStore({ api, storage = globalThis.localStorag
             this.send();
         },
 
-        /** Opened in "News": all shown ones are read. */
+        /** "News" was opened: the unread ones become the fresh ones and all are read. */
+        openNews() {
+            this.fresh = [];
+            this.markAllRead();
+        },
+
+        /** While "News" is open: all shown ones are read, the unread ones are added to the fresh ones. */
         markAllRead() {
-            this.mark('read', this.news.filter((item) => !item.read_at).map((item) => item.id));
+            const unread = this.news.filter((item) => !item.read_at).map((item) => item.id);
+            if (unread.length) this.fresh = [...new Set([...this.fresh, ...unread])];
+            this.mark('read', unread);
         },
 
         dismiss(id) {
@@ -190,6 +201,7 @@ export function createAnnouncementsStore({ api, storage = globalThis.localStorag
             this.enabled = false;
             this.items = [];
             this.pending = emptyPending();
+            this.fresh = [];
             clearAnnouncements(storage);
         },
     };

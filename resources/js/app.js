@@ -186,8 +186,6 @@ Alpine.data('shoppinglist', () => ({
     // Entries history.go() goes back (navigate), and the hash to open after that (openFromLists).
     navPops: 0,
     navAfter: null,
-    // News unread when the list was opened (highlighted while it stays open).
-    newsFresh: [],
 
     init() {
         const layers = closeLayersOnBack({ menuOpen: () => this.menu !== null, closeMenu: () => { this.menu = null; } });
@@ -218,6 +216,8 @@ Alpine.data('shoppinglist', () => ({
         };
         window.addEventListener('hashchange', parse);
         parse();
+        // While "News" is open, arriving ones are read too (and marked "New").
+        this.$watch('$store.announcements.items', () => this.route.view === 'news' && Alpine.store('announcements').markAllRead());
     },
 
     // ---- data helpers
@@ -1374,34 +1374,23 @@ Alpine.data('shoppinglist', () => ({
 
     // ---- announcements (bell, news, banner) and their channels
 
-    get announcementsEnabled() {
-        return Boolean(Alpine.store('sync').user?.announcements);
-    },
-
-    /** Opening "News" marks all shown ones as read; #/news/<id> (push notification) scrolls to one. */
+    /** Opening "News" marks all shown ones as read; #/news/<id> (push notification, banner) scrolls to one. */
     openNews(id = null) {
-        const store = Alpine.store('announcements');
-        this.newsFresh = store.news.filter((item) => !item.read_at).map((item) => item.id);
-        store.markAllRead();
+        Alpine.store('announcements').openNews();
         if (id) this.$nextTick(() => document.getElementById(`news-${id}`)?.scrollIntoView({ block: 'start' }));
     },
 
+    /** Date of an announcement (ms) in the UI language, e.g. "14. November 2026". */
     newsDate(ms) {
-        return new Date(ms).toLocaleDateString(Alpine.store('i18n').locale.replace('_', '-'), { day: 'numeric', month: 'long', year: 'numeric' });
+        return ms ? new Date(ms).toLocaleDateString(Alpine.store('i18n').locale.replace('_', '-'), { day: 'numeric', month: 'long', year: 'numeric' }) : '';
     },
 
+    /** Badge of an announcement type (same labels and colours in Chorelist, feature in the accent colour). */
     newsType(type) {
         return {
             feature: { label: this.$t('New feature'), badge: 'bg-emerald-100 text-emerald-800' },
             maintenance: { label: this.$t('Maintenance'), badge: 'bg-amber-100 text-amber-800' },
-        }[type] ?? { label: this.$t('Notice'), badge: 'bg-sky-100 text-sky-800' };
-    },
-
-    /** "More" on the banner: the news (or the link) and the banner is done. */
-    openBanner(item) {
-        Alpine.store('announcements').dismiss(item.id);
-        if (item.in_app) this.navigate(`#/news/${item.id}`);
-        else if (item.link) window.open(item.link, '_blank', 'noopener');
+        }[type] ?? { label: this.$t('Notice'), badge: 'bg-stone-100 text-stone-700' };
     },
 
     async setAnnouncementEmails(value) {

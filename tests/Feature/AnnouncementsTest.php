@@ -583,6 +583,23 @@ class AnnouncementsTest extends TestCase
         $this->assertStringContainsString('Plan your <strong', $message->getHtmlBody());
         $this->assertStringContainsString(e($url), $message->getHtmlBody());
         $this->assertStringContainsString('https://help.example.com/weekly-plan', $message->getHtmlBody());
+        $this->assertStringContainsString('Learn more: https://help.example.com/weekly-plan', $message->getTextBody());
+        $this->assertStringContainsString('Plan your week', $message->getTextBody());
+    }
+
+    public function test_an_email_without_link_opens_the_news_in_the_app(): void
+    {
+        $user = $this->user(['locale' => 'en']);
+        $user->forceFill(['announcement_emails' => 'all'])->save();
+        $this->answer([$this->announcement(['channels' => ['in_app', 'email'], 'link' => null, 'image_url' => 'https://cdn.example.com/a.png'])]);
+
+        $this->sync();
+
+        $message = $this->sentMails()[0]->getOriginalMessage();
+        $this->assertStringContainsString(e(url('/#/news/'.self::UUID)), $message->getHtmlBody());
+        $this->assertStringContainsString('Open '.config('app.name'), $message->getHtmlBody());
+        $this->assertStringContainsString('src="https://cdn.example.com/a.png"', $message->getHtmlBody());
+        $this->assertStringContainsString('Open '.config('app.name').': '.url('/#/news/'.self::UUID), $message->getTextBody());
     }
 
     public function test_the_unsubscribe_link_turns_off_all_announcement_emails(): void

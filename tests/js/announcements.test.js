@@ -96,6 +96,26 @@ describe('createAnnouncementsStore', () => {
         expect(JSON.parse(storage.data[ANNOUNCEMENTS_KEY]).pending).toEqual({ read: [], dismissed: [] });
     });
 
+    it('marks the unread news as fresh when they are opened, until they are opened again', async () => {
+        const storage = memoryStorage({ [ANNOUNCEMENTS_KEY]: JSON.stringify({ email: user.email, items: [item('a'), item('b', { read_at: now })], pending: { read: [], dismissed: [] } }) });
+        const store = createAnnouncementsStore({ api: { get: vi.fn(), post: vi.fn() }, storage, online: () => false });
+        store.restore(user);
+
+        store.openNews();
+        expect(store.fresh).toEqual(['a']);
+        expect(store.unread).toBe(0);
+
+        // Arriving while open: read and fresh too.
+        store.items = [item('c'), ...store.items];
+        store.markAllRead();
+        expect(store.fresh).toEqual(['a', 'c']);
+
+        store.openNews();
+        expect(store.fresh).toEqual([]);
+        store.clear();
+        expect(store.fresh).toEqual([]);
+    });
+
     it('keeps the cached state when the server is not reachable', async () => {
         const storage = memoryStorage({ [ANNOUNCEMENTS_KEY]: JSON.stringify({ email: user.email, items: [item('a')], pending: { read: [], dismissed: [] } }) });
         const api = { get: vi.fn(async () => { throw new Error('offline'); }), post: vi.fn() };

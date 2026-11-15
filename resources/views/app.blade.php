@@ -76,10 +76,11 @@
                 }[$store.sync.status]"></span>
             </span>
 
-            {{-- Announcements: bell with the unread news (resources/js/announcements.js) --}}
-            <a href="#/news" x-show="announcementsEnabled && (tab || route.view === 'list')" class="icon-button relative"
+            {{-- News of the AccountManager (ANNOUNCEMENTS_DRIVER=account-manager, resources/js/announcements.js): bell with the
+                 unread count, on the same views as the settings. Same markup in Shoppinglist and Chorelist. --}}
+            <a href="#/news" x-show="$store.announcements.enabled && (tab || route.view === 'list')" class="icon-button relative"
                 :aria-label="$store.announcements.unread ? $t('News (:count unread)', { count: $store.announcements.unread }) : $t('News')">
-                <svg viewBox="0 0 24 24" class="size-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+                <svg viewBox="0 0 24 24" class="size-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
                 <span x-show="$store.announcements.unread" class="absolute top-1 right-1 grid min-w-4 place-items-center rounded-full bg-red-600 px-1 text-[0.65rem] leading-4 font-semibold text-white"
                     x-text="$store.announcements.unread > 9 ? '9+' : $store.announcements.unread" aria-hidden="true"></span>
             </a>
