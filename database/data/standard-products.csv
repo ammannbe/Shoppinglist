@@ -173,7 +173,6 @@ Leberpain,Fleisch & Fisch
 Lachs,Fleisch & Fisch
 Räucherlachs,Fleisch & Fisch
 Thon,Fleisch & Fisch
-Fischstäbchen,Fleisch & Fisch
 Crevetten,Fleisch & Fisch
 Schnitzel,Fleisch & Fisch
 Brätkügeli,Fleisch & Fisch
@@ -258,7 +257,6 @@ Rohzucker,Vorräte
 Puderzucker,Vorräte
 Vanillezucker,Vorräte
 Gelierzucker,Vorräte
-Honig,Vorräte
 Ahornsirup,Vorräte
 Backpulver,Vorräte
 Hefe,Vorräte
@@ -373,13 +371,13 @@ Erdnussbutter,Brotaufstrich
 Brotaufstrich,Brotaufstrich
 Haselnussmus,Brotaufstrich
 Mandelmus,Brotaufstrich
+Honig,Brotaufstrich
 Schokolade,Süsses & Snacks
 Guetzli,Süsses & Snacks
 Chips,Süsses & Snacks
 Salzstangen,Süsses & Snacks
 Popcorn,Süsses & Snacks
 Gummibärchen,Süsses & Snacks
-Glace,Süsses & Snacks
 Adventskalender,Süsses & Snacks
 Apérogebäck,Süsses & Snacks
 Cracker,Süsses & Snacks
@@ -438,6 +436,8 @@ Chicken Nuggets,Tiefkühlprodukte
 Edamame,Tiefkühlprodukte
 Eiswürfel,Tiefkühlprodukte
 Frühlingsrollen,Tiefkühlprodukte
+Glace,Tiefkühlprodukte
+Fischstäbchen,Tiefkühlprodukte
 Babynahrung,Baby
 Windeln,Baby
 Feuchttücher,Baby
