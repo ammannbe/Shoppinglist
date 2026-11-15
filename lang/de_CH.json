@@ -828,5 +828,6 @@
     "You will no longer get news by email from :app, also no maintenance notices.": "Du erhältst keine Neuigkeiten von :app mehr per E-Mail, auch keine Wartungshinweise.",
     "You can turn them on again in the settings of the app.": "Du kannst sie in den Einstellungen der App wieder einschalten.",
     "Unsubscribe :email from news by email (including maintenance notices)?": ":email von Neuigkeiten per E-Mail abmelden (auch Wartungshinweise)?",
-    "Unknown push service.": "Unbekannter Push-Dienst."
+    "Unknown push service.": "Unbekannter Push-Dienst.",
+    "No emails": "Keine E-Mails"
 }

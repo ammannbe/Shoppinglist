@@ -187,7 +187,7 @@ class AnnouncementsTest extends TestCase
     {
         $this->answer([$this->announcement()]);
 
-        $this->assertSame(['upserted' => 1, 'deleted' => 0], $this->sync());
+        $this->assertSame(['upserted' => 1, 'withdrawn' => 0], $this->sync());
 
         $this->assertArrayNotHasKey('since', $this->requests[0]->data());
         $this->assertSame('2026-11-14T10:30:00Z', Cache::get(AccountManagerAnnouncements::SERVER_TIME_KEY));
@@ -211,10 +211,10 @@ class AnnouncementsTest extends TestCase
         $this->sync();
 
         $this->answer([$this->announcement()]);
-        $this->assertSame(['upserted' => 0, 'deleted' => 0], $this->sync());
+        $this->assertSame(['upserted' => 0, 'withdrawn' => 0], $this->sync());
 
         $this->answer([$this->announcement(['title' => ['de' => 'Neu: Wochenplaner', 'en' => null], 'type' => 'surprise', 'channels' => ['in_app', 'fax'], 'updated_at' => '2026-11-14T10:40:00Z'])]);
-        $this->assertSame(['upserted' => 1, 'deleted' => 0], $this->sync());
+        $this->assertSame(['upserted' => 1, 'withdrawn' => 0], $this->sync());
 
         $announcement = Announcement::sole();
         $this->assertSame(['de' => 'Neu: Wochenplaner', 'en' => null], $announcement->title);
@@ -222,7 +222,7 @@ class AnnouncementsTest extends TestCase
         $this->assertSame(['in_app'], $announcement->channels, 'Unknown channels are left out.');
     }
 
-    public function test_deleted_announcements_are_removed_with_their_reads(): void
+    public function test_deleted_announcements_are_hidden_but_kept_with_their_reads(): void
     {
         $user = $this->user();
         $this->answer([$this->announcement(), $this->announcement(['uuid' => self::OTHER])]);
@@ -230,13 +230,41 @@ class AnnouncementsTest extends TestCase
         $this->actingAs($user)->postJson('/announcements/read', ['read' => [self::UUID]])->assertNoContent();
 
         $this->answer([], [self::UUID]);
-        $this->assertSame(['upserted' => 0, 'deleted' => 1], $this->sync());
+        $this->assertSame(['upserted' => 0, 'withdrawn' => 1], $this->sync());
 
-        $this->assertSame([self::OTHER], Announcement::pluck('account_manager_uuid')->all());
-        $this->assertSame(0, AnnouncementRead::count());
+        $this->assertSame([self::OTHER], Announcement::active()->pluck('account_manager_uuid')->all());
+        $this->assertSame(2, Announcement::count(), 'Hidden, not deleted.');
+        $this->assertSame(1, AnnouncementRead::count());
+        $this->assertSame([self::OTHER], array_column($this->actingAs($user)->getJson('/announcements')->json('data'), 'id'));
+
+        // Coming back (same updated_at): shown again, still read.
+        $this->answer([$this->announcement()]);
+        $this->assertSame(['upserted' => 1, 'withdrawn' => 0], $this->sync());
+        $this->assertNull(Announcement::where('account_manager_uuid', self::UUID)->value('withdrawn_at'));
+        $items = collect($this->actingAs($user)->getJson('/announcements')->json('data'))->keyBy('id');
+        $this->assertNotNull($items[self::UUID]['read_at']);
     }
 
-    public function test_the_full_sync_removes_copies_missing_in_the_complete_list(): void
+    public function test_a_withdrawn_announcement_coming_back_is_not_sent_again(): void
+    {
+        $user = $this->user(['announcement_emails' => 'all']);
+        $this->subscribe($user);
+        $this->answer([$this->announcement(['channels' => ['in_app', 'push', 'email']])]);
+        $this->sync();
+        $this->assertCount(1, $this->pushes);
+        $this->assertCount(1, $this->sentMails());
+
+        $this->answer([], [self::UUID]);
+        $this->sync();
+        $this->answer([$this->announcement(['channels' => ['in_app', 'push', 'email'], 'updated_at' => '2026-11-14T10:40:00Z'])]);
+        $this->sync();
+
+        $this->assertTrue(Announcement::sole()->isActive());
+        $this->assertCount(1, $this->pushes);
+        $this->assertCount(1, $this->sentMails());
+    }
+
+    public function test_the_full_sync_hides_copies_missing_in_the_complete_list(): void
     {
         $this->answer([$this->announcement(), $this->announcement(['uuid' => self::OTHER])]);
         $this->sync();
@@ -246,7 +274,8 @@ class AnnouncementsTest extends TestCase
         $this->artisan('account-manager:sync-announcements', ['--full' => true])->assertSuccessful();
 
         $this->assertArrayNotHasKey('since', end($this->requests)->data(), 'The full sync does not send since.');
-        $this->assertSame([self::UUID], Announcement::pluck('account_manager_uuid')->all());
+        $this->assertSame([self::UUID], Announcement::active()->pluck('account_manager_uuid')->all());
+        $this->assertNotNull(Announcement::where('account_manager_uuid', self::OTHER)->value('withdrawn_at'));
         $this->assertSame('2026-11-15T04:50:00Z', Cache::get(AccountManagerAnnouncements::SERVER_TIME_KEY));
     }
 
@@ -477,6 +506,20 @@ class AnnouncementsTest extends TestCase
         $announcement->forceFill(['publish_at' => now()->subHour(), 'expires_at' => now()->subMinute()])->save();
         app()->call([new SendAnnouncementBatch($announcement->id, 'push', User::pluck('id')->all(), 'push-1'), 'handle']);
         $this->assertSame([], $this->pushes);
+    }
+
+    public function test_only_announcements_of_the_last_seven_days_are_sent(): void
+    {
+        $this->assertSame(7, config('announcements.send_max_age_days'));
+        $this->subscribe($this->user(['created_at' => '2026-10-01 08:00']));
+        $this->answer([
+            $this->announcement(['channels' => ['push'], 'publish_at' => '2026-11-07T11:00:00Z']),
+            $this->announcement(['uuid' => self::OTHER, 'channels' => ['push'], 'publish_at' => '2026-11-07T09:00:00Z']),
+        ]);
+
+        $this->sync();
+
+        $this->assertCount(1, $this->pushes);
     }
 
     public function test_devices_are_subscribed_only_at_known_push_services(): void

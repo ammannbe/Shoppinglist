@@ -41,7 +41,7 @@ class SendAnnouncementBatch implements ShouldQueue
     public function handle(AccountManagerClient $client): void
     {
         $announcement = Announcement::query()->find($this->announcementId);
-        // Deleted in the meantime, or expired: nothing more is sent.
+        // Withdrawn in the meantime, or expired: nothing more is sent.
         if ($announcement === null || ! $announcement->isActive() || ! in_array($this->channel, AnnouncementDispatcher::CHANNELS, true)) {
             return;
         }

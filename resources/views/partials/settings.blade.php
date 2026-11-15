@@ -156,7 +156,7 @@
                         <template x-for="option in [
                             { value: 'all', label: $t('All news') },
                             { value: 'maintenance', label: $t('Only maintenance notices') },
-                            { value: 'none', label: $t('None') },
+                            { value: 'none', label: $t('No emails') },
                         ]" :key="option.value">
                             <option :value="option.value" x-text="option.label" :selected="($store.sync.user?.announcements?.emails ?? 'maintenance') === option.value"></option>
                         </template>

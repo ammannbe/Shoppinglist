@@ -62,8 +62,8 @@ class AnnouncementDispatcher
     private function queue(Announcement $announcement, string $channel): void
     {
         // First seen long after the publication (e.g. the first sync after enabling the driver): not sent.
-        $maxAge = (int) config('announcements.send_max_age_days');
-        if ($maxAge > 0 && $announcement->publish_at->lt(now()->subDays($maxAge))) {
+        $maxAge = max(1, (int) config('announcements.send_max_age_days'));
+        if ($announcement->publish_at->lt(now()->subDays($maxAge))) {
             return;
         }
 

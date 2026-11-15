@@ -39,7 +39,7 @@ class SyncAnnouncements extends Command
             return self::SUCCESS;
         }
 
-        $this->info("Announcements: {$result['upserted']} updated, {$result['deleted']} removed.");
+        $this->info("Announcements: {$result['upserted']} updated, {$result['withdrawn']} withdrawn.");
 
         return self::SUCCESS;
     }

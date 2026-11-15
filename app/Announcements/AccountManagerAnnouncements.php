@@ -14,9 +14,11 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Mirrors the announcements of the AccountManager (ANNOUNCEMENTS_DRIVER=account-manager, contract:
- * AccountManager docs/ANNOUNCEMENTS-API.md): local copy upserted by uuid, `deleted` removes copies,
- * a full sync (without since) removes the ones missing in the complete list. The next since is the
- * server_time of the last successful answer. New announcements are then dispatched by push and email.
+ * AccountManager docs/ANNOUNCEMENTS-API.md): local copy upserted by uuid, `deleted` withdraws copies,
+ * a full sync (without since) withdraws the ones missing in the complete list. Withdrawn copies are
+ * hidden (withdrawn_at), never deleted: one that comes back is shown again but not sent twice. The
+ * next since is the server_time of the last successful answer. New announcements are then dispatched
+ * by push and email.
  */
 class AccountManagerAnnouncements
 {
@@ -34,7 +36,7 @@ class AccountManagerAnnouncements
     /**
      * Fetches and applies the changes (full: the complete list). Null if another sync is running.
      *
-     * @return array{upserted: int, deleted: int}|null
+     * @return array{upserted: int, withdrawn: int}|null
      *
      * @throws AccountManagerUnavailable
      */
@@ -61,7 +63,7 @@ class AccountManagerAnnouncements
 
     /**
      * @param  array{data: list<array<string, mixed>>, deleted: list<string>, server_time: string}  $answer
-     * @return array{upserted: int, deleted: int}
+     * @return array{upserted: int, withdrawn: int}
      */
     private function apply(array $answer, bool $complete): array
     {
@@ -79,22 +81,25 @@ class AccountManagerAnnouncements
             $seen[] = $data['account_manager_uuid'];
 
             $existing = Announcement::query()->where('account_manager_uuid', $data['account_manager_uuid'])->first();
-            if ($existing?->remote_updated_at?->equalTo($data['remote_updated_at'])) {
+            if ($existing !== null && $existing->withdrawn_at === null && $existing->remote_updated_at?->equalTo($data['remote_updated_at'])) {
                 continue;
             }
 
-            Announcement::query()->updateOrCreate(['account_manager_uuid' => $data['account_manager_uuid']], $data);
+            // Coming back (published again, service selected again …): visible again, *_dispatched_at stay.
+            Announcement::query()->updateOrCreate(['account_manager_uuid' => $data['account_manager_uuid']], [...$data, 'withdrawn_at' => null]);
             $upserted++;
         }
 
-        $deleted = Announcement::query()->whereIn('account_manager_uuid', array_map('strtolower', $answer['deleted']))->delete();
+        $withdrawn = Announcement::query()->whereNull('withdrawn_at')
+            ->whereIn('account_manager_uuid', array_map('strtolower', $answer['deleted']))
+            ->update(['withdrawn_at' => now()]);
 
         // Without since the list is complete: copies missing there are no longer visible to this service.
         if ($complete) {
-            $deleted += Announcement::query()->whereNotIn('account_manager_uuid', $seen)->delete();
+            $withdrawn += Announcement::query()->whereNull('withdrawn_at')->whereNotIn('account_manager_uuid', $seen)->update(['withdrawn_at' => now()]);
         }
 
-        return ['upserted' => $upserted, 'deleted' => $deleted];
+        return ['upserted' => $upserted, 'withdrawn' => $withdrawn];
     }
 
     /**

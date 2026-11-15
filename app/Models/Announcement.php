@@ -37,6 +37,7 @@ class Announcement extends Model
             'publish_at' => 'datetime',
             'expires_at' => 'datetime',
             'remote_updated_at' => 'datetime',
+            'withdrawn_at' => 'datetime',
             'push_dispatched_at' => 'datetime',
             'email_dispatched_at' => 'datetime',
         ];
@@ -70,17 +71,18 @@ class Announcement extends Model
 
     public function isActive(): bool
     {
-        return $this->publish_at->isPast() && ($this->expires_at === null || $this->expires_at->isFuture());
+        return $this->withdrawn_at === null && $this->publish_at->isPast() && ($this->expires_at === null || $this->expires_at->isFuture());
     }
 
     /**
-     * Published and not expired.
+     * Published, not expired and not withdrawn.
      *
      * @param  Builder<Announcement>  $query
      */
     public function scopeActive(Builder $query): void
     {
-        $query->where('publish_at', '<=', now())
+        $query->whereNull('withdrawn_at')
+            ->where('publish_at', '<=', now())
             ->where(fn (Builder $query) => $query->whereNull('expires_at')->orWhere('expires_at', '>', now()));
     }
 
