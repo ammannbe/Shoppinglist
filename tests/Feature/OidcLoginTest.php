@@ -284,6 +284,31 @@ class OidcLoginTest extends TestCase
         $this->get(route('register'))->assertOk()->assertDontSee(route('oidc.redirect'), false);
     }
 
+    public function test_the_login_buttons_lead_to_the_entry_url_if_set(): void
+    {
+        $this->get(route('login'))->assertSee('href="'.route('oidc.redirect').'"', false);
+        $this->get(route('register'))->assertSee('href="'.route('oidc.redirect').'"', false);
+
+        config(['login.oidc.entry_url' => 'https://konto.example.com/services/shoppinglist/open']);
+
+        $this->get(route('login'))->assertOk()
+            ->assertSee('href="https://konto.example.com/services/shoppinglist/open"', false)
+            ->assertDontSee('href="'.route('oidc.redirect').'"', false);
+        $this->get(route('register'))->assertOk()
+            ->assertSee('href="https://konto.example.com/services/shoppinglist/open"', false)
+            ->assertDontSee('href="'.route('oidc.redirect').'"', false);
+    }
+
+    public function test_linking_in_the_settings_keeps_the_redirect_with_an_entry_url(): void
+    {
+        config(['login.oidc.entry_url' => 'https://konto.example.com/services/shoppinglist/open']);
+        $user = User::factory()->create(['password' => null]);
+
+        $this->actingAs($user)->postJson(route('oidc.link'))
+            ->assertOk()
+            ->assertJsonPath('redirect', route('oidc.redirect', ['link' => 1]));
+    }
+
     public function test_the_label_falls_back_to_the_name_published_by_pocket_id(): void
     {
         config(['login.oidc.label' => null, 'services.oidc.base_url' => 'https://login.example.com']);

@@ -1,7 +1,7 @@
 <x-guest-layout :title="__('Register')">
     {{-- An account at the OIDC provider also works here: the first login creates the account (AUTH_OIDC_REGISTRATION). --}}
     @if (config('login.oidc.enabled') && config('login.oidc.registration'))
-        <a href="{{ route('oidc.redirect') }}" class="button-secondary mb-3 flex w-full items-center justify-center gap-2">
+        <a href="{{ App\Auth\OidcEntry::url() }}" class="button-secondary mb-3 flex w-full items-center justify-center gap-2">
             {{ __('Register with :provider', ['provider' => App\Auth\OidcLabel::get()]) }}
         </a>
         <x-oidc-signup class="mb-6" />
